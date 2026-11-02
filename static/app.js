@@ -36,7 +36,7 @@ const recFor = (market, side, line) => { const r = REC_MAP[market+'.'+side]; ret
 const units = u => u==null ? '—' : (u>0?'+':'')+Number(u).toFixed(2)+'u';
 const oddsTxt = r => r.odds==null ? 'sin cuota' : am(r.odds)+(r.book?' · '+esc(r.book):'');
 const SPORT_EM = {mlb:'⚾',nfl:'🏈',nba:'🏀',nhl:'🏒',tenis:'🎾',futbol:'⚽'};
-function setNav(n){ document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===n)); }
+function setNav(n){ document.querySelectorAll('nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
 
 // ------------------------------------------------------------ rutas
 async function route(){
@@ -78,37 +78,66 @@ async function viewSport(sport, league){
   else {
     let cur=''; const groups={};
     d.games.forEach(g=>{ const k=dayKey(g.date); (groups[k]=groups[k]||[]).push(g); });
-    body = Object.keys(groups).sort().map(k=>`<div class="day">${esc(dayLabel(groups[k][0].date))}</div>`+groups[k].map(gameCard).join('')).join('');
+    body = Object.keys(groups).sort().map(k=>`<div class="day">${esc(dayLabel(groups[k][0].date))}</div><div class="glist">${groups[k].map(gameCard).join('')}</div>`).join('');
   }
   $app.innerHTML = `<a class="back" href="#/">← Deportes</a><h1>${sp.emoji} ${esc(sp.name)}${sp.leagues.length>1?'':''}</h1>${pills}${body}`;
   if(d.ok&&d.games.some(g=>g.state==='pre')) fillBriefs(league);
 }
 function stBadge(g){ return g.state==='in'?`<span class="badge b-live">● EN VIVO</span>`:g.state==='post'?`<span class="badge b-fin">FINAL</span>`:`<span class="badge b-pre">PROGRAMADO</span>`; }
-function oddsChips(g){
-  const o=g.odds; if(!o) return g.state==='pre'?`<span class="chip mut">Cuotas: ${SD}</span>`:'';
-  const c=[];
-  if(o.ml.home!=null||o.ml.away!=null) c.push(`<span class="chip mono">ML ${am(o.ml.away)} / ${am(o.ml.home)}${o.ml.draw!=null?' · E '+am(o.ml.draw):''}</span>`);
-  if(o.spread.home) c.push(`<span class="chip mono">SPR ${sg(o.spread.home.line)} (${am(o.spread.home.price)})</span>`);
-  if(o.total.over) c.push(`<span class="chip mono">O/U ${o.total.over.line}</span>`);
-  return c.join('');
+// ---- helpers de la vista compacta
+const tn = t => (t&&(t.abbr||t.short))||((t&&t.name)||'').split(' ').slice(-1)[0];
+const shortLbl = (l,g) => { let x=String(l||''); [g.away,g.home].forEach(t=>{ if(t&&t.name&&t.name.length>3) x=x.split(t.name).join(tn(t)); }); return x.replace(/\s*\((visitante|local)\)/g,'').trim(); };
+const MKL = {ml:'ML',spread:'SPR',total:'TOT',sspread:'HÁN',stotal:'TOT',dc:'DC',btts:'BTTS'};
+const mkl = b => MKL[b.market]||String(b.title||b.market||'').slice(0,3).toUpperCase();
+let GAMES = {};
+const gradedBadge = x => (x&&x.status&&x.status!=='PENDIENTE') ? gradeBadge(x,false) : '';
+const edgeTxt = e => e==null ? '' : `<span class="ed mono ${e>0?'pos':e<0?'neg':'mut'}">${sg(e)}pp</span>`;
+function sgrRow(b,g,rec){
+  const rr=rec&&rec.find(x=>x.market===b.market&&x.selection===b.side);
+  return `<div class="sgr" title="${esc(b.title||'')}"><span class="mk">${esc(mkl(b))}</span><span class="lb">${esc(shortLbl(b.label,g))}${b.clipped?' <span title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''} ${gradedBadge(rr)}</span>${edgeTxt(b.edge)}
+    <span class="st mono">Mod ${b.p_model!=null?pct(b.p_model,0):SD} · Mkt ${b.p_nv!=null?pct(b.p_nv,0):SD}${b.best&&b.best.price_txt?' · '+esc(b.best.price_txt):''}</span></div>`;
 }
-function recChips(g){
+const briefRows = (items,g,rec) => (items||[]).map(b=>sgrRow(b,g,rec)).join('');
+function briefBlock(g,items){
+  if(!items||!items.length) return `<div class="pickline none">Probabilidades: ${SD}</div>`;
+  const rec=g.rec||[], rm=rec.find(x=>x.type==='main');
+  let main = rm && items.find(b=>b.market===rm.market&&b.side===rm.selection);
+  let line;
+  if(!main && rm){
+    line=`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(rm.label,g))}</span>${gradedBadge(rm)}</div>`;
+  } else {
+    if(!main) main=items.slice().sort((a,b)=>(b.edge==null?-99:b.edge)-(a.edge==null?-99:a.edge))[0];
+    line=`<div class="pickline" title="${esc(main.title||'')} · ${esc(main.label)}"><span class="k">PICK</span><span class="t">${esc(shortLbl(main.label,g))}</span>${main.p_model!=null?`<span class="m mono">${pct(main.p_model,0)}</span>`:''}${main.edge!=null?`<span class="e mono ${main.edge>0?'pos':'neg'}">edge ${sg(main.edge)}pp</span>`:''}${gradedBadge(rm&&rm.market===main.market&&rm.selection===main.side?rm:null)}</div>`;
+  }
+  const rest=items.filter(b=>b!==main);
+  if(!rest.length) return line;
+  return line+`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${briefRows(rest,g,rec)}</div>`;
+}
+function recBlock(g){
   const r=g.rec||[]; if(!r.length) return '';
-  const m=r.filter(x=>x.type==='main'), sg_=r.filter(x=>x.type!=='main');
-  const ic=x=>(GRADE[x.status]||GRADE.PENDIENTE)[0];
-  return `<div class="brief"><span class="pchip" title="Pick principal registrado: ${esc(m.map(x=>x.label).join(', '))}"><b>Principal</b> ${m.map(ic).join(' ')||'—'}</span><span class="pchip"><b>Sugerencias</b> ${sg_.map(ic).join(' ')||'—'}</span></div>`;
+  const m=r.find(x=>x.type==='main'), rest=r.filter(x=>x!==m);
+  const row=x=>`<div class="sgr"><span class="mk">${esc(MKL[x.market]||String(x.market).slice(0,3).toUpperCase())}</span><span class="lb">${esc(shortLbl(x.label,g))}</span>${gradeBadge(x,false)}</div>`;
+  return `<div class="gp">${m?`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(m.label,g))}</span>${gradeBadge(m,false)}</div>`:''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;
+}
+function marketRow(g){
+  const o=g.odds; if(!o) return g.state==='pre'?`<div class="sub" style="margin-top:8px">Cuotas: ${SD}</div>`:'';
+  const c=[];
+  if(o.spread&&o.spread.home) c.push(`<div class="mc"><small>Spread</small><span class="mono">${esc(tn(g.home))} ${sg(o.spread.home.line)}</span> <span class="sub mono">${am(o.spread.home.price)}</span></div>`);
+  if(o.total&&o.total.over) c.push(`<div class="mc"><small>Total</small><span class="mono">O/U ${o.total.over.line}</span></div>`);
+  if(o.ml&&o.ml.draw!=null) c.push(`<div class="mc"><small>Empate</small><span class="mono">${am(o.ml.draw)}</span></div>`);
+  return c.length?`<div class="gm">${c.join('')}</div>`:'';
 }
 function gameCard(g){
-  const sc = g.state!=='pre';
+  GAMES[g.id]=g;
+  const sc = g.state!=='pre', o=g.odds;
+  const team=(t,side)=>{ const ml=o&&o.ml?o.ml[side]:null;
+    return `<div class="tm">${t.logo?`<img src="${esc(t.logo)}" loading="lazy" alt="">`:'<span style="width:22px;flex:none"></span>'}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(t.score??'')}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
+  const where=[g.note||g.league_name, g.venue].filter(Boolean).map(esc).join(' · ');
   return `<a class="card game" href="#/juego/${encodeURIComponent(g.league)}/${g.id}">
-    <div><div class="time mono">${fmtTime(g.date)}</div><div class="sub">${stBadge(g)}</div></div>
-    <div>
-      <div class="tm">${g.away.logo?`<img src="${esc(g.away.logo)}" loading="lazy" alt="">`:''}<b>${esc(g.away.name)}</b><span class="sub">${esc(g.away.record||'')}</span>${sc?`<span class="sc mono ${g.away.winner?'pos':''}">${esc(g.away.score??'')}</span>`:''}</div>
-      <div class="tm">${g.home.logo?`<img src="${esc(g.home.logo)}" loading="lazy" alt="">`:''}<b>${esc(g.home.name)}</b><span class="sub">${esc(g.home.record||'')}</span>${sc?`<span class="sc mono ${g.home.winner?'pos':''}">${esc(g.home.score??'')}</span>`:''}</div>
-      <div class="sub">${esc(g.note||g.league_name)}${g.venue?' · '+esc(g.venue):''}</div>
-      ${g.state==='pre'?`<div class="brief" data-id="${esc(g.id)}"><span class="sub">⏳ Probabilidades…</span></div>`:recChips(g)}
-    </div>
-    <div class="chips hide-m">${oddsChips(g)}</div></a>`;
+    <div class="gh"><span class="time mono">${fmtTime(g.date)}</span><span class="gl">${where}</span>${sc?stBadge(g):''}</div>
+    ${team(g.away,'away')}${team(g.home,'home')}
+    ${marketRow(g)}
+    ${g.state==='pre'?`<div class="gp" data-id="${esc(g.id)}"><span class="sub">⏳ Probabilidades…</span></div>`:recBlock(g)}</a>`;
 }
 
 // ------------------------------------------------------------ juego
@@ -133,7 +162,7 @@ async function viewGame(league, id){
   if(d.gaps && d.gaps.length) html += `<div class="note gap"><b>🕳️ Datos no disponibles (${SD}):</b><ul class="t">${d.gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
   html += `<div class="note">⚖️ <b>Estimación del modelo, no certeza.</b> Sin promesas de rentabilidad. Revisa lesiones/alineaciones de último minuto antes de apostar.</div>`;
   $app.innerHTML = html;
-  mvDraw();
+  mvDraw(); foldCards();
 }
 
 function candRow(c){
@@ -148,29 +177,31 @@ function candRow(c){
   <div class="mono" data-l="Precio máx.">${esc(c.max_txt||SD)}</div>${c.signals&&c.signals.verdict&&c.signals.verdict!=='sin_dato'?`<div class="ctags">${tagChips(c.signals)||'<span class="sub">Mercado: sin señal clara</span>'}${c.signals.best?`<span class="sub">🏷️ Mejor precio ${esc(c.signals.best.price_txt)} en ${esc(c.signals.best.book)}${c.signals.best.ev!=null?' · EV '+sg(c.signals.best.ev)+'%':''}</span>`:''}</div>`:''}</div>`;
 }
 function leanBlock(d){
-  const p=d.picks, l=p.lean, c=p.confidence;
-  const st=STATUS[p.status];
-  const lines = [];
+  const p=d.picks, l=p.lean, c=p.confidence, st=STATUS[p.status];
+  const gb = gradeBadge(recFor(mktKey(l),l.side,l.line),true)||'<span class="gbadge g-n">⏳ Pendiente</span>';
+  const cell=(k,v,cls='')=>`<div><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;
+  let head, cells, note;
   if(l.price_txt){
-    lines.push(`<div class="big">${st[0]} ${st[1]} · ${esc(l.label)} <span class="mono">(${esc(l.price_txt)})</span> ${gradeBadge(recFor(mktKey(l),l.side,l.line),true)||'<span class="gbadge g-n">⏳ Pendiente</span>'}</div>`);
-    lines.push(`📊 Modelo <b class="mono">${pct(l.p_model)}</b> vs implícita s/vig <b class="mono">${pct(l.p_nv)}</b> (con vig ${pct(l.implied_raw)})`);
-    lines.push(`🧮 Prob. final (mezcla modelo/mercado) <b class="mono">${pct(l.p_final)}</b> · ⚡ Edge <b class="mono ${l.edge>0?'pos':'neg'}">${sg(l.edge)} pp</b> · EV <b class="mono ${l.ev>0?'pos':'neg'}">${sg(l.ev)}%</b>`);
-    lines.push(`🎯 Línea justa <b class="mono">${esc(l.fair_txt)}</b> · 💰 Precio máximo para apostar <b class="mono">${esc(l.max_txt)}</b> <span class="sub">(EV ≥ +2% sobre la prob. final)</span>`);
+    head=`${st[0]} ${st[1]} · ${esc(l.label)} <span class="mono">(${esc(l.price_txt)})</span> ${gb}`;
+    cells=[cell('Modelo',pct(l.p_model)),cell('Mercado s/vig',pct(l.p_nv)),cell('Con vig',pct(l.implied_raw)),cell('Prob. final',pct(l.p_final)),
+      cell('Edge',sg(l.edge)+' pp',l.edge>0?'pos':'neg'),cell('EV',sg(l.ev)+'%',l.ev>0?'pos':'neg'),cell('Línea justa',esc(l.fair_txt)),cell('Precio máx.',esc(l.max_txt))];
+    note='Prob. final = mezcla modelo/mercado. Precio máximo = el que deja EV ≥ +2% sobre la prob. final.';
   } else {
-    lines.push(`<div class="big">${st[0]} ${st[1]} · Lean del modelo: ${esc(l.label)} ${gradeBadge(recFor(mktKey(l),l.side,l.line),true)||'<span class="gbadge g-n">⏳ Pendiente</span>'}</div>`);
-    lines.push(`📊 Modelo <b class="mono">${pct(l.p_model)}</b> · Edge: ${SD} (no hay precio de mercado)`);
-    lines.push(`🎯 Línea justa <b class="mono">${esc(l.fair_txt)}</b> · 💰 Precio máximo para apostar <b class="mono">${esc(l.max_txt)}</b> <span class="sub">(sólo valdría la pena apostar a ese momio o mejor)</span>`);
+    head=`${st[0]} ${st[1]} · Lean del modelo: ${esc(l.label)} ${gb}`;
+    cells=[cell('Modelo',pct(l.p_model)),cell('Edge',SD),cell('Línea justa',esc(l.fair_txt)),cell('Precio máx.',esc(l.max_txt))];
+    note='Sin precio de mercado: sólo valdría la pena apostar a ese momio o mejor.';
   }
-  lines.push(`🧠 ${confBadge(c)} ${c.reasons&&c.reasons.length?`<span class="sub">${esc(c.reasons.join(' · '))}</span>`:''}`);
-  if(l.downgraded) lines.push(`<span class="sub">⬇️ Era PICK pero se degradó a LEAN por confianza baja.</span>`);
-  if(p.status==='PASS') lines.push(`<span class="sub">Sin ventaja suficiente en ningún mercado; este es el lean menos malo, no una recomendación fuerte.</span>`);
-  return `<div class="lean">${lines.join('<br>')}</div>${sigLine(l.signals)}`;
+  const lines=[`<div class="lh">${head}</div><div class="stats">${cells.join('')}</div><div class="sub">${note}</div>`];
+  lines.push(`<div style="margin-top:8px">🧠 ${confBadge(c)} ${c.reasons&&c.reasons.length?`<span class="sub">${esc(c.reasons.join(' · '))}</span>`:''}</div>`);
+  if(l.downgraded) lines.push(`<div class="sub">⬇️ Era PICK pero se degradó a LEAN por confianza baja.</div>`);
+  if(p.status==='PASS') lines.push(`<div class="sub">Sin ventaja suficiente en ningún mercado; este es el lean menos malo, no una recomendación fuerte.</div>`);
+  return `<div class="lean">${lines.join('')}</div>${sigLine(l.signals)}`;
 }
 function picksSection(d){
   if(!d.picks) return `<div class="card" style="margin-top:10px"><h2>🎯 Mejores picks</h2><div class="mut">${d.game.state!=='pre'?'El juego ya empezó o terminó: los picks pre-juego no aplican.':`Sin modelo para este juego (${SD}).`}</div></div>`;
   const cs = d.picks.candidates||[];
   return `<div class="card hot" style="margin-top:10px"><h2>🎯 Mejores picks <span class="badge b-model">ESTIMACIÓN DEL MODELO</span></h2>${leanBlock(d)}
-  ${cs.length?`<div style="margin-top:12px"><div class="cand h"><div>Selección</div><div>Precio</div><div>Modelo</div><div>Mercado s/vig</div><div>Edge</div><div>Línea justa</div><div>Precio máx.</div></div>${cs.map(candRow).join('')}</div>`:''}
+  ${cs.length?`<details class="cands" ${matchMedia('(min-width:641px)').matches?'open':''} style="margin-top:8px"><summary>Todas las selecciones (${cs.length})</summary><div class="cand h"><div>Selección</div><div>Precio</div><div>Modelo</div><div>Mercado s/vig</div><div>Edge</div><div>Línea justa</div><div>Precio máx.</div></div>${cs.map(candRow).join('')}</details>`:''}
   ${d.model&&d.model.w_model!=null?`<div class="sub" style="margin-top:8px">Prob. final = ${Math.round(d.model.w_model*100)}% modelo + ${100-Math.round(d.model.w_model*100)}% mercado s/vig (el peso del modelo crece con la muestra de juegos). Edge = prob. final − prob. s/vig. ✂️ = prob. del modelo recortada a ±20 pp del mercado.</div>`:''}
   </div>`;
 }
@@ -298,13 +329,13 @@ async function viewRecord(){
    ${pills('days',[['','Todo'],['7','7 días'],['30','30 días']])}
    <div class="kpis">${kpi('Récord G-P-E',`${f(S.W)}-${f(S.L)}-${f(S.P)}`)}${kpi('% acierto',S.win_pct==null?SD:S.win_pct.toFixed(1)+'%',S.win_pct>=52.4?'pos':'')}
     ${kpi('Unidades (1u plano)',S.n_priced?units(S.units):SD,S.units>0?'pos':S.units<0?'neg':'')}${kpi('ROI',S.roi==null?SD:sg(S.roi)+'%',S.roi>0?'pos':S.roi<0?'neg':'')}
-    ${kpi('Calificados',S.graded)}${kpi('⏳ Pendientes',S.pending)}${kpi('⚪ Anulados',S.void)}</div>
+    </div><div class="kpis s">${kpi('Calificados',S.graded)}${kpi('⏳ Pendientes',S.pending)}${kpi('⚪ Anulados',S.void)}</div>
    <div class="sub">G = ganado · P = perdido · E = push (devolución). % acierto = G/(G+P) sin pushes. Medio ganado/perdido (líneas de cuarto) cuenta 0.5 en G o P y 0.5 en E. Unidades = ganancia/pérdida de apostar 1u a la cuota registrada${S.n_unpriced?` (${S.n_unpriced} calificados sin cuota registrada no entran en unidades/ROI)`:''}.
    <button class="btn" onclick="gradeNow(this)">🔄 Calificar ahora</button> <span class="sub">Automático cada ${d.grading.every_min} min${d.grading.last?' · última '+tsFmt(d.grading.last):''}</span></div>`;
   if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
-  else html+=`<div class="day">Últimos picks calificados</div>`+d.recent.map(r=>`<div class="card rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
+  else html+=`<div class="day">Últimos picks calificados</div><div class="rec-list">`+d.recent.map(r=>`<div class="rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
      <div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div><div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
-     <div class="rr">${gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('');
+     <div class="rr">${gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
   $app.innerHTML=html;
 }
 function setRecF(k,v){ RECF[k]=v; viewRecord(); }
@@ -318,11 +349,14 @@ async function viewPicks(scope){
   const t=`<div class="pills">${tabs.map(([k,l])=>`<a class="pill ${k===scope?'on':''}" href="#/picks/${k}">${l}</a>`).join('')}</div>`;
   const withOdds=d.items.filter(r=>r.has_odds&&r.status!=='PASS'), pass=d.items.filter(r=>r.has_odds&&r.status==='PASS'), noodds=d.items.filter(r=>!r.has_odds);
   const card=r=>{ const l=r.lean, g=r.game, st=STATUS[r.status];
-    return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="ic">${st[0]}</div><div>
-    <div><b>${esc(l.label)}</b> <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span> ${badgeSt(r.status)} ${confBadge(r.confidence)}</div>
-    <div class="sub">${esc(g.league_name)} · ${esc(g.away.name)} @ ${esc(g.home.name)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
-    <div class="sub mono">Modelo ${pct(l.p_model)} vs s/vig ${pct(l.p_nv)} · Línea justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato'?`<div class="sub">${(VERD[l.signals.verdict]||[])[0]||''} ${(VERD[l.signals.verdict]||[])[1]||''}${l.signals.tickets!=null?` · ${l.signals.tickets}% tickets / ${l.signals.money!=null?l.signals.money+'% dinero':'dinero '+SD}`:''}${l.signals.best?` · mejor ${esc(l.signals.best.price_txt)} en ${esc(l.signals.best.book)}`:''}</div>${tagChips(l.signals)}`:''}${r.brief&&r.brief.length?`<div class="brief">${briefChips(r.brief)}</div>`:''}</div>
-    <div class="mono ${l.edge>0?'pos':'mut'}" style="font-size:18px;font-weight:800;text-align:right">${l.edge==null?SD:sg(l.edge)+' pp'}<div class="sub">edge</div></div></a>`; };
+    const sg_=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato';
+    const sigH=sg_?`<div class="sub" style="margin:8px 0 4px">${(VERD[l.signals.verdict]||[])[0]||''} ${(VERD[l.signals.verdict]||[])[1]||''}${l.signals.tickets!=null?` · ${l.signals.tickets}% tickets / ${l.signals.money!=null?l.signals.money+'% dinero':'dinero '+SD}`:''}${l.signals.best?` · mejor ${esc(l.signals.best.price_txt)} en ${esc(l.signals.best.book)}`:''}</div>${tagChips(l.signals)}`:'';
+    const nb=(r.brief||[]).length;
+    const det=(sg_||nb)?`<div class="gp"><div class="tg" role="button" tabindex="0">Señales y mercados${nb?` (${nb})`:''}</div><div class="sg">${sigH}${nb?briefRows(r.brief,g,[]):''}</div></div>`:'';
+    return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div class="pkt">${st[0]} ${esc(l.label)} <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span></div>
+    <div class="pke mono ${l.edge>0?'pos':'mut'}">${l.edge==null?SD:sg(l.edge)+'pp'}<small>edge</small></div></div>
+    <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}<span class="sub">${esc(g.league_name)} · ${esc(g.away.name)} @ ${esc(g.home.name)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
+    <div class="stat mono">Modelo ${pct(l.p_model)} · s/vig ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${det}</a>`; };
   let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por estado, edge y confianza. <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
   if(withOdds.length) html+=`<div class="day">Con ventaja (PICK / LEAN)</div>`+withOdds.slice(0,40).map(card).join('');
@@ -346,11 +380,11 @@ function probSection(d){
       const mod = o.p_model_raw==null ? `<span class="mut" title="${esc(o.model_note||'Modelo: Sin dato')}">Modelo: ${SD}</span>` : `<span class="mono"><b>${pct(o.p_model)}</b></span>${o.clipped?' <span title="Recortada a ±20 pp del mercado">✂️</span>':''}${o.p_push?` <span class="sub" title="Probabilidad aprox. de push (devolución); excluida del cálculo">push ${(o.p_push*100).toFixed(0)}%</span>`:''}`;
       const rr=recFor(o.market,o.side,o.line);
       return `<tr class="${hi?'hi':''}"><td class="lb"><b>${esc(o.label)}</b>${rr?' '+gradeBadge(rr,false)+' <span class="sub">'+(rr.type==='main'?'principal':'sugerencia')+'</span>':''}${o.model_note&&o.p_model_raw==null&&m.key!=='dc'?`<div class="sub">${esc(o.model_note)}</div>`:''}</td>
-       <td>${mod}</td><td>${consTxt}</td><td>${pinTxt}</td>
-       <td class="mono">${o.p_final==null?`<span class="mut">${SD}</span>`:pct(o.p_final)}</td>
-       <td class="mono">${o.fair_txt?esc(o.fair_txt):`<span class="mut">${SD}</span>`}</td>
-       <td class="mono">${o.best?`<b>${esc(o.best.price_txt)}</b> <span class="sub">${esc(o.best.book||'')}${o.best.n_books>1?' · '+o.best.n_books+' casas':''}</span>`:`<span class="mut">${m.derived?'sin precio directo':SD}</span>`}</td>
-       <td class="mono ${e>0?'pos':e<0?'neg':''}">${e==null?`<span class="mut">${SD}</span>`:sg(e)+' pp'}</td></tr>`;
+       <td data-l="Modelo">${mod}</td><td data-l="Mercado s/vig">${consTxt}</td><td data-l="Pinnacle">${pinTxt}</td>
+       <td class="mono" data-l="Prob. final">${o.p_final==null?`<span class="mut">${SD}</span>`:pct(o.p_final)}</td>
+       <td class="mono" data-l="Línea justa">${o.fair_txt?esc(o.fair_txt):`<span class="mut">${SD}</span>`}</td>
+       <td class="mono" data-l="Mejor precio">${o.best?`<b>${esc(o.best.price_txt)}</b> <span class="sub">${esc(o.best.book||'')}${o.best.n_books>1?' · '+o.best.n_books+' casas':''}</span>`:`<span class="mut">${m.derived?'sin precio directo':SD}</span>`}</td>
+       <td class="mono ${e>0?'pos':e<0?'neg':''}" data-l="Edge">${e==null?`<span class="mut">${SD}</span>`:sg(e)+' pp'}</td></tr>`;
     }).join('');
     const src=[...new Set(m.outcomes.map(o=>o.nv_src).filter(Boolean))].join(' · ');
     return `<div class="tbl"><div class="sub tt">${esc(m.title)}${m.outcomes[0]&&m.outcomes[0].line!=null&&m.key!=='ml'?` · línea actual ${/spread$/.test(m.key)?sg(m.outcomes[0].line):m.outcomes[0].line}${m.unit?' '+m.unit:''}`:''}${m.derived?' · derivado del 1X2':''}${src?` · mercado: ${esc(src)}`:''}</div>
@@ -363,12 +397,12 @@ function probSection(d){
    ${g.neutral&&d.kind!=='tennis'?`<div class="sub" style="margin-top:4px">Cancha neutral: “local” es sólo la designación del calendario; el modelo no aplica ventaja de local.</div>`:''}
    <div class="note" style="margin-bottom:0">Son estimaciones de un modelo simple, no certezas ni recomendaciones de apuesta.</div></div>`;
 }
-const briefChips = (items) => !items||!items.length ? `<span class="chip mut">Probabilidades: ${SD}</span>` : items.map(b=>`<span class="pchip" title="${esc(b.title)} · mejor resultado (mayor edge, o mayor prob. del modelo)"><b>${esc(({ml:'ML',spread:b.title,total:'Total',sspread:'Hánd. sets',stotal:'Total sets'})[b.market]||b.title)}</b> ${esc(b.label)} <span class="mono">${b.p_model!=null?'Mod '+pct(b.p_model,0):'Mod: '+SD}</span>${b.clipped?'<span title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''} <span class="sub mono">Mkt ${b.p_nv!=null?pct(b.p_nv,0):SD}</span>${b.edge!=null?` <span class="mono ${b.edge>0?'pos':'neg'}">${sg(b.edge)}pp</span>`:''}</span>`).join('');
+const briefChips = (items,g) => !items||!items.length ? `<span class="sub">Probabilidades: ${SD}</span>` : briefRows(items,g||{away:{},home:{}},[]);
 async function fillBriefs(league){
   try{
     const r=await api('/api/league_brief?league='+encodeURIComponent(league));
-    document.querySelectorAll('.brief[data-id]').forEach(el=>{ const it=r.items[el.dataset.id]; el.innerHTML = it===undefined ? '' : briefChips(it); });
-  }catch(e){ document.querySelectorAll('.brief[data-id]').forEach(el=>el.innerHTML=`<span class="sub">Probabilidades: ${SD}</span>`); }
+    document.querySelectorAll('.gp[data-id]').forEach(el=>{ const it=r.items[el.dataset.id]; el.innerHTML = it===undefined ? '' : briefBlock(GAMES[el.dataset.id]||{away:{},home:{}},it); });
+  }catch(e){ document.querySelectorAll('.gp[data-id]').forEach(el=>el.innerHTML=`<span class="sub">Probabilidades: ${SD}</span>`); }
 }
 
 // ------------------------------------------------------------ mercado: casas, % apuestas, RLM, movimientos
@@ -540,3 +574,20 @@ function viewInfo(){
   <li><b>Confianza:</b> muestra de juegos, acuerdo con el mercado, líderes lesionados, abridores (MLB).</li></ul></div>
   <div class="note">El modelo no sabe de lesiones de último minuto, descansos, clima ni alineaciones. El mercado suele ser más informado que un modelo simple: trátalo como una segunda opinión. Sin promesas de rentabilidad.</div>`;
 }
+
+
+// ------------------------------------------------------------ interacción (móvil): sugerencias y tarjetas plegables
+function foldCards(){
+  if(!matchMedia('(max-width:640px)').matches) return;
+  const keep=/Picks registrados|Mejores picks|Probabilidades|Comparador|Movimientos de l/i;
+  document.querySelectorAll('#app > .card').forEach(c=>{
+    const h=c.querySelector(':scope > h2'); if(!h) return;
+    c.classList.add('fold'); if(!keep.test(h.textContent)) c.classList.add('closed');
+  });
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('.tg');
+  if(t){ e.preventDefault(); e.stopPropagation(); t.parentElement.classList.toggle('open'); return; }
+  const h=e.target.closest('.fold > h2'); if(h) h.parentElement.classList.toggle('closed');
+},true);
+document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('tg')){ e.preventDefault(); e.target.parentElement.classList.toggle('open'); } });
