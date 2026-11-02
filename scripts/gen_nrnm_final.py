@@ -6,10 +6,10 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 PINK, DK, WH = "#FF1179", "#14181e", "#FFFFFF"
 H = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">'
 CX, CY = 256, 322
-def frame(inner):
+def frame(inner, col=PINK):
     return (H + '<g transform="translate(0 8)">'
-            f'<path d="M256 66 L446 432 H66 Z" stroke="{PINK}" stroke-width="28"/>'
-            f'<path d="M162 {CY} Q256 218 350 {CY} Q256 426 162 {CY} Z" stroke="{PINK}" stroke-width="22"/>' + inner + '</g></svg>')
+            f'<path d="M256 66 L446 432 H66 Z" stroke="{col}" stroke-width="28"/>'
+            f'<path d="M162 {CY} Q256 218 350 {CY} Q256 426 162 {CY} Z" stroke="{col}" stroke-width="22"/>' + inner + '</g></svg>')
 def pent(r, rot=-90):
     return " ".join(f"{CX + r * math.cos(math.radians(rot + 72 * i)):.1f},{CY + r * math.sin(math.radians(rot + 72 * i)):.1f}" for i in range(5))
 plain = f'<circle cx="{CX}" cy="{CY}" r="36" fill="{PINK}"/><circle cx="{CX}" cy="{CY}" r="16" fill="{DK}"/><circle cx="{CX + 7}" cy="{CY - 7}" r="6" fill="{WH}"/>'
@@ -30,6 +30,10 @@ def americano(fill=PINK, line=DK, stroke=None):
 amer = americano()
 amer_w = americano(fill="#FFFFFF", line=DK)                       # balón blanco, cordones oscuros
 amer_wo = americano(fill=DK, line="#FFFFFF", stroke="#FFFFFF")   # solo contorno blanco, interior oscuro
+K, W = "#000000", "#FFFFFF"
+plain_w = f'<circle cx="{CX}" cy="{CY}" r="36" fill="{W}"/><circle cx="{CX}" cy="{CY}" r="16" fill="{K}"/><circle cx="{CX + 7}" cy="{CY - 7}" r="6" fill="{W}"/>'
+WHITE_OPT = {"nrnm_final_blanco": ("Blanco · pupila", "Todo blanco sobre negro puro #000: triángulo completo, ojo y pupila.", plain_w),
+             "nrnm_final_blanco_americano": ("Blanco · balón americano", "Todo blanco sobre negro puro #000; el iris es un balón americano con cordones en negativo (negros).", americano(fill=W, line=K))}
 OPT = {"nrnm_final": ("Final · pupila", "Triángulo completo + ojo, todo rosa; pupila oscura con brillo.", plain),
        "nrnm_final_futbol": ("Fútbol", "Iris/pupila = balón de fútbol (pentágono central).", futbol),
        "nrnm_final_basket": ("Básquetbol", "Iris/pupila = balón de básquetbol (cruz y arcos).", basket),
@@ -42,4 +46,7 @@ if __name__ == "__main__":
     for k, (lab, desc, inner) in OPT.items():
         os.makedirs(os.path.join(ROOT, "static/brand", k), exist_ok=True); open(os.path.join(ROOT, "static/brand", k, "glyph.svg"), "w").write(frame(inner))
         b["options"][k] = dict(name="No Risk No Money", short="NRNM", tagline="Riesgo medido, picks con datos", palette=pal, label=lab, desc=desc, icon_bg="#171b21")
+    for k, (lab, desc, inner) in WHITE_OPT.items():
+        os.makedirs(os.path.join(ROOT, "static/brand", k), exist_ok=True); open(os.path.join(ROOT, "static/brand", k, "glyph.svg"), "w").write(frame(inner, W))
+        b["options"][k] = dict(name="No Risk No Money", short="NRNM", tagline="Riesgo medido, picks con datos", palette=pal, label=lab, desc=desc, icon_bg=K)
     json.dump(b, open(bj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)

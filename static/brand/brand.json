@@ -311,6 +311,38 @@
    "label": "Americano contorno blanco",
    "desc": "Triángulo y ojo rosas; balón solo con contorno y cordones blancos, interior oscuro.",
    "icon_bg": "#171b21"
+  },
+  "nrnm_final_blanco": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Blanco · pupila",
+   "desc": "Todo blanco sobre negro puro #000: triángulo completo, ojo y pupila.",
+   "icon_bg": "#000000"
+  },
+  "nrnm_final_blanco_americano": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Blanco · balón americano",
+   "desc": "Todo blanco sobre negro puro #000; el iris es un balón americano con cordones en negativo (negros).",
+   "icon_bg": "#000000"
   }
  }
 }
