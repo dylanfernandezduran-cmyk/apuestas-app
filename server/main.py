@@ -57,6 +57,29 @@ async def games(league: str, days: int | None = None):
     gs, ok = await data.list_games(league, days)
     return dict(league=league, name=LEAGUES[league]["name"], ok=ok, games=gs, now=time.time())
 
+_brief_cache = {}
+
+@app.get("/api/league_brief")
+async def league_brief(league: str, hours: int = 96):
+    """Probabilidades compactas (mejor resultado por mercado) de los juegos próximos de una liga. Para tarjetas de lista."""
+    if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")
+    ent = _brief_cache.get(league)
+    if ent and time.time() - ent[0] < 120: return ent[1]
+    gs, ok = await data.list_games(league)
+    lim = time.time() + hours * 3600
+    gs = [g for g in gs if g["state"] == "pre"][:40]
+    sem = asyncio.Semaphore(6)
+    async def one(g):
+        async with sem:
+            try:
+                a = await data.analyze(league, g["id"])
+            except Exception:
+                return g["id"], None
+        return g["id"], (data.PR.brief(a.get("probs")) if a and a.get("probs") else [])
+    res = dict(league=league, items=dict(await asyncio.gather(*[one(g) for g in gs])), now=time.time())
+    _brief_cache[league] = (time.time(), res)
+    return res
+
 @app.get("/api/game/{league}/{eid}")
 async def game(league: str, eid: str):
     if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")

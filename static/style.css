@@ -76,3 +76,10 @@ table.cmp tr.nv td{background:#101a29;border-top:1px solid var(--line)}table.cmp
 .row2{padding:8px 0;border-bottom:1px dashed var(--line)}
 .chart{width:100%;height:auto;background:#0c121b;border-radius:8px}
 .legend2{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut);margin-top:6px}.legend2 i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+
+table.prob th,table.prob td{white-space:nowrap}table.prob td.lb{white-space:normal;min-width:190px}
+table.prob tr.hi td{background:#0e2a20}
+table.prob td:not(:first-child){text-align:right}
+.brief{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.pchip{border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:3px 7px;font-size:12px}
+.pk .brief{margin-top:4px}

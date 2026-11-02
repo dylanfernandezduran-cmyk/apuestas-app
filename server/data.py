@@ -8,6 +8,7 @@ from .odds import extract_odds, fmt_am
 from . import ratings as RT
 from . import model as M
 from . import market as MK
+from . import probs as PR
 
 CDMX = ZoneInfo(TZ)
 SD = "Sin dato"
@@ -169,6 +170,7 @@ async def tennis_detail(league, mid):
         odds["src"] = "mk"
         gaps[0] = "Cuotas: sólo Pinnacle (referencia sharp, vía guest API pública); ESPN no publica momios de tenis. % tickets/% dinero: Sin dato"
     res = dict(game=g, kind="tennis", odds=odds, gaps=gaps, form={"home": fa, "away": fb}, market=mk, odds_note=("Cuotas tomadas de Pinnacle (ESPN no publica tenis)." if odds else None))
+    if g["state"] == "pre": res["probs"] = PR.build(g, mdl, odds, mk, w=(M.blend_weight(mdl) if mdl else None))
     if mdl and g["state"] == "pre":
         cands = M.build_candidates(mdl, odds, A["name"], B["name"]) if odds else []
         conf = M.confidence(mdl, odds, {}, "tennis")
@@ -354,6 +356,7 @@ async def analyze(league, eid):
     if not mdl:
         out["model"] = None; out["picks"] = None
         gaps.append("Modelo: Sin dato suficiente de resultados de uno de los equipos")
+        if game["state"] == "pre": out["probs"] = PR.build(game, None, odds, mk)
         return out
     # lesionados clave (líderes de equipo en lista)
     key = False; key_names = []
@@ -376,6 +379,7 @@ async def analyze(league, eid):
         dec = M.decide(cands, mdl, H["name"], A["name"])
         if mk: MK.attach_signals(dec["candidates"], mk)
         out["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
+        out["probs"] = PR.build(game, mdl, odds, mk)
     else:
         out["picks"] = None
         gaps.append("Picks no disponibles: el juego ya empezó o terminó (las cuotas ya no son pre-juego)")
@@ -416,7 +420,7 @@ async def picks(scope="24h"):
         if not a or not a.get("picks"): return None
         p = a["picks"]
         return dict(game=a["game"], lean=p["lean"], status=p["status"], confidence=p["confidence"], has_odds=bool(a.get("odds")),
-                    top=[c for c in p["candidates"][:3]], model=a.get("model"))
+                    top=[c for c in p["candidates"][:3]], model=a.get("model"), brief=PR.brief(a.get("probs")))
     rs = [r for r in await asyncio.gather(*[one(g) for g in games]) if r]
     pri = {"PICK": 0, "LEAN": 1, "PASS": 2, "SIN_LINEA": 3}
     cw = {"Alta": 1.0, "Media": 0.7, "Baja": 0.4}

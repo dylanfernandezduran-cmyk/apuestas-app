@@ -48,6 +48,9 @@ Opción con llave gratuita (no incluida): The Odds API (más casas, sin splits).
 
 Variables de entorno opcionales: `SNAP_MIN` (default 10), `PINNACLE=0` (desactiva Pinnacle), `PINNACLE_GUEST_KEY`, `APUESTAS_DB` (ruta del SQLite; default `data/history.db`).
 
+## Probabilidades por resultado
+Cada juego (pre-juego) tiene una sección **Probabilidades** con todos los resultados de ganador/1X2, doble oportunidad (fútbol), hándicap/spread/run line/puck line y over/under, siempre con el nombre del equipo/jugador (p. ej. «Lakers (local)»): prob. del modelo, prob. sin vig del consenso y de Pinnacle, prob. final (mezcla), línea justa, mejor precio y casa, y edge. Las tarjetas de lista y Top picks muestran el mejor resultado por mercado (`/api/league_brief?league=nba`). Sin dato del modelo (p. ej. hándicap/totales de tenis, líneas de cuarto): sólo mercado y «Modelo: Sin dato».
+
 ## API
 `/api/sports` · `/api/games?league=nba&days=3` · `/api/game/{league}/{eventId}` (incluye `market`) · `/api/history/{league}/{eventId}` · `/api/picks?scope=24h|hoy|manana|72h` · `POST /api/snapshot` · `/api/health`
 
