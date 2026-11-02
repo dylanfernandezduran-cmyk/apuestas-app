@@ -19,7 +19,7 @@ def test_brand_manifest_and_index(monkeypatch):
     from server import main
     c = TestClient(main.app)
     b = c.get("/api/brand").json()
-    assert b["id"] == "ventaja" and set(b["options"]) == {"ventaja", "pizarra", "vigia"}
+    assert b["id"] == "ventaja" and set(b["options"]) == {"ventaja", "pizarra", "vigia", "avizor", "atalaya", "zahori", "lince"}
     m = c.get("/manifest.webmanifest").json()
     assert m["display"] == "standalone" and m["short_name"] == "Ventaja" and any(i["purpose"] == "maskable" for i in m["icons"])
     html = c.get("/").text

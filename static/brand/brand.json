@@ -19,6 +19,26 @@
    "name": "Vigía",
    "tagline": "Todo el deporte, en vigilancia",
    "desc": "Vigilancia en tiempo real (en vivo, lesiones, alineaciones). Logo: señal tipo radar con un punto verde de «live»."
+  },
+  "avizor": {
+   "name": "Avizor",
+   "tagline": "Ojo avizor en cada jugada",
+   "desc": "«Ojo avizor»: vigilante y atento. El ojo que todo lo ve, con la iris convertida en pelota (costuras de béisbol/tenis) en verde."
+  },
+  "atalaya": {
+   "name": "Atalaya",
+   "tagline": "Todo el juego, a la vista",
+   "desc": "La atalaya es la torre desde donde se vigila todo. Ojo dentro de un triángulo que descansa sobre la línea de cancha."
+  },
+  "zahori": {
+   "name": "Zahorí",
+   "tagline": "Ve lo que otros no ven",
+   "desc": "El zahorí detecta lo oculto. Un ojo visto como estadio desde arriba: la iris es la cancha con su línea media y círculo central."
+  },
+  "lince": {
+   "name": "Lince",
+   "tagline": "Vista de lince en cada juego",
+   "desc": "«Vista de lince» = ver hasta el último detalle. La pupila es una diana con retícula: precisión sobre el partido."
   }
  }
 }

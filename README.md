@@ -55,6 +55,7 @@ Todo con datos reales (ESPN y Open-Meteo); si algo no existe se muestra «Sin da
 
 ## Marca, logo y app instalable (PWA)
 - **3 opciones** de nombre/logo en `static/brand/{ventaja,pizarra,vigia}/glyph.svg` (vista previa: `screens/logos_options.png` o `/static/brand/options.html`). Por defecto: **Ventaja**.
+- **4 opciones «el ojo que todo lo ve»** (minimalistas, ojo + deporte): `avizor` (iris = pelota), `atalaya` (ojo en torre/cancha), `zahori` (iris = cancha vista desde arriba), `lince` (pupila = diana). Hoja: `screens/logos_ojo_options.png`; maquetas iPhone: `screens/logo_ojo_<nombre>.png` (`python scripts/make_brand_sheet.py avizor atalaya zahori lince`). Para ver los íconos de una opción sin activarla: `python scripts/make_icons.py avizor --preview`.
 - **Cambiar de marca** (una línea): edita `"active"` en `static/brand/brand.json` (o ejecuta con la variable de entorno `BRAND=pizarra`), y regenera íconos con `python scripts/make_icons.py pizarra` (usa Playwright/Chrome; escribe `static/brand/icons/*`). El nombre, eslogan, logo del encabezado, splash, `manifest.webmanifest` y metas de iOS se rellenan solos desde esa config.
 - **Splash:** animación corta del logo, una vez por sesión, se salta con un toque (`/?splash=1` lo fuerza; `?splash=1&hold=1` lo mantiene para capturas).
 - **Instalar en el teléfono:**
