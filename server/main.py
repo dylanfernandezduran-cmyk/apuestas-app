@@ -244,7 +244,7 @@ async def league_brief(league: str, hours: int = 96):
 async def game(league: str, eid: str):
     if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")
     r = await data.analyze(league, eid)
-    if not r: raise HTTPException(404, "Juego no encontrado o sin datos")
+    if not r: raise HTTPException(404, "Juego no encontrado o la fuente (ESPN) no respondió. Reintenta en unos segundos.")
     try: await enrich.detail(r, league, eid)
     except Exception: pass
     return r

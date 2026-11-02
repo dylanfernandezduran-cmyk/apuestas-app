@@ -14,7 +14,21 @@ const num = (v,d=1) => v==null||isNaN(v) ? SD : Number(v).toFixed(d);
 
 setInterval(()=>{document.getElementById('clock').textContent = new Intl.DateTimeFormat('es-MX',{timeZone:TZ,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date())+' · CDMX (UTC-6)'},1000);
 
-async function api(path){ const r = await fetch(path); if(!r.ok) throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail||r.statusText); return r.json(); }
+// fetch con tope de tiempo: nunca se queda girando; el error sube a route() que muestra el mensaje + «Reintentar»
+const API_TIMEOUT_MS = 45000;
+async function api(path, ms){
+  const ac = new AbortController(), t = setTimeout(()=>ac.abort(), ms||API_TIMEOUT_MS);
+  try{
+    const r = await fetch(path, {signal: ac.signal});
+    if(!r.ok) throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail||r.statusText);
+    return await r.json();
+  }catch(e){
+    if(e&&e.name==='AbortError') throw new Error('La consulta tardó demasiado (más de '+Math.round((ms||API_TIMEOUT_MS)/1000)+' s). Revisa tu conexión o que el servidor esté encendido.');
+    if(e instanceof TypeError) throw new Error('No se pudo conectar con el servidor. Revisa tu conexión.');
+    throw e;
+  }finally{ clearTimeout(t); }
+}
+const errBox = (msg) => `<div class="err">⚠️ ${esc(msg)}<div style="margin-top:10px"><button class="btn" id="retry" type="button">↻ Reintentar</button></div></div>`;
 const loading = t => $app.innerHTML = `<div class="loading">⏳ ${t||'Cargando datos reales…'}</div>`;
 const todayKey = () => dayKey(new Date().toISOString());
 function dayLabel(iso){ const k=dayKey(iso); const t=todayKey(); const tm=dayKey(new Date(Date.now()+864e5).toISOString());
@@ -39,20 +53,22 @@ const SPORT_EM = {mlb:'⚾',nfl:'🏈',nba:'🏀',nhl:'🏒',tenis:'🎾',futbol
 function setNav(n){ document.querySelectorAll('nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
 
 // ------------------------------------------------------------ rutas
+let ROUTE_SEQ = 0;
 async function route(){
+  const seq = ++ROUTE_SEQ;
   Live.stop();
   const h = location.hash.replace(/^#\/?/,'').split('/').map(decodeURIComponent);
   window.scrollTo(0,0);
   try{
-    if(!h[0]||h[0]==='') { setNav('home'); return viewHome(); }
-    if(h[0]==='deportes'){ setNav('sports'); return viewSports(); }
-    if(h[0]==='deporte'){ setNav('sports'); return viewSport(h[1], h[2]); }
-    if(h[0]==='juego'){ setNav('sports'); return viewGame(h[1], h[2]); }
-    if(h[0]==='picks'){ setNav('picks'); return viewPicks(h[1]||'24h'); }
-    if(h[0]==='record'){ setNav('record'); return viewRecord(); }
-    if(h[0]==='info'){ setNav('info'); return viewInfo(); }
-    viewHome();
-  }catch(e){ $app.innerHTML = `<div class="err">⚠️ ${esc(e.message)}</div>`; }
+    if(!h[0]||h[0]==='') { setNav('home'); return await viewHome(); }
+    if(h[0]==='deportes'){ setNav('sports'); return await viewSports(); }
+    if(h[0]==='deporte'){ setNav('sports'); return await viewSport(h[1], h[2]); }
+    if(h[0]==='juego'){ setNav('sports'); return await viewGame(h[1], h[2]); }
+    if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'24h'); }
+    if(h[0]==='record'){ setNav('record'); return await viewRecord(); }
+    if(h[0]==='info'){ setNav('info'); return await viewInfo(); }
+    await viewHome();
+  }catch(e){ if(seq!==ROUTE_SEQ) return; $app.innerHTML = errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); }
 }
 window.addEventListener('hashchange', route); route();
 
