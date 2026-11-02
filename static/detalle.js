@@ -59,7 +59,7 @@ function dProb(d){
       const col=e!=null&&e>=3?DC.tl:e!=null&&e<=-3?DC.pk:DC.bl;
       return `<div class="pb"><div class="pbl"><b>${esc(obLabel(o,g))}</b>${rr?gradeBadge(rr,false):''}<span class="pv mono">${pct(pf,0)}</span></div>
         <div class="pbar"><i style="width:${Math.round(pf*100)}%;background:${col}"></i>${o.p_nv!=null?`<u style="left:${(o.p_nv*100).toFixed(1)}%"></u>`:''}</div>
-        <div class="pm">${o.p_model_raw!=null?`modelo ${pct(o.p_model,0)}`:'sin modelo'}${o.p_nv!=null?` · mercado ${pct(o.p_nv,0)}`:''}${o.fair_txt?` · justa ${esc(o.fair_txt)}`:''}${e!=null&&Math.abs(e)>=1?` · <b class="${e>0?'k-t':'k-p'}">${sg(e)} pp</b>`:''}</div></div>`; }).join('');
+        <div class="pbm">${[o.p_model_raw!=null?`modelo ${pct(o.p_model,0)}`:'sin modelo',o.p_nv!=null?`mercado ${pct(o.p_nv,0)}`:'',o.fair_txt?`justa ${esc(o.fair_txt)}`:'',e!=null&&Math.abs(e)>=1?`<b class="${e>0?'k-t':'k-p'}">${sg(e)} pp</b>`:''].filter(Boolean).map(t=>`<span>${t}</span>`).join('')}</div></div>`; }).join('');
     if(!outs) return '';
     const ln=m.outcomes[0]&&m.outcomes[0].line!=null&&m.key!=='ml'?` · ${/spread$/.test(m.key)?sg(m.outcomes[0].line):m.outcomes[0].line}`:'';
     return `<div class="pbk"><div class="pbt">${esc(mkTitle(m,g))}${ln}</div>${outs}</div>`; }).join('');
@@ -394,7 +394,7 @@ function courtLive(d){
 
 // ================= PREDICCIÓN NRNM (pt75u): marcador proyectado + ganador + total + hándicap, derivados del modelo; bloqueada al inicio
 const PRK = {GANADO:['ok','✓'],MEDIO_GANADO:['ok','✓'],PERDIDO:['no','✕'],MEDIO_PERDIDO:['no','✕'],PUSH:['pu','↔']};
-const prMark = r => r&&PRK[r]?`<i class="pm ${PRK[r][0]}" title="${r==='PUSH'?'Devolución':PRK[r][0]==='ok'?'Acertó':'Falló'}">${PRK[r][1]}</i>`:'';
+const prMark = r => r&&PRK[r]?`<i class="pmk ${PRK[r][0]}" title="${r==='PUSH'?'Devolución':PRK[r][0]==='ok'?'Acertó':'Falló'}">${PRK[r][1]}</i>`:'';
 function dPred(d){
   const p=d.pred, g=d.game; if(!p||!p.score||!p.winner) return '';
   const [s0,s1]=sides(g), R=p.result||null, tennis=d.kind==='tennis';

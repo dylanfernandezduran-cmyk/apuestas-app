@@ -58,7 +58,7 @@ def test_fuente_ui_buscador_y_detalle_limpio():
     ds_ = dj[dj.index("function detailSections"):]
     assert ds_.index("dPred") < ds_.index("dRec") < ds_.index("dPicks") and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
-    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == ["16", "3", "14", "12"] and "shell-v17" in SRC["sw.js"]
+    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == ["17", "4", "14", "12"] and "shell-v18" in SRC["sw.js"]
     assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
 
 def _py_playwright():
@@ -101,3 +101,23 @@ def test_buscador_y_detalle_limpio_e2e():
     assert o["pred_soc"] == ["GANADOR", "MARCADOR EXACTO", "TOTAL DE GOLES", "CÓRNERS", "HÁNDICAP"] and len(o["pred_resumen"]) == 5 and o["pred_resumen"][2] == "Menos de 2.5 goles" and "córners" in o["pred_resumen"][3]
     # en vivo: cancha arriba y el estado (ⓘ, plegado, scroll) sobreviven al refresco
     assert o["marcador"] == "2–1" and o["cancha_arriba"] <= 3 and o["refrescos"] >= 2 and o["estado_tras_refresco"] == [True, True] and o["scroll"] == 150 and o["errores"] == []
+
+@pytest.mark.skipif(_py_playwright() is None, reason="sin Playwright/Chrome")
+def test_detalle_sin_desborde_a_375_390_430():
+    """Ningún elemento ni texto del detalle (todas las secciones con ⓘ abiertos, mocks de pre/en vivo) sale del viewport ni de su tarjeta."""
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    srv = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.main:app", "--port", str(port)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try: socket.create_connection(("127.0.0.1", port), 0.2).close(); break
+            except OSError: time.sleep(0.2)
+        r = subprocess.run([_py_playwright(), os.path.join(ROOT, "tests", "e2e_overflow.py"), str(port), "/usr/bin/google-chrome"], capture_output=True, text=True, timeout=180)
+        assert r.returncode == 0, r.stderr[-800:]
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        srv.terminate()
+    assert o == {"375": [], "390": [], "430": []}, o
+
+def test_prob_meta_no_usa_la_clase_de_la_marca_pm():
+    css, dj = SRC["style.css"], SRC["detalle.js"]
+    assert 'class="pbm"' in dj and 'class="pm"' not in dj and re.search(r"\.pb \.pbm\{[^}]*flex-wrap:wrap", css) and not re.search(r"(^|\n)\.pm\{", css)
