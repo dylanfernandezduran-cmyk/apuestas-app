@@ -127,3 +127,27 @@ def test_carrusel_e2e_una_tarjeta_deslizable_y_no_se_reinicia_al_refrescar():
     assert o["tras_refresco"]["txt"] == "4/5" and o["tras_refresco"]["on"] == 3          # el refresco de 25 s no devuelve a la primera
     assert o["marcador_antes"] != o["marcador_despues"]                                   # y sí actualizó el marcador en sitio
     assert o["iniciales"] >= 5 and o["errores"] == []                                     # imagen rota -> iniciales, sin errores JS
+
+
+@pytest.mark.skipif(_py_playwright() is None, reason="sin Playwright/Chrome")
+def test_layout_inicio_y_picks_por_deporte_e2e():
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    srv = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.main:app", "--port", str(port)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try: socket.create_connection(("127.0.0.1", port), 0.2).close(); break
+            except OSError: time.sleep(0.2)
+        r = subprocess.run([_py_playwright(), os.path.join(ROOT, "tests", "e2e_layout.py"), str(port), "/usr/bin/google-chrome"], capture_output=True, text=True, timeout=90)
+        assert r.returncode == 0, r.stderr[-800:]
+        o = json.loads(r.stdout.strip().splitlines()[-1])
+    finally:
+        srv.terminate()
+    assert o["secciones"] == ["hm-live", "hm-sp", "hm-picks"]                          # en vivo -> deportes -> mejores picks
+    assert o["texto_inicio_tiene"] == []                                              # sin Récord ni Bajas confirmadas en Inicio
+    assert o["nav"] == ["⚾ MLB", "🏈 NFL", "🏀 NBA", "🏒 NHL", "⚽ Fútbol", "🎾 Tenis"] or [x.replace("\n", " ") for x in o["nav"]] == ["⚾ MLB", "🏈 NFL", "🏀 NBA", "🏒 NHL", "⚽ Fútbol", "🎾 Tenis"]
+    assert o["nav_href"] == [f"#/deporte/{k}" for k in ("mlb", "nfl", "nba", "nhl", "futbol", "tenis")] and o["tap_nfl"] == "#/deporte/nfl"
+    assert o["nav_estilo"]["bw"] == "0px" and o["nav_estilo"]["bg"] in ("rgba(0, 0, 0, 0)", "transparent") and o["nav_estilo"]["sh"] == "none"   # sin cajas
+    assert o["nav_vivo"] == ["nba"] and o["rec_tab"] is True                           # punto de "en vivo"; la pestaña Récord sigue
+    assert o["grupos"] == ["mlb", "nfl", "futbol", "nba", "nhl", "tenis"]
+    assert o["orden_cards"] == "H:mlb,c,c,H:nfl,c,H:futbol,c,c,H:nba,c,H:nhl,c,H:tenis,c"
+    assert o["grupos_sin_vacios"] == ["mlb", "nba"] and o["errores"] == []

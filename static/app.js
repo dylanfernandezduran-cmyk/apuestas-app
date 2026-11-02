@@ -421,7 +421,9 @@ function setRecF(k,v){ RECF[k]=v; viewRecord(); }
 async function gradeNow(btn){ btn.disabled=true; btn.textContent='Calificando…'; try{ await fetch('/api/grade',{method:'POST'}); }catch(e){} viewRecord(); }
 
 // ------------------------------------------------------------ picks del día
+const PICK_GROUPS = ['mlb','nfl','futbol','nba','nhl','tenis'];
 async function viewPicks(scope){
+  SPORTS = SPORTS || await api('/api/sports');
   loading('Calculando picks de todos los deportes (primera vez puede tardar ~20 s)…');
   const d = await api('/api/picks?scope='+scope);
   const tabs=[['24h','Próx. 24 h'],['hoy','Hoy'],['manana','Mañana'],['72h','72 h']];
@@ -438,9 +440,14 @@ async function viewPicks(scope){
     <div class="stat mono">Modelo ${pct(l.p_model)} · s/vig ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${det}</a>`; };
   let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por estado, edge y confianza. <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
-  if(withOdds.length) html+=`<div class="day">Con ventaja (PICK / LEAN)</div>`+withOdds.slice(0,40).map(card).join('');
-  if(pass.length) html+=`<div class="day">⛔ PASS · sin ventaja (se muestra el lean)</div>`+pass.slice(0,15).map(card).join('');
-  if(noodds.length) html+=`<div class="day">🔍 Sin línea de mercado (sólo lean del modelo, sin edge)</div>`+noodds.slice(0,20).map(card).join('');
+  // agrupado por deporte (orden: MLB, NFL, Fútbol, NBA, NHL, Tenis; grupos vacíos ocultos). Dentro de cada grupo: con ventaja, PASS y sin línea (orden del servidor)
+  const rank=r=>r.has_odds?(r.status==='PASS'?1:0):2;
+  PICK_GROUPS.forEach(k=>{
+    const its=d.items.filter(r=>r.game.sport===k).map((r,i)=>[r,i]).sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(x=>x[0]);
+    if(!its.length) return;
+    const sp=(SPORTS||[]).find(x=>x.key===k)||{name:k,emoji:''}, nPick=its.filter(r=>r.has_odds&&r.status!=='PASS').length;
+    html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${sp.emoji}</span> ${esc(sp.name)} <span class="n mono">${its.length}${nPick?` · ${nPick} con ventaja`:''}</span></h2>`+its.slice(0,30).map(card).join('');
+  });
   $app.innerHTML=html;
 }
 

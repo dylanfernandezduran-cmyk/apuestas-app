@@ -196,6 +196,10 @@ function carPatch(root, games){
   const v=tr.children[carIdx(tr)]; return v?v.dataset.gid:null;
 }
 
+// ---------- navegación minimalista de deportes (inicio): emoji arriba, nombre abajo, sin cajas
+const SNAV_ORDER = ['mlb','nfl','nba','nhl','futbol','tenis'];
+const sportNavItem = s => `<a href="#/deporte/${s.key}" data-sp="${s.key}"><span class="em">${s.emoji}</span><span class="nm">${esc(s.name)}</span></a>`;
+
 // ---------- resumen del día (inicio)
 const liveRowHtml = g => {
   const pv = Object.values(g.prov||{}); const main=(g.rec||[]).find(r=>r.type==='main');
@@ -208,10 +212,8 @@ async function viewHome(){
   const today = new Intl.DateTimeFormat('es-MX',{timeZone:TZ,weekday:'long',day:'numeric',month:'long'}).format(new Date());
   $app.innerHTML = `<div class="hm-h"><div class="sub">${esc(today)} · CDMX</div><h1>Resumen del día</h1></div>
    <section class="hm" id="hm-live"><h3>En vivo ahora</h3><div class="skel">Buscando juegos en vivo…</div></section>
+   <div class="hm snav" id="hm-sp" role="navigation" aria-label="Deportes">${SNAV_ORDER.map(k=>SPORTS.find(x=>x.key===k)).filter(Boolean).concat(SPORTS.filter(x=>!SNAV_ORDER.includes(x.key))).map(sportNavItem).join('')}</div>
    <section class="hm" id="hm-picks"><h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3><div class="skel">Calculando con el modelo…</div></section>
-   <section class="hm" id="hm-rec"><h3>Récord · últimos 30 días <a href="#/record" class="more">Detalle →</a></h3><div class="skel">…</div></section>
-   <section class="hm" id="hm-inj"><h3>Bajas confirmadas en juegos de hoy</h3><div class="skel">…</div></section>
-   <section class="hm" id="hm-sp"><h3>Deportes</h3><div class="grid g3">${SPORTS.map(s=>`<a class="card sport" href="#/deporte/${s.key}"><span class="em">${s.emoji}</span>${esc(s.name)}<span class="sub" data-sp="${s.key}">${s.leagues.map(l=>esc(l.name)).join(' · ')}</span></a>`).join('')}</div></section>
    <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo. Si algo no está disponible se muestra <b>${SD}</b>. Las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
   let timer=null;
   const fillHome = async (first)=>{
@@ -223,13 +225,8 @@ async function viewHome(){
       const lb=el.querySelector('.hm-lb');
       if(h.live.length){ const nc=lb.querySelector('.hm-none'); if(nc) nc.remove(); carPatch(lb,h.live.slice(0,12)); }
       else lb.innerHTML=`<div class="card mut hm-none">No hay juegos en vivo en este momento.</div>`;
-      h.sports.forEach(s=>{ const x=document.querySelector(`[data-sp="${s.key}"]`); if(x) x.innerHTML = s.today||s.live ? `${s.live?`<b class="pos">● ${s.live} en vivo</b> · `:''}${s.today} juego${s.today===1?'':'s'} hoy` : 'Sin juegos hoy'; });
-      if(first){
-        const r=h.record, ra=h.record_all;
-        document.getElementById('hm-rec').innerHTML = `<h3>Récord · últimos 30 días <a href="#/record" class="more">Detalle →</a></h3>` + (r.graded ? `<div class="kpis s"><div class="kpi"><small class="sub">G-P-E</small><div class="v mono">${r.W%1?r.W.toFixed(1):r.W}-${r.L%1?r.L.toFixed(1):r.L}-${r.P%1?r.P.toFixed(1):r.P}</div></div><div class="kpi"><small class="sub">% acierto</small><div class="v mono">${r.win_pct==null?'—':r.win_pct.toFixed(1)+'%'}</div></div><div class="kpi"><small class="sub">Unidades</small><div class="v mono ${r.units>0?'pos':r.units<0?'neg':''}">${units(r.units)}</div></div></div><div class="rec-note">${r.graded} picks calificados · ${r.pending} pendientes. Unidades a 1u plano con la cuota registrada.</div>` : `<div class="card mut">Aún no hay picks calificados en 30 días (${r.pending} pendientes).</div>`);
-        document.getElementById('hm-inj').innerHTML = `<h3>Bajas confirmadas en juegos de hoy</h3>` + (h.injuries.length ? `<div class="card">${h.injuries.map(i=>`<a class="irow" href="#/juego/${encodeURIComponent(i.league)}/${i.id}"><div class="il"><b>${esc(i.name)}</b> <span class="sub">${esc(i.pos||'')} · ${esc(i.team)}</span><div class="sub">${esc(i.detail||'')}${i.n_out>1?` · ${i.n_out} bajas en el equipo`:''}</div></div><div class="ir"><span class="badge b-out">${esc(i.status)}</span></div></a>`).join('')}</div><div class="sub" style="margin-top:4px">Una baja destacada por equipo (QB primero en NFL). Fuente: ESPN.</div>` : `<div class="card mut">Sin dato de bajas para los juegos de hoy (ESPN no publica fútbol/tenis, o no hay juegos).</div>`);
-        loadHomePicks();
-      }
+      h.sports.forEach(x=>{ const a=document.querySelector(`.snav a[data-sp="${x.key}"]`); if(a){ a.classList.toggle('lv',!!x.live); a.title = x.live?`${x.live} en vivo`:(x.today?`${x.today} juego${x.today===1?'':'s'} hoy`:'Sin juegos hoy'); } });
+      if(first) loadHomePicks();
       if(h.live.length && !timer) { Live.start(()=>fillHome(false),25000); timer=1; }
       if(!h.live.length && timer){ Live.stop(); timer=null; }
     }catch(e){ const l=document.getElementById('hm-live'); if(l&&first) l.innerHTML=`<h3>En vivo ahora</h3><div class="card mut">${SD}: ${esc(e.message)}</div>`; }
