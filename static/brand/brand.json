@@ -44,8 +44,16 @@
    "name": "No Risk No Money",
    "short": "NRNM",
    "tagline": "Riesgo medido, picks con datos",
-   "label": "Recomendada · A",
-   "desc": "Pirámide con el ojo que todo lo ve; la pupila es una pelota verde y la base es una línea de cancha. Es la variante A (tri_bola)."
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Rosa neón (recomendada)",
+   "desc": "Triángulo rosa, ojo blanco, pupila-pelota teal y línea de cancha rosa. Paleta: rosa = marca/CTA, teal = ganado/positivo, azul = en vivo/info, naranja-rojo = pérdida."
   },
   "nrnm_oro": {
    "name": "No Risk No Money",
@@ -81,6 +89,36 @@
    "tagline": "Riesgo medido, picks con datos",
    "label": "D · Insignia monolínea",
    "desc": "Aro + triángulo + ojo mínimo, un solo grosor; base (línea de cancha) y pupila en verde."
+  },
+  "nrnm_degradado": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Degradado rosa→azul",
+   "desc": "Triángulo con degradado sutil rosa→azul, pupila-pelota rosa."
+  },
+  "nrnm_azul": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Azul + teal",
+   "desc": "Triángulo azul, base y pelota teal: la versión más fría."
   }
  }
 }

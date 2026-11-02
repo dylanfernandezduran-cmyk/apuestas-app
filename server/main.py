@@ -291,7 +291,20 @@ def brand():
     act = os.environ.get("BRAND") or d["active"]
     if act not in d["options"]: act = d["active"]
     o = d["options"][act]
-    return dict(id=act, name=o["name"], short=o.get("short", o["name"]), tagline=o["tagline"], theme=d["theme"], options={k: dict(v) for k, v in d["options"].items()})
+    return dict(id=act, name=o["name"], short=o.get("short", o["name"]), tagline=o["tagline"], palette=o.get("palette") or {}, theme=d["theme"], options={k: dict(v) for k, v in d["options"].items()})
+
+def _theme_css(pal):
+    """Paleta opcional por marca (brand.json -> options.<id>.palette) -> variables CSS. Sin paleta = colores por defecto de style.css."""
+    if not pal: return ""
+    def rgb(h):
+        h = h.lstrip("#"); return ",".join(str(int(h[i:i + 2], 16)) for i in (0, 2, 4))
+    names = dict(acc="acc", grn="grn", red="red", amb="amb", blu="blu", live="live", ink="ink")
+    out = []
+    for k, v in pal.items():
+        if k in names and isinstance(v, str) and len(v) == 7 and v.startswith("#"):
+            out.append(f"--{k}:{v}")
+            if k != "ink": out.append(f"--{k}-rgb:{rgb(v)}")
+    return ":root{" + ";".join(out) + "}" if out else ""
 
 @app.get("/api/brand")
 async def brand_api():
@@ -316,6 +329,6 @@ async def index():
     b = brand()
     html = open(os.path.join(STATIC, "index.html"), encoding="utf-8").read()
     glyph = open(os.path.join(STATIC, "brand", b["id"], "glyph.svg"), encoding="utf-8").read()
-    for k, v in (("__NAME__", b["name"]), ("__SHORT__", b["short"]), ("__TAGLINE__", b["tagline"]), ("__BRAND_ID__", b["id"]), ("__GLYPH__", glyph), ("__BG__", b["theme"]["bg"])):
+    for k, v in (("__NAME__", b["name"]), ("__SHORT__", b["short"]), ("__TAGLINE__", b["tagline"]), ("__BRAND_ID__", b["id"]), ("__GLYPH__", glyph), ("__BG__", b["theme"]["bg"]), ("__THEME__", _theme_css(b["palette"]))):
         html = html.replace(k, v)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
