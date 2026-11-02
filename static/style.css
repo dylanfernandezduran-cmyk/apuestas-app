@@ -58,3 +58,21 @@ footer{max-width:1100px;margin:20px auto;padding:0 14px 40px;color:var(--mut);fo
 .pk:hover{border-color:var(--grn)}.pk .ic{font-size:26px}
 .back{display:inline-block;margin-bottom:8px;color:var(--mut)}.back:hover{color:var(--tx)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:700px){.two{grid-template-columns:1fr}}
+
+.tt{margin:10px 0 4px;text-transform:uppercase;letter-spacing:.08em}
+table.cmp td.best{background:#0f3a28;color:var(--grn);font-weight:700}
+table.cmp td.bline{text-decoration:underline;text-decoration-color:var(--amb);text-underline-offset:3px}
+table.cmp tr.k-consensus td,table.cmp tr.k-open td{color:var(--mut);font-style:italic}
+table.cmp tr.k-sharp td{background:#14122b}
+table.cmp tr.nv td{background:#101a29;border-top:1px solid var(--line)}table.cmp tr.nv.sharp td{background:#14122b}
+.legend{color:var(--mut);font-size:12px;margin-top:8px}.legend .best{background:#0f3a28;color:var(--grn);padding:0 5px;border-radius:4px}.legend .bline{text-decoration:underline;text-decoration-color:var(--amb)}
+.bars{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;align-items:center;margin:4px 0;font-size:13px}.bars.hd{color:var(--mut);font-size:11px;text-transform:uppercase}
+.bw{position:relative;background:#0c121b;border-radius:5px;height:22px;overflow:hidden}.bw .bar{position:absolute;left:0;top:0;bottom:0;opacity:.75}.bw .bar.t{background:#2b6cb0}.bw .bar.m{background:#7c4ddb}.bw span{position:relative;line-height:22px;padding-left:8px;font-size:12px}
+.mk{margin-bottom:10px}
+.tag{display:inline-block;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;margin:2px 4px 2px 0;border:1px solid var(--line)}
+.t-pos{background:#0f3a28;color:var(--grn);border-color:#1b6b4a}.t-neg{background:#3a1218;color:var(--red);border-color:#6b1b28}.t-neu{background:#1c2434;color:var(--mut)}
+.tags{margin-top:2px}.ctags{grid-column:1/-1;text-align:left!important;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sig{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:8px;font-size:13.5px}
+.row2{padding:8px 0;border-bottom:1px dashed var(--line)}
+.chart{width:100%;height:auto;background:#0c121b;border-radius:8px}
+.legend2{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut);margin-top:6px}.legend2 i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}

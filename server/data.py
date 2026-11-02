@@ -7,6 +7,7 @@ from .config import ESPN, MLB_API, LEAGUES, FAMILY, TZ, SPORTS
 from .odds import extract_odds, fmt_am
 from . import ratings as RT
 from . import model as M
+from . import market as MK
 
 CDMX = ZoneInfo(TZ)
 SD = "Sin dato"
@@ -162,13 +163,20 @@ async def tennis_detail(league, mid):
     fa, fb = _tennis_matches_for(evs, A["id"]), _tennis_matches_for(evs, B["id"])
     mdl = M.tennis_model(A["points"], B["points"])
     gaps = ["Cuotas (ESPN no publica momios de tenis): Sin dato", "Superficie / H2H / lesiones: Sin dato (no disponible en fuentes gratuitas)"]
-    res = dict(game=g, kind="tennis", odds=None, gaps=gaps, form={"home": fa, "away": fb})
+    mk = await MK.game_market(league, g) if g["state"] == "pre" else None
+    odds = MK.as_odds(mk, prefer=("sharp",)) if mk else None
+    if odds:
+        odds["src"] = "mk"
+        gaps[0] = "Cuotas: sólo Pinnacle (referencia sharp, vía guest API pública); ESPN no publica momios de tenis. % tickets/% dinero: Sin dato"
+    res = dict(game=g, kind="tennis", odds=odds, gaps=gaps, form={"home": fa, "away": fb}, market=mk, odds_note=("Cuotas tomadas de Pinnacle (ESPN no publica tenis)." if odds else None))
     if mdl and g["state"] == "pre":
-        cands = []
-        dec = M.decide([], mdl, A["name"], B["name"])
-        conf = M.confidence(mdl, None, {}, "tennis")
-        res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], label="Heurística por puntos de ranking (logística sobre ln de puntos)")
-        res["picks"] = dict(lean=dec["lean"], status="SIN_LINEA", candidates=[], confidence=conf)
+        cands = M.build_candidates(mdl, odds, A["name"], B["name"]) if odds else []
+        conf = M.confidence(mdl, odds, {}, "tennis")
+        M.apply_confidence(cands, conf)
+        dec = M.decide(cands, mdl, A["name"], B["name"])
+        if mk: MK.attach_signals(dec["candidates"], mk)
+        res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label="Heurística por puntos de ranking (logística sobre ln de puntos)")
+        res["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
     else:
         res["model"] = None
         res["picks"] = None
@@ -308,13 +316,22 @@ async def analyze(league, eid):
     if game["state"] == "pre":
         pc = (summ.get("pickcenter") or [None])[0] or (summ.get("odds") or [None])[0]
         odds = extract_odds(pc)
+        if odds: odds["src"] = "espn"
+    mk = None; odds_note = None
+    if game["state"] == "pre":
+        mk = await MK.game_market(league, game)
+        if not odds and mk:
+            odds = MK.as_odds(mk)
+            if odds: odds["src"] = "mk"; odds_note = f"Cuotas tomadas de {odds['book']} (ESPN no publica línea para este juego)."
     R = await RT.get_ratings(league)
     gaps = []
     tsum = {H["id"]: RT.team_summary(R, H["id"]), A["id"]: RT.team_summary(R, A["id"])}
     inj = _injuries(summ); lead = _leaders(summ)
     if not inj: gaps.append("Lesiones: Sin dato (la fuente no las publica para esta liga/juego)")
     if not lead: gaps.append("Líderes/jugadores clave: Sin dato")
-    if not odds and game["state"] == "pre": gaps.append("Cuotas: Sin dato (ESPN/DraftKings aún no publica línea para este juego)")
+    if not odds and game["state"] == "pre": gaps.append("Cuotas: Sin dato (ni ESPN/DraftKings, ni Action Network, ni Pinnacle publican línea para este juego todavía)")
+    if game["state"] == "pre" and mk and not mk.get("splits"): gaps.append("% tickets / % dinero: Sin dato (Action Network no tiene este juego, o no lo cubre: Liga MX y tenis no están cubiertos)")
+    if game["state"] == "pre" and not mk: gaps.append("Comparador multi-casa: Sin dato (ninguna fuente de mercado tiene este juego)")
     # ---- MLB lanzadores
     pitchers = None; extra = 0.0
     if league == "mlb":
@@ -332,6 +349,7 @@ async def analyze(league, eid):
                h2h=_h2h(summ), gaps=gaps, pitchers=pitchers, ratings_n=R["n_games"],
                espn_predictor=(summ.get("predictor") and dict(home=summ["predictor"]["homeTeam"].get("gameProjection"), away=summ["predictor"]["awayTeam"].get("gameProjection"))),
                ats=_ats(summ))
+    out["market"] = mk; out["odds_note"] = odds_note
     out["trends"] = _trends(league, fam, tsum, H["id"], A["id"], H["name"], A["name"], odds, inj)
     if not mdl:
         out["model"] = None; out["picks"] = None
@@ -356,6 +374,7 @@ async def analyze(league, eid):
         conf = M.confidence(mdl, odds, flags, fam)
         M.apply_confidence(cands, conf)
         dec = M.decide(cands, mdl, H["name"], A["name"])
+        if mk: MK.attach_signals(dec["candidates"], mk)
         out["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
     else:
         out["picks"] = None

@@ -12,3 +12,5 @@ shots.py
 .env
 *.zip
 .DS_Store
+data/
+shots2.py

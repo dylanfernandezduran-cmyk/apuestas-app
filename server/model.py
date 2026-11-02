@@ -162,7 +162,7 @@ def confidence(model, odds, flags, family):
         score -= 1
     if flags.get("key_injury"): score -= 1; reasons.append("jugador clave en lista de lesionados")
     if family == "baseball" and not flags.get("pitchers_known"): score -= 1; reasons.append("abridores no confirmados")
-    if family in ("tennis",): score = min(score, 1)
+    if family in ("tennis",): score = min(score, 0); reasons.append("modelo de tenis simple (sólo ranking, sin superficie/forma)")
     lvl = "Alta" if score >= 3 else ("Media" if score >= 1 else "Baja")
     return dict(level=lvl, emoji={"Alta": "🟢", "Media": "🟡", "Baja": "🔴"}[lvl], score=score, reasons=reasons)
 

@@ -30,8 +30,29 @@ MLB · NFL · NBA · NHL · Tenis (ATP/WTA) · Fútbol (Liga MX, Premier, LaLiga
 - MLB StatsAPI `statsapi.mlb.com`: pitchers probables y sus stats.
 Caché en memoria con TTL (scoreboard 1–5 min, summary ~2 min, calendarios/ratings 1 h) y reintentos; si la fuente falla se sirve el último dato.
 
+## Mercado: casas, % apuestas, RLM y movimientos
+En cada juego (antes de empezar) la ficha muestra:
+- **Comparador de casas** (ML, spread/hándicap, total): Pinnacle (sharp) + DraftKings, FanDuel, BetMGM, Caesars, BetRivers, bet365, Fanatics, Unibet (según el juego), consenso y apertura. Mejor precio y mejor línea resaltados; probabilidad de consenso sin vig.
+- **% tickets / % dinero** por lado, con fuente y hora (CDMX). Sin fuente para el juego ⇒ "Sin dato" (nunca se estima).
+- **RLM y dinero inteligente** (indicadores, no garantías): lado público (≥55% tickets) contra el que se mueve la línea/precio entre la apertura y ahora; y % dinero − % tickets ≥ 10 pp.
+- **Movimientos**: apertura vs actual por mercado + historial propio por casa con gráfica (SVG). El servidor guarda en SQLite un snapshot cada `SNAP_MIN` min (sólo cuando algo cambia) de los juegos de las próximas 72 h.
+- Las señales aparecen junto a cada pick (etiquetas a favor / en contra / mixto) **sin modificar** la probabilidad del modelo.
+
+| Fuente | Qué aporta | Cobertura |
+|---|---|---|
+| Action Network (API pública sin llave) | 8 casas de EE. UU., consenso, apertura, % tickets y % dinero | NBA, NFL, NHL, MLB, NCAAF, NCAAB, fútbol (EPL, LaLiga, Serie A, Ligue 1, Bundesliga, Champions, Europa, MLS). No Liga MX ni tenis |
+| Pinnacle (API de invitado, llave pública del sitio) | línea sharp, sin splits | Todos, incl. Liga MX y tenis (sólo juegos cercanos) |
+| ESPN | DraftKings (respaldo) | según el juego |
+
+Opción con llave gratuita (no incluida): The Odds API (más casas, sin splits). Estas APIs no son oficiales y pueden cambiar o bloquearse: el app degrada a "Sin dato".
+
+Variables de entorno opcionales: `SNAP_MIN` (default 10), `PINNACLE=0` (desactiva Pinnacle), `PINNACLE_GUEST_KEY`, `APUESTAS_DB` (ruta del SQLite; default `data/history.db`).
+
 ## API
-`/api/sports` · `/api/games?league=nba&days=3` · `/api/game/{league}/{eventId}` · `/api/picks?scope=24h|hoy|manana|72h` · `/api/health`
+`/api/sports` · `/api/games?league=nba&days=3` · `/api/game/{league}/{eventId}` (incluye `market`) · `/api/history/{league}/{eventId}` · `/api/picks?scope=24h|hoy|manana|72h` · `POST /api/snapshot` · `/api/health`
+
+## Windows
+`py -m venv .venv` · `.venv\Scripts\pip install -r requirements.txt` (incluye `tzdata`, necesario en Windows) · `.venv\Scripts\python -m uvicorn server.main:app --host 0.0.0.0 --port 8765`
 
 ## Modelo (simple y transparente — estimación, no garantía)
 - Deportes de margen: ratings SRS (40 iteraciones) con encogimiento por muestra, ventaja de local estimada con prior, distribución normal para ML/spread/total.

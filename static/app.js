@@ -105,11 +105,13 @@ async function viewGame(league, id){
     <div class="sub" style="text-align:center;margin-top:8px">${esc(g.venue||'')}${g.court?' · '+esc(g.court):''}${g.note?' · '+esc(g.note):''}${g.weather?` · 🌡️ ${g.weather.temp_f}°F`:''}</div></div>`;
   let html = back + hero;
   html += picksSection(d);
-  if(d.odds) html += oddsSection(d);
+  html += marketSection(d) + splitsSection(d) + rlmSection(d) + movementSection(d);
+  if(d.odds && d.odds.src==='espn') html += oddsSection(d);
   if(d.kind==='tennis') html += tennisSections(d); else html += teamSections(d);
   if(d.gaps && d.gaps.length) html += `<div class="note gap"><b>🕳️ Datos no disponibles (${SD}):</b><ul class="t">${d.gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
   html += `<div class="note">⚖️ <b>Estimación del modelo, no certeza.</b> Sin promesas de rentabilidad. Revisa lesiones/alineaciones de último minuto antes de apostar.</div>`;
   $app.innerHTML = html;
+  mvDraw();
 }
 
 function candRow(c){
@@ -120,7 +122,7 @@ function candRow(c){
   <div class="mono" data-l="Mercado s/vig">${pct(c.p_nv)}</div>
   <div class="mono ${e>0?'pos':e<0?'neg':''}" data-l="Edge">${e==null?SD:sg(e)+' pp'}</div>
   <div class="mono" data-l="Línea justa">${esc(c.fair_txt||SD)}</div>
-  <div class="mono" data-l="Precio máx.">${esc(c.max_txt||SD)}</div></div>`;
+  <div class="mono" data-l="Precio máx.">${esc(c.max_txt||SD)}</div>${c.signals&&c.signals.verdict&&c.signals.verdict!=='sin_dato'?`<div class="ctags">${tagChips(c.signals)||'<span class="sub">Mercado: sin señal clara</span>'}${c.signals.best?`<span class="sub">🏷️ Mejor precio ${esc(c.signals.best.price_txt)} en ${esc(c.signals.best.book)}${c.signals.best.ev!=null?' · EV '+sg(c.signals.best.ev)+'%':''}</span>`:''}</div>`:''}</div>`;
 }
 function leanBlock(d){
   const p=d.picks, l=p.lean, c=p.confidence;
@@ -139,7 +141,7 @@ function leanBlock(d){
   lines.push(`🧠 ${confBadge(c)} ${c.reasons&&c.reasons.length?`<span class="sub">${esc(c.reasons.join(' · '))}</span>`:''}`);
   if(l.downgraded) lines.push(`<span class="sub">⬇️ Era PICK pero se degradó a LEAN por confianza baja.</span>`);
   if(p.status==='PASS') lines.push(`<span class="sub">Sin ventaja suficiente en ningún mercado; este es el lean menos malo, no una recomendación fuerte.</span>`);
-  return `<div class="lean">${lines.join('<br>')}</div>`;
+  return `<div class="lean">${lines.join('<br>')}</div>${sigLine(l.signals)}`;
 }
 function picksSection(d){
   if(!d.picks) return `<div class="card" style="margin-top:10px"><h2>🎯 Mejores picks</h2><div class="mut">${d.game.state!=='pre'?'El juego ya empezó o terminó: los picks pre-juego no aplican.':`Sin modelo para este juego (${SD}).`}</div></div>`;
@@ -172,7 +174,7 @@ function oddsSection(d){
   if(o.open&&o.open.ml){ const bits=[]; for(const s of ['away','home']){ if(o.open.ml[s]!=null&&o.ml[s]!=null) bits.push(`${esc(g[s].short||g[s].name)}: ${am(o.open.ml[s])} → <b>${am(o.ml[s])}</b>`);} if(bits.length) mv=`<div class="sub" style="margin-top:6px">📈 Movimiento ML (apertura → actual): ${bits.join(' · ')}</div>`; }
   return `<div class="card" style="margin-top:10px"><h2>💵 Cuotas actuales <span class="badge b-ok">CONFIRMADO · ${esc(o.book)} vía ESPN</span></h2>
   <div class="tbl"><table><thead><tr><th>Mercado</th><th>Precio</th><th>Impl. c/vig</th><th>Impl. s/vig</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>${mv}
-  <div class="sub" style="margin-top:6px">Una sola casa (DraftKings) · probabilidad sin vig = normalización proporcional. Precios pueden cambiar; verifica en tu casa de apuestas.</div></div>`;
+  <div class="sub" style="margin-top:6px">Una sola casa (${esc(o.book)}, vía ESPN) · el comparador de arriba tiene más casas · probabilidad sin vig = normalización proporcional. Precios pueden cambiar; verifica en tu casa de apuestas.</div></div>`;
 }
 
 function formPills(f){ return `<div class="form">${(f||[]).map(x=>`<span class="f f-${x}">${x==='W'?'G':x==='L'?'P':'E'}</span>`).join('')||SD}</div>`; }
@@ -250,7 +252,7 @@ async function viewPicks(scope){
     return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="ic">${st[0]}</div><div>
     <div><b>${esc(l.label)}</b> <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span> ${badgeSt(r.status)} ${confBadge(r.confidence)}</div>
     <div class="sub">${esc(g.league_name)} · ${esc(g.away.name)} @ ${esc(g.home.name)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
-    <div class="sub mono">Modelo ${pct(l.p_model)} vs s/vig ${pct(l.p_nv)} · Línea justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div></div>
+    <div class="sub mono">Modelo ${pct(l.p_model)} vs s/vig ${pct(l.p_nv)} · Línea justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato'?`<div class="sub">${(VERD[l.signals.verdict]||[])[0]||''} ${(VERD[l.signals.verdict]||[])[1]||''}${l.signals.tickets!=null?` · ${l.signals.tickets}% tickets / ${l.signals.money!=null?l.signals.money+'% dinero':'dinero '+SD}`:''}${l.signals.best?` · mejor ${esc(l.signals.best.price_txt)} en ${esc(l.signals.best.book)}`:''}</div>${tagChips(l.signals)}`:''}</div>
     <div class="mono ${l.edge>0?'pos':'mut'}" style="font-size:18px;font-weight:800;text-align:right">${l.edge==null?SD:sg(l.edge)+' pp'}<div class="sub">edge</div></div></a>`; };
   let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por estado, edge y confianza. <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
@@ -260,10 +262,162 @@ async function viewPicks(scope){
   $app.innerHTML=html;
 }
 
+
+// ------------------------------------------------------------ mercado: casas, % apuestas, RLM, movimientos
+const tsFmt = t => t==null ? SD : new Intl.DateTimeFormat('es-MX',{timeZone:TZ,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(t*1000))+' CDMX';
+const dec2 = a => a==null ? null : (a>0 ? 1+a/100 : 1+100/Math.abs(a));
+const probRaw = a => a==null ? null : (a>0 ? 100/(a+100) : Math.abs(a)/(Math.abs(a)+100));
+const fairAm = p => p==null||p<=0||p>=1 ? null : (p>=.5 ? Math.round(-100*p/(1-p)) : Math.round(100*(1-p)/p));
+const KIND = {sharp:['SHARP','b-model'],consensus:['CONSENSO','b-conf'],open:['APERTURA','b-pass'],book:['','']};
+const TAG_CLS = {rlm_for:'t-pos',sharp_for:'t-pos',rlm_against:'t-neg',sharp_against:'t-neg',move_with:'t-neu'};
+const tagChips = c => (c&&c.tags&&c.tags.length) ? `<div class="tags">${c.tags.map(t=>`<span class="tag ${TAG_CLS[t[0]]||'t-neu'}" title="${esc(t[1])}">${esc(t[1])}</span>`).join('')}</div>` : '';
+const VERD = {a_favor:['✅','Señales de mercado a favor','pos'],en_contra:['⚠️','Señales de mercado en contra','neg'],mixto:['↔️','Señales mixtas','amb'],neutral:['➖','Sin señal clara de mercado','mut'],sin_dato:['🕳️','Señales de mercado: '+SD,'mut']};
+function sigLine(c){
+  if(!c||!c.verdict) return '';
+  const v=VERD[c.verdict]||VERD.sin_dato;
+  const sp = (c.tickets!=null||c.money!=null) ? ` · <span class="mono">${c.tickets!=null?c.tickets+'% tickets':'tickets '+SD} / ${c.money!=null?c.money+'% dinero':'dinero '+SD}</span>` : '';
+  const best = c.best ? ` · 🏷️ Mejor precio: <b class="mono">${esc(c.best.price_txt)}</b> en ${esc(c.best.book)}${c.best.ev!=null?` (EV ${sg(c.best.ev)}%)`:''}` : '';
+  return `<div class="sig"><span class="${v[2]}">${v[0]} <b>${v[1]}</b></span>${sp}${best}${tagChips(c)}<div class="sub">Indicadores de mercado (RLM, % dinero vs % tickets), no garantías.</div></div>`;
+}
+
+function marketSection(d){
+  const mk=d.market, g=d.game;
+  if(!mk||!mk.books||!mk.books.length) return `<div class="card" style="margin-top:10px"><h2>📚 Comparador de casas</h2><div class="mut">${SD}: ninguna fuente publica cuotas para este juego${d.odds_note?' · '+esc(d.odds_note):''}.</div></div>`;
+  const books=mk.books, nm=s=>s==='home'?g.home.name:s==='away'?g.away.name:s==='draw'?'Empate':s==='over'?'Over':'Under';
+  const sh=s=>s==='home'?(g.home.short||g.home.name):s==='away'?(g.away.short||g.away.name):s==='draw'?'Empate':s==='over'?'Over':'Under';
+  const tbl=(title,key,sides,cell,extra)=>{
+    if(!books.some(b=>b[key]&&sides.some(s=>b[key][s]!=null))) return '';
+    const head=`<tr><th>Casa</th>${sides.map(s=>`<th>${esc(sh(s))}</th>`).join('')}</tr>`;
+    const rows=books.filter(b=>b[key]&&sides.some(s=>b[key][s]!=null)).map(b=>{
+      const k=KIND[b.kind]||KIND.book;
+      return `<tr class="k-${b.kind}"><td>${esc(b.name)} ${k[0]?`<span class="badge ${k[1]}">${k[0]}</span>`:''}</td>${sides.map(s=>{
+        const fl=(b.flags||{})[key+'.'+s]; const c=cell(b,s);
+        return `<td class="mono ${fl==='best'?'best':fl==='line'?'bline':''}" title="${fl==='best'?'Mejor precio en la misma línea':fl==='line'?'Mejor línea (número más favorable)':''}">${c}</td>`}).join('')}</tr>`;}).join('');
+    let nvrow='';
+    const cn=(mk.consensus_nv||{})[key], sn=(mk.sharp_nv||{})[key];
+    const nvr=(lbl,o,cls)=>o?`<tr class="nv ${cls}"><td>${lbl} <span class="sub">(${o.n?o.n+' casas':'1 casa'}${o.line!=null?' · línea '+(key==='spread'?sg(o.line):o.line):''})</span></td>${sides.map(s=>`<td class="mono">${o[s]!=null?`<b>${pct(o[s])}</b> <span class="sub">${am(fairAm(o[s]))}</span>`:SD}</td>`).join('')}</tr>`:'';
+    nvrow=nvr('Consenso s/vig',cn,'cons')+nvr('Pinnacle s/vig',sn,'sharp');
+    return `<div class="tbl"><div class="sub tt">${title}</div><table class="cmp"><thead>${head}</thead><tbody>${rows}${nvrow}</tbody></table></div>`;
+  };
+  const sideCell=(key,s)=>b=>b[key]&&b[key][s]!=null?am(b[key][s]):'<span class="mut">—</span>';
+  const lp=(key)=>(b,s)=>{const c=(b[key]||{})[s]; return c?`${key==='spread'?sg(c.line):(s==='over'?'O ':'U ')+c.line} <span class="${c.price>0?'pos':''}">${am(c.price)}</span>`:'<span class="mut">—</span>'};
+  const mlSides = books.some(b=>b.ml&&b.ml.draw!=null)?['away','draw','home']:['away','home'];
+  const ts=(mk.sources||[]).map(s=>`${esc(s.name)} (${s.n_books} ${s.n_books===1?'casa':'casas'}) · ${tsFmt(s.ts)}`).join(' · ');
+  const nreal=books.filter(b=>b.kind==='book'||b.kind==='sharp').length;
+  return `<div class="card" style="margin-top:10px"><h2>📚 Comparador de casas <span class="badge b-ok">${nreal} CASAS</span></h2>
+   ${tbl('Moneyline','ml',mlSides,(b,s)=>sideCell('ml',s)(b))}
+   ${tbl(d.game.sport==='mlb'?'Run line':d.game.sport==='futbol'?'Hándicap':d.game.sport==='tenis'?'Hándicap de sets':'Spread','spread',['away','home'],(b,s)=>lp('spread')(b,s))}
+   ${tbl(d.game.sport==='tenis'?'Total de sets':'Total','total',['over','under'],(b,s)=>lp('total')(b,s))}
+   <div class="legend"><span class="best mono">verde</span> = mejor precio en la misma línea · <span class="bline mono">subrayado</span> = mejor línea (número más favorable) · filas “s/vig” = probabilidad sin comisión (normalización proporcional) y su momio justo. Consenso = promedio de las casas en la línea de referencia.</div>
+   <div class="sub" style="margin-top:6px">Fuentes: ${ts||SD}. Los precios cambian; confirma en tu casa antes de apostar.</div></div>`;
+}
+
+function splitsSection(d){
+  const mk=d.market, g=d.game; if(!mk) return '';
+  const sp=mk.splits||{}, has=Object.keys(sp).length>0;
+  const names={ml:'Moneyline',spread:d.game.sport==='futbol'?'Hándicap':'Spread',total:'Total'};
+  const lab=(m,s)=>s==='home'?g.home.name:s==='away'?g.away.name:s==='draw'?'Empate':s==='over'?'Over':'Under';
+  const ordr={ml:['away','draw','home'],spread:['away','home'],total:['over','under']};
+  let body='';
+  if(has){
+    body=['ml','spread','total'].filter(m=>sp[m]).map(m=>{
+      const sg_=(mk.signals||{})[m]||{};
+      const rows=ordr[m].filter(s=>sp[m][s]).map(s=>{ const t=sp[m][s].t, mo=sp[m][s].m; const df=(t!=null&&mo!=null)?mo-t:null;
+        return `<div class="bars"><div class="bl">${esc(lab(m,s))}${df!=null&&df>=10?' <span class="tag t-pos" title="Dinero% supera tickets% por ≥10 pp">$ dinero &gt; tickets</span>':''}</div>
+         <div class="bw"><div class="bar t" style="width:${t||0}%"></div><span class="mono">${t!=null?t+'%':SD}</span></div>
+         <div class="bw"><div class="bar m" style="width:${mo||0}%"></div><span class="mono">${mo!=null?mo+'%':SD}</span></div></div>`; }).join('');
+      return `<div class="mk"><div class="sub tt">${names[m]}</div><div class="bars hd"><div></div><div>% Tickets (apuestas)</div><div>% Dinero</div></div>${rows}</div>`;}).join('');
+  } else body=`<div class="mut">${SD}: la fuente de % apuestas / % dinero no cubre este juego${d.kind==='tennis'||mk.matched&&!mk.matched.an?' (sólo Action Network publica splits y no cubre esta liga o este juego aún)':''}. No se estima ni se inventa.</div>`;
+  return `<div class="card" style="margin-top:10px"><h2>🧾 % Apuestas y % Dinero ${has?'<span class="badge b-ok">CONFIRMADO</span>':'<span class="badge b-pass">SIN DATO</span>'}</h2>${body}
+   <div class="sub" style="margin-top:6px">Fuente: ${has?esc(mk.splits_src||'Action Network')+' · '+tsFmt(mk.splits_ts):SD}. % tickets = proporción de apuestas; % dinero = proporción del monto apostado. Cubre las casas de EE. UU. que reporta la fuente, no el mercado total.</div></div>`;
+}
+
+function rlmSection(d){
+  const mk=d.market, g=d.game; if(!mk) return '';
+  const sg_=mk.signals||{}; const names={ml:'Moneyline',spread:'Spread',total:'Total'};
+  const lab=(m,s)=>s==='home'?g.home.name:s==='away'?g.away.name:s==='draw'?'Empate':s==='over'?'Over':'Under';
+  const items=['ml','spread','total'].filter(m=>sg_[m]&&sg_[m].tickets).map(m=>{
+    const s=sg_[m]; const pub=s.public_side;
+    const flags=[];
+    if(s.rlm) flags.push(`<span class="tag t-pos">🔄 RLM → ${esc(lab(m,s.rlm_side))}</span>`);
+    else if(s.move_dir==='con') flags.push(`<span class="tag t-neu">La línea se mueve con el público</span>`);
+    else if(!pub) flags.push(`<span class="tag t-neu">Sin lado público claro</span>`);
+    else flags.push(`<span class="tag t-neu">Sin movimiento significativo</span>`);
+    if(s.sharp_side) flags.push(`<span class="tag t-pos">$ Dinero &gt; tickets (+${s.sharp_diff} pp) → ${esc(lab(m,s.sharp_side))}</span>`);
+    return `<div class="row2"><div><b>${names[m]}</b> · lado público: <b>${pub?esc(lab(m,pub)):SD}</b> <span class="mono sub">(${pub?s.tickets[pub]+'% tickets':''})</span></div><div>${flags.join(' ')}</div><div class="sub">${esc(s.move_text||'')}</div></div>`;}).join('');
+  const body = items || `<div class="mut">${SD}: sin % apuestas y/o sin apertura para este juego, no se puede evaluar RLM ni dinero inteligente.</div>`;
+  return `<div class="card" style="margin-top:10px"><h2>🔄 RLM y dinero inteligente <span class="badge b-prob">INDICADOR · NO GARANTÍA</span></h2>${body}
+   <div class="note" style="margin-bottom:0">RLM (movimiento inverso de línea): el público (≥55% de tickets; ≥45% y mayoría en 3 vías) está de un lado, pero la línea o el precio se mueve en su contra (≥0.25 pts o ≥1.5 pp en prob. s/vig entre apertura y actual de Action Network). “Dinero &gt; tickets” = % dinero supera % tickets por ≥10 pp en un lado. Son <b>indicadores</b> que a veces fallan; no garantizan resultado.</div></div>`;
+}
+
+let MV=null;
+function movementSection(d){
+  const mk=d.market, g=d.game; if(!mk) return '';
+  const mv=mk.movement||{}, rows=[];
+  const sh=s=>s==='home'?(g.home.short||g.home.name):s==='away'?(g.away.short||g.away.name):s==='draw'?'Empate':s==='over'?'Over':'Under';
+  if(mv.ml) for(const s of ['away','draw','home']){ const x=mv.ml[s]; if(x) rows.push(`<tr><td>Moneyline · ${esc(sh(s))}</td><td class="mono">${am(x.open)}</td><td class="mono"><b>${am(x.cur)}</b></td><td class="mono ${x.d_nv_pp>0?'pos':x.d_nv_pp<0?'neg':''}">${x.d_nv_pp!=null?sg(x.d_nv_pp)+' pp':SD}</td></tr>`); }
+  if(mv.spread) rows.push(`<tr><td>${g.sport==='futbol'?'Hándicap':'Spread'} · ${esc(sh('home'))}</td><td class="mono">${sg(mv.spread.open_line)} <span class="sub">${am((mv.spread.open_price||{}).home)}</span></td><td class="mono"><b>${sg(mv.spread.cur_line)}</b> <span class="sub">${am((mv.spread.cur_price||{}).home)}</span></td><td class="mono ${mv.spread.d_line_home>0?'pos':mv.spread.d_line_home<0?'neg':''}">${sg(mv.spread.d_line_home)} pts</td></tr>`);
+  if(mv.total) rows.push(`<tr><td>Total</td><td class="mono">${mv.total.open_line} <span class="sub">${am((mv.total.open_price||{}).over)}/${am((mv.total.open_price||{}).under)}</span></td><td class="mono"><b>${mv.total.cur_line}</b> <span class="sub">${am((mv.total.cur_price||{}).over)}/${am((mv.total.cur_price||{}).under)}</span></td><td class="mono ${mv.total.d_line>0?'pos':mv.total.d_line<0?'neg':''}">${sg(mv.total.d_line)} pts</td></tr>`);
+  const h=mk.history||{lines:{},splits:{},n_points:0};
+  // por casa: primer vs último registro propio
+  const byBook=[]; const nameOf=Object.fromEntries((mk.books||[]).map(b=>[b.id,b.name]));
+  const first=(arr)=>arr&&arr.length?arr[0]:null, last=(arr)=>arr&&arr.length?arr[arr.length-1]:null;
+  const ids=new Set(); for(const m of ['ml','spread','total']) for(const b of Object.keys((h.lines||{})[m]||{})) ids.add(b);
+  for(const id of ids){
+    const cell=(m,s,fmt)=>{ const a=((h.lines[m]||{})[id]||{})[s]; if(!a||!a.length) return '<td class="mut">—</td>'; const f=a[0],l=a[a.length-1]; const same=a.length===1; return `<td class="mono">${same?fmt(l):fmt(f)+' → <b>'+fmt(l)+'</b>'}${same?'':' <span class="sub">('+a.length+')</span>'}</td>`; };
+    byBook.push(`<tr><td>${esc(nameOf[id]||id)}</td>${cell('ml','home',p=>am(p[2]))}${cell('spread','home',p=>sg(p[1]))}${cell('total','over',p=>p[1])}</tr>`);
+  }
+  const t0=h.first_ts;
+  const note = h.n_points? `Historial propio desde ${tsFmt(t0)} · ${h.n_points} registros (se guarda sólo cuando cambia algo; el servidor toma un snapshot cada ~10 min, configurable).` : `Historial propio: ${SD} (aún no hay snapshots de este juego).`;
+  MV = {mk, g, tab:'ml'};
+  return `<div class="card" style="margin-top:10px"><h2>📈 Movimientos de línea <span class="badge b-ok">${mk.movement_src?'APERTURA REAL':'SIN APERTURA'}</span></h2>
+   ${rows.length?`<div class="tbl"><table><thead><tr><th>Mercado</th><th>Apertura</th><th>Actual</th><th>Cambio</th></tr></thead><tbody>${rows.join('')}</tbody></table></div><div class="sub" style="margin-top:4px">Apertura vs consenso actual · fuente: ${esc(mk.movement_src||'')}. El cambio de ML se mide en prob. sin vig; spread/total en puntos (positivo = el local recibe más puntos / el total sube). Las casas no publican aperturas individuales: por casa usamos nuestro propio historial.</div>`:`<div class="mut">Apertura vs actual: ${SD} (ninguna fuente gratuita publica la apertura de este juego).</div>`}
+   <div class="pills" style="margin-top:12px" id="mvtabs">${[['ml','Moneyline'],['spread','Spread'],['total','Total'],['pct','% Apuestas']].map(t=>`<span class="pill ${t[0]==='ml'?'on':''}" data-t="${t[0]}" onclick="mvTab('${t[0]}')">${t[1]}</span>`).join('')}</div>
+   <div id="mvchart"></div>
+   ${byBook.length?`<div class="tbl" style="margin-top:8px"><div class="sub tt">Por casa · primer registro propio → actual (local / over)</div><table><thead><tr><th>Casa</th><th>ML local</th><th>Spread local</th><th>Total</th></tr></thead><tbody>${byBook.join('')}</tbody></table></div>`:''}
+   <div class="sub" style="margin-top:6px">${note}</div></div>`;
+}
+const PAL=['#22e08a','#4da3ff','#ffc247','#ff5c6c','#a78bfa','#2dd4bf','#f472b6','#fb923c','#94a3b8','#e879f9','#84cc16'];
+function mvTab(t){ if(!MV) return; MV.tab=t; document.querySelectorAll('#mvtabs .pill').forEach(p=>p.classList.toggle('on',p.dataset.t===t)); mvDraw(); }
+function mvDraw(){
+  const el=document.getElementById('mvchart'); if(!el||!MV) return;
+  const {mk,g,tab}=MV, h=mk.history||{lines:{},splits:{}}, now=mk.now||Date.now()/1000;
+  const nameOf=Object.fromEntries((mk.books||[]).map(b=>[b.id,b.name]));
+  let series=[], ylab='', fmt=v=>v;
+  if(tab==='pct'){
+    const sp=h.splits||{}; const pick=[['ml','home'],['spread','home'],['total','over']];
+    for(const [m,s] of pick){ const a=(sp[m]||{})[s]; if(!a||!a.length) continue; const nmx=m==='ml'?'ML':m==='spread'?'Spread':'Total'; const sd=s==='home'?(g.home.short||g.home.name):s==='over'?'Over':s;
+      series.push({n:`${nmx} ${sd} · tickets`,pts:a.filter(p=>p[1]!=null).map(p=>[p[0],p[1]]),dash:false}); series.push({n:`${nmx} ${sd} · dinero`,pts:a.filter(p=>p[2]!=null).map(p=>[p[0],p[2]]),dash:true}); }
+    ylab='% (tickets sólido · dinero punteado)'; fmt=v=>v.toFixed(0)+'%';
+  } else {
+    const L=(h.lines||{})[tab]||{}; const side=tab==='total'?'over':'home';
+    for(const id of Object.keys(L)){ if(id==='an30') continue; /* apertura AN: no tiene hora real de captura */ const a=L[id][side]; if(!a||!a.length) continue;
+      const pts=a.map(p=>[p[0], tab==='ml'?probRaw(p[2])*100:p[1]]).filter(p=>p[1]!=null);
+      series.push({n:nameOf[id]||id,pts,dash:false}); }
+    ylab=tab==='ml'?`Prob. implícita c/vig de ${g.home.name} (%)`:tab==='spread'?`Línea de ${g.home.name}`:'Línea del total'; fmt=v=>tab==='ml'?v.toFixed(1)+'%':(tab==='spread'?sg(v):v.toFixed(1));
+  }
+  series=series.filter(s=>s.pts.length);
+  if(!series.length){ el.innerHTML=`<div class="mut" style="padding:10px">${SD}: aún no hay historial propio para este mercado.</div>`; return; }
+  const all=series.flatMap(s=>s.pts); const x0=Math.min(...all.map(p=>p[0])), x1=Math.max(now,...all.map(p=>p[0]));
+  let y0=Math.min(...all.map(p=>p[1])), y1=Math.max(...all.map(p=>p[1])); if(y1-y0<(tab==='ml'||tab==='pct'?2:0.5)){ const c=(y0+y1)/2, w=(tab==='ml'||tab==='pct'?1:0.5); y0=c-w; y1=c+w; } const pad=(y1-y0)*.12; y0-=pad; y1+=pad;
+  const W=720,H=250,L=52,R=10,T=10,B=28; const X=x=>L+(x1===x0?0:(x-x0)/(x1-x0))*(W-L-R), Y=y=>T+(1-(y-y0)/(y1-y0))*(H-T-B);
+  let svg=`<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Historial de líneas">`;
+  for(let i=0;i<=4;i++){ const y=y0+(y1-y0)*i/4; svg+=`<line x1="${L}" x2="${W-R}" y1="${Y(y)}" y2="${Y(y)}" stroke="#1f2b3d"/><text x="${L-6}" y="${Y(y)+4}" text-anchor="end" fill="#7d8ba1" font-size="10">${fmt(y)}</text>`; }
+  const tl=t=>new Intl.DateTimeFormat('es-MX',{timeZone:TZ,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(t*1000));
+  svg+=`<text x="${L}" y="${H-8}" fill="#7d8ba1" font-size="10">${tl(x0)}</text><text x="${W-R}" y="${H-8}" text-anchor="end" fill="#7d8ba1" font-size="10">${tl(x1)} (CDMX)</text>`;
+  series.forEach((s,i)=>{ const c=PAL[i%PAL.length]; let d=''; const pts=s.pts.slice(); const lastp=pts[pts.length-1]; const ext=pts.concat([[x1,lastp[1]]]);
+    ext.forEach((p,j)=>{ d+=(j?`H${X(p[0]).toFixed(1)}V${Y(p[1]).toFixed(1)}`:`M${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`); });
+    svg+=`<path d="${d}" fill="none" stroke="${c}" stroke-width="1.8" ${s.dash?'stroke-dasharray="5 4"':''} opacity=".9"/>`;
+    pts.forEach(p=>{ svg+=`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="3" fill="${c}"><title>${esc(s.n)}: ${fmt(p[1])} · ${tl(p[0])}</title></circle>`; }); });
+  svg+='</svg>';
+  const npts=Math.max(...series.map(s=>s.pts.length));
+  el.innerHTML=`<div class="sub tt">${esc(ylab)}</div>${svg}<div class="legend2">${series.map((s,i)=>`<span><i style="background:${PAL[i%PAL.length]}"></i>${esc(s.n)}</span>`).join('')}</div>${npts<2?`<div class="sub">Sólo hay ${npts} registro por serie: el gráfico se irá llenando con cada snapshot; la línea se extiende hasta “ahora”.</div>`:''}`;
+}
+
 // ------------------------------------------------------------ info
 function viewInfo(){
   $app.innerHTML=`<h1>ℹ️ Metodología y fuentes</h1>
-  <div class="card kv"><h2>Fuentes (públicas, sin llave)</h2><ul class="t"><li>ESPN site API: marcadores, resúmenes, calendarios y resultados, lesiones, líderes, tablas, rankings de tenis y cuotas de DraftKings (cuando existen).</li><li>MLB StatsAPI: lanzadores abridores probables y sus estadísticas.</li><li>Todo se cachea (marcadores 90 s, resúmenes 150 s, calendarios 1 h). Si un dato no existe se muestra <b>${SD}</b>; nunca se inventa.</li></ul></div>
+  <div class="card kv"><h2>Fuentes (públicas, sin llave)</h2><ul class="t"><li>ESPN site API: marcadores, resúmenes, calendarios y resultados, lesiones, líderes, tablas, rankings de tenis y cuotas de DraftKings (cuando existen).</li><li><b>Action Network</b> (API pública sin llave): cuotas de DraftKings, FanDuel, BetMGM, Caesars, BetRivers, bet365, Fanatics y Unibet, consenso, apertura y <b>% tickets / % dinero</b>. Cubre NBA, NFL, NHL, MLB, NCAA y fútbol de las grandes ligas; no cubre Liga MX ni tenis.</li><li><b>Pinnacle</b> (API de invitado, línea “sharp”): cuotas de todos los deportes incluidos Liga MX y tenis, sin % apuestas.</li><li><b>Historial propio</b>: el servidor guarda en SQLite un snapshot de líneas y % cada ~10 min (sólo cuando algo cambia) para construir nuestra propia curva de movimiento.</li><li>MLB StatsAPI: lanzadores abridores probables y sus estadísticas.</li><li>Todo se cachea (marcadores 90 s, resúmenes 150 s, calendarios 1 h). Si un dato no existe se muestra <b>${SD}</b>; nunca se inventa.</li></ul></div>
   <div class="card kv" style="margin-top:10px"><h2>Modelo (transparente y simple)</h2><ul class="t">
   <li><b>NFL / NBA / NHL / MLB:</b> rating SRS (margen promedio ajustado por rival y localía) calculado con todos los resultados reales de la liga, suavizado hacia 0 según juegos jugados, + ajuste por forma (últimos 5). Probabilidad = normal(margen esperado, σ). En MLB se añade un ajuste pequeño por ERA de abridores probables.</li>
   <li><b>Fútbol:</b> Poisson con fuerza de ataque/defensa suavizada y ventaja de local de la liga → 1X2, hándicap y totales.</li>
@@ -271,6 +425,8 @@ function viewInfo(){
   <li><b>Prob. final</b> = mezcla del modelo y el mercado sin vig; el peso del modelo (máx. 50%) crece con la muestra. El modelo se recorta a ±20 pp del mercado.</li>
   <li><b>Edge</b> = prob. final − prob. implícita sin vig (pp). <b>EV</b> = prob. final × momio decimal − 1. <b>Línea justa</b> = momio de la prob. final. <b>Precio máx.</b> = momio con EV = +2%.</li>
   <li><b>Estados:</b> 🔥 PICK (edge ≥ 3 pp, EV ≥ 0 y confianza Media/Alta) · 🟡 LEAN (edge ≥ 1 pp) · ⛔ PASS (sin edge; igual se muestra el lean) · 🔍 SIN LÍNEA (no hay precio).</li>
+  <li><b>Casas y consenso:</b> mejor precio = el momio más alto en la misma línea; consenso s/vig = promedio de las probabilidades sin vig de las casas en la línea de referencia.</li>
+  <li><b>RLM:</b> lado público (≥55% de tickets) y la línea/precio se mueve en su contra entre la apertura y ahora. <b>Dinero &gt; tickets:</b> % dinero − % tickets ≥ 10 pp. Se muestran junto al pick como etiquetas (a favor / en contra / mixto) <b>sin cambiar la probabilidad del modelo</b>: son indicadores, no garantías. Sin % de apuestas ⇒ “Sin dato”.</li>
   <li><b>Confianza:</b> muestra de juegos, acuerdo con el mercado, líderes lesionados, abridores (MLB).</li></ul></div>
   <div class="note">El modelo no sabe de lesiones de último minuto, descansos, clima ni alineaciones. El mercado suele ser más informado que un modelo simple: trátalo como una segunda opinión. Sin promesas de rentabilidad.</div>`;
 }

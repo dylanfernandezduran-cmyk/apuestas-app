@@ -14,9 +14,16 @@ def client():
 
 _sem = asyncio.Semaphore(12)
 
-async def get_json(url: str, ttl: int = 120, params: dict | None = None):
+def _key(url, params=None):
+    return url + "?" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items()))
+
+def fetched_at(url, params=None):
+    ent = _store.get(_key(url, params))
+    return ent[0] if ent else None
+
+async def get_json(url: str, ttl: int = 120, params: dict | None = None, headers: dict | None = None):
     """GET con caché TTL en memoria, dedupe de peticiones en vuelo y 'stale on error'. Devuelve None si falla y no hay caché."""
-    key = url + "?" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items()))
+    key = _key(url, params)
     now = time.time()
     ent = _store.get(key)
     if ent and now - ent[0] < ttl:
@@ -32,7 +39,7 @@ async def get_json(url: str, ttl: int = 120, params: dict | None = None):
         for attempt in range(2):
             try:
                 async with _sem:
-                    r = await client().get(url, params=params)
+                    r = await client().get(url, params=params, headers=headers)
                 if r.status_code == 200:
                     data = r.json()
                     _store[key] = (time.time(), data)

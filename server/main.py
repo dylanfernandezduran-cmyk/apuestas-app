@@ -1,8 +1,9 @@
 import asyncio, os, time
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from . import data, ratings
+from . import data, ratings, market as MK, history
 from .config import SPORTS, LEAGUES
 from .cache import STATS
 
@@ -16,6 +17,35 @@ async def warm():
             try: await ratings.get_ratings(l)
             except Exception: pass
     asyncio.create_task(w())
+    asyncio.create_task(snapshot_loop())
+
+SNAP_MIN = float(os.environ.get("SNAP_MIN", "10"))   # minutos entre snapshots de líneas
+SNAP_STATE = {"last": None, "games": 0, "runs": 0, "err": None}
+
+async def snapshot_once():
+    now = datetime.now(timezone.utc); lim = now + timedelta(hours=72)
+    leagues = list(LEAGUES.keys())
+    lists = await asyncio.gather(*[data.list_games(l) for l in leagues], return_exceptions=True)
+    todo = []
+    for l, r in zip(leagues, lists):
+        if isinstance(r, Exception): continue
+        for g in r[0]:
+            d = data.parse_dt(g["date"])
+            if g["state"] == "pre" and d and now <= d <= lim: todo.append((l, g))
+    sem = asyncio.Semaphore(6)
+    async def one(l, g):
+        async with sem:
+            try: await MK.game_market(l, g, snapshot=True)
+            except Exception: pass
+    await asyncio.gather(*[one(l, g) for l, g in todo])
+    SNAP_STATE.update(last=time.time(), games=len(todo), runs=SNAP_STATE["runs"] + 1)
+
+async def snapshot_loop():
+    await asyncio.sleep(5)
+    while True:
+        try: await snapshot_once()
+        except Exception as ex: SNAP_STATE["err"] = str(ex)[:200]
+        await asyncio.sleep(max(60, SNAP_MIN * 60))
 
 @app.get("/api/sports")
 async def sports():
@@ -38,9 +68,18 @@ async def game(league: str, eid: str):
 async def picks(scope: str = "24h"):
     return await data.picks(scope)
 
+@app.get("/api/history/{league}/{eid}")
+async def hist(league: str, eid: str):
+    return history.series(league, eid)
+
+@app.post("/api/snapshot")
+async def snap_now():
+    await snapshot_once()
+    return dict(SNAP_STATE, db=history.stats())
+
 @app.get("/api/health")
 async def health():
-    return dict(ok=True, cache=STATS, ratings={k: v["n_games"] for k, v in ratings._ratings.items()}, ts=time.time())
+    return dict(ok=True, cache=STATS, ratings={k: v["n_games"] for k, v in ratings._ratings.items()}, ts=time.time(), snapshots=dict(SNAP_STATE, every_min=SNAP_MIN, db=history.stats()))
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
