@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import imgproxy, data, ratings, market as MK, history, record as REC, grading, enrich, injuries as INJ, weather as WX, live as LV
+from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, grading, enrich, injuries as INJ, weather as WX, live as LV
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -112,6 +112,15 @@ async def img(u: str, w: int = 64):
     r = await imgproxy.get_image(u, w)
     if not r: raise HTTPException(404, "sin imagen")
     return Response(r[0], media_type=r[1] or "image/png", headers={"Cache-Control": "public, max-age=604800"})
+
+@app.get("/api/search")
+async def search(q: str = ""):
+    """Buscador del inicio (juegos, equipos, jugadores de tenis, ligas/torneos) sobre los juegos cargados de todas las ligas."""
+    if len(SEARCH.norm(q)) < 2 or len(q) > 60: return dict(q=q, leagues=[], teams=[], games=[])
+    leagues = list(LEAGUES.keys())
+    lists = await asyncio.gather(*[data.list_games(l) for l in leagues], return_exceptions=True)
+    by = {l: (r[0] if not isinstance(r, Exception) else []) for l, r in zip(leagues, lists)}
+    return SEARCH.search(q, by, LEAGUES, SPORTS)
 
 @app.get("/api/sports")
 async def sports():

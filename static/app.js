@@ -89,6 +89,7 @@ async function viewSport(sport, league){
   league = league || sp.leagues[0].key;
   loading(`Cargando juegos de ${sp.name}…`);
   const d = await api('/api/games?league='+encodeURIComponent(league));
+  if(!location.hash.startsWith('#/deporte/')) return;   // el usuario ya se fue a otra pantalla: no pisarla
   const pills = sp.leagues.length>1 ? `<div class="pills">${sp.leagues.map(l=>`<a class="pill ${l.key===league?'on':''}" href="#/deporte/${sport}/${encodeURIComponent(l.key)}">${esc(l.name)}</a>`).join('')}</div>`:'';
   let body='';
   if(!d.ok) body = `<div class="note">⚠️ La fuente de datos no respondió. Intenta de nuevo en un momento.</div>`;
@@ -201,38 +202,87 @@ function gameCard(g){
 }
 
 // ------------------------------------------------------------ juego
-function heroSide(g,d,sd){ const t=g[sd];
-  return `<div>${badge(t,52)}<div class="n">${esc(t.name)}</div><div class="sub">${esc(t.record||'')}${d.kind==='tennis'&&t.rank?` · #${t.rank} ranking · ${t.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(d.kind==='tennis'?(t.sets||[]).join(' '):(t.score??''))}</div>`:''}</div>`; }
+// ---- detalle limpio: encabezado, pick principal, mercados en bloques y todo lo técnico en acordeones cerrados
+function heroSide(g,d,sd){ const t=g[sd], ten=d.kind==='tennis';
+  return `<div class="hs">${badge(t,56)}<div class="n">${esc(t.name)}</div><div class="sub">${esc(t.record||'')}${ten&&t.rank&&!t.record?`#${t.rank} ranking`:''}</div>${ten&&g.state!=='pre'?`<div class="big mono hsets">${esc((t.sets||[]).join(' '))}</div>`:''}</div>`; }
+function heroMid(g,d){
+  const live=g.state==='in', ten=d.kind==='tennis', sd=sides(g);
+  if(g.state==='pre') return `<div class="hm-d">${esc(fmtShort(g.date))}</div><div class="hm-t mono">${esc(fmtTime(g.date))}</div><div class="sub">CDMX</div>`;
+  const clock = d.live&&d.live.text ? d.live.text : (live?(g.status||''):'Final');
+  if(ten) return `<div class="hm-s ${live?'lv-clock':''}">${live?'● EN VIVO':'FINAL'}</div><div class="sub">${esc(clock)}</div>`;
+  return `<div class="hm-sc mono">${esc(g[sd[0]].score??'')} <span class="mut">–</span> ${esc(g[sd[1]].score??'')}</div><div class="hm-s ${live?'lv-clock':''}">${live?'● '+esc(clock):'FINAL'}</div>`;
+}
+function acc(title, inner, cls=''){ return inner&&inner.trim() ? `<div class="card fold closed acc ${cls}"><h2>${title}</h2><div class="acc-b">${inner}</div></div>` : ''; }
+function mainPickCard(d){
+  const p=d.picks, g=d.game;
+  if(!p) return `<div class="card mp"><div class="mp-k">Pick del modelo</div><div class="mut">${g.state!=='pre'?'El juego ya empezó o terminó: el pick pre-juego no aplica.':`Sin modelo para este juego (${SD}).`}</div></div>`;
+  const l=p.lean, c=p.confidence, st=STATUS[p.status];
+  const rr=recFor(mktKey(l),l.side,l.line);
+  const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,false)) : gradeBadge(rr,true)) : '';
+  const cell=(k,v,cls='')=>`<div><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;
+  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final)),cell('Edge',sg(l.edge)+' pp',l.edge>0?'pos':'neg'),cell('Confianza',c?`${c.emoji} ${esc(c.level)}`:SD)]
+    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model)),cell('Edge',SD),cell('Confianza',c?`${c.emoji} ${esc(c.level)}`:SD)];
+  return `<div class="card mp ${p.status==='PICK'?'hot':''}"><div class="mp-h"><span class="mp-k">${st[0]} ${st[1]}</span>${gb||''}</div>
+    <div class="mp-l">${esc(l.label)}</div><div class="mp-g">${cells.join('')}</div>${l.price_txt?'':`<div class="sub" style="margin-top:6px">Sin línea de mercado para calcular edge.</div>`}</div>`;
+}
+const MK_ORDER={ml:0,total:1,spread:2,dc:3};
+function mkTitle(m,g){
+  const sp=g.sport, k=m.key;
+  if(k==='ml') return isSoc(g)?'Resultado final':sp==='tenis'?'Ganador del partido':'Ganador';
+  if(k==='total') return sp==='tenis'?'Total':'Total de '+(sp==='futbol'?'goles':sp==='mlb'||sp==='nhl'?'carreras/goles':'puntos');
+  if(k==='spread') return sp==='mlb'?'Run line':sp==='futbol'?'Hándicap asiático':sp==='tenis'?'Hándicap de juegos':'Hándicap (spread)';
+  if(k==='dc') return 'Doble oportunidad';
+  return (m.title||k).replace(/\s*\(.*\)\s*$/,'');
+}
+const obLabel = (o,g) => String(o.label||'').replace(/\s*\((local|visitante)\)/i,'').replace(/^Over\b/,'Más de').replace(/^Under\b/,'Menos de').replace(/\s*\(sin empate\)/i,'');
+function mkFromOdds(d){
+  const o=d.odds, g=d.game; if(!o) return [];
+  const out=[], bt=(label,price,market,side,line)=>({label,market,side,line,p_final:null,best:price!=null?{price_txt:am(price)}:null});
+  if(o.ml){ const th=o.ml.draw!=null; out.push({key:'ml',outcomes:mlSides(g,th).filter(sd=>o.ml[sd]!=null).map(sd=>bt(sd==='draw'?'Empate':g[sd].name,o.ml[sd],'ml',sd))}); }
+  const T=o.total; if(T&&T.over&&T.under) out.push({key:'total',outcomes:[bt('Más de '+T.over.line,T.over.price,'total','over',T.over.line),bt('Menos de '+T.under.line,T.under.price,'total','under',T.under.line)]});
+  const S=o.spread; if(S&&S.home&&S.away) out.push({key:'spread',outcomes:sides(g).map(sd=>bt(g[sd].name+' '+(S[sd].line>0?'+':'')+S[sd].line,S[sd].price,'spread',sd,S[sd].line))});
+  return out.filter(m=>m.outcomes.length);
+}
+function marketBlocks(d){
+  const g=d.game, P=d.probs, l=d.picks&&d.picks.lean;
+  let mk=(P&&P.markets||[]).filter(m=>m.outcomes&&m.outcomes.length);
+  let fb=false; if(!mk.length){ mk=mkFromOdds(d); fb=mk.length>0; }
+  if(!mk.length) return '';
+  mk=mk.slice().sort((a,b)=>(MK_ORDER[a.key]??9)-(MK_ORDER[b.key]??9));
+  const isPick=o=>l&&String(o.market||'').toLowerCase()===String(mktKey(l)).toLowerCase()&&o.side===l.side&&(l.line==null||o.line==null||Number(o.line)===Number(l.line));
+  const order = (m)=>{ if(m.key==='ml'||m.key==='spread'){ const th=m.outcomes.length===3; const ord=mlSides(g,th); return m.outcomes.slice().sort((a,b)=>ord.indexOf(a.side)-ord.indexOf(b.side)); } if(m.key==='total') return m.outcomes.slice().sort((a,b)=>(a.side==='over'?0:1)-(b.side==='over'?0:1)); return m.outcomes; };
+  const btn=o=>{ const pk=isPick(o), v=o.edge!=null&&o.edge>=3, rr=recFor(String(o.market||'').toLowerCase(),o.side,o.line);
+    const pr=o.best&&(o.best.price_txt||(o.best.price!=null?am(o.best.price):null));
+    return `<div class="ob ${pk?'pick':''} ${v?'val':''}"><span class="ol">${esc(obLabel(o,g))}</span><span class="oq mono">${esc(pr||'—')}</span><span class="op">${o.p_final!=null?pct(o.p_final,0)+(pk&&o.edge!=null?` · <b class="${o.edge>0?'pos':'neg'}">${sg(o.edge)}pp</b>`:''):'&nbsp;'}</span>${rr&&rr.status!=='PENDIENTE'?`<span class="og">${gradeBadge(rr,false)}</span>`:''}</div>`; };
+  const blocks=mk.map(m=>{ const os=order(m); return `<div class="mkb"><div class="mkb-h">${esc(mkTitle(m,g))}</div><div class="ob-g n${Math.min(os.length,3)}">${os.map(btn).join('')}</div></div>`; }).join('');
+  return `<div class="card mkc"><h2>Mercados</h2>${blocks}<div class="sub mkn">${fb?'Cuotas de ESPN. ':''}Cuota = mejor precio disponible · % = probabilidad final${P&&P.markets&&P.markets.length?' (modelo + mercado)':''}.</div></div>`;
+}
 async function viewGame(league, id, silent){
   if(!silent) loading('Analizando partido con datos reales…');
   const d = await api(`/api/game/${encodeURIComponent(league)}/${id}`);
+  if(!location.hash.startsWith('#/juego/')) return d;
   const g = d.game;
   const back = `<a class="back" href="#/deporte/${g.sport}/${encodeURIComponent(league)}">← ${esc(g.league_name)}</a>`;
   const live = g.state==='in';
-  const stTxt = g.state!=='pre' && d.live && d.live.text ? ` · <b class="${live?'lv-clock':''}">${esc(d.live.text)}</b>` : '';
-  const hero = `<div class="card"><div class="sub" style="text-align:center">${esc(g.league_name)} · ${esc(fmtDay(g.date))} · <b>${fmtTime(g.date)}</b> CDMX ${stBadge(g)}${stTxt}${g.neutral&&d.kind!=='tennis'?' · cancha neutral':''}</div>
-    <div class="hero" style="margin-top:10px">
-      ${heroSide(g,d,sides(g)[0])}
-      <div class="vs">${d.kind==='tennis'?'VS':vsMark(g)}</div>
-      ${heroSide(g,d,sides(g)[1])}
-    </div>
-    <div class="sub" style="text-align:center;margin-top:8px">${esc(g.venue||'')}${g.court?' · '+esc(g.court):''}${g.note?' · '+esc(g.note):''}${g.weather&&!d.weather?` · 🌡️ ${g.weather.temp_f}°F`:''}</div>
-    ${g.wd?`<div class="sub" style="text-align:center;margin-top:4px">⚠️ ${esc(g.wd)}</div>`:''}
-    ${restTags(d)?`<div style="text-align:center;margin-top:8px">${restTags(d)}</div>`:''}
-    <div style="text-align:center;margin-top:8px">${updTag(d.updated,live)}</div></div>`;
+  const sub=[g.note&&g.note!==g.league_name?g.note:'', g.venue, g.court, g.neutral&&d.kind!=='tennis'?'cancha neutral':'', g.weather&&!d.weather?`🌡️ ${g.weather.temp_f}°F`:''].filter(Boolean).map(esc).join(' · ');
+  const hero = `<div class="card gh2"><div class="gh2-t"><span>${esc(g.league_name)}</span>${stBadge(g)}</div>
+    <div class="hero">${heroSide(g,d,sides(g)[0])}<div class="hmid">${heroMid(g,d)}</div>${heroSide(g,d,sides(g)[1])}</div>
+    ${sub?`<div class="sub hsub">${sub}</div>`:''}${g.wd?`<div class="sub hsub">⚠️ ${esc(g.wd)}</div>`:''}
+    ${restTags(d)?`<div class="hsub">${restTags(d)}</div>`:''}<div class="hsub">${updTag(d.updated,live)}</div></div>`;
   REC_MAP = {}; (d.record||[]).forEach(r=>{ REC_MAP[r.market+'.'+r.selection]=r; }); PROV = d.prov||{};
-  let html = back + hero;
-  html += liveSection(d) + recordCard(d) + picksSection(d) + probSection(d);
-  html += marketSection(d) + splitsSection(d) + rlmSection(d) + movementSection(d);
-  if(d.odds && d.odds.src==='espn') html += oddsSection(d);
-  if(d.kind==='tennis') html += tennisSections(d); else html += teamSections(d);
-  if(d.gaps && d.gaps.length) html += `<div class="note gap"><b>🕳️ Datos no disponibles (${SD}):</b><ul class="t">${d.gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
-  html += `<div class="note">⚖️ <b>Estimación del modelo, no certeza.</b> Sin promesas de rentabilidad. Revisa lesiones/alineaciones de último minuto antes de apostar.</div>`;
-  // conserva scroll y tarjetas plegadas/abiertas al refrescar en vivo
-  const st = silent ? {y:window.scrollY, open:[...document.querySelectorAll('#app > .fold')].map(c=>[c.querySelector(':scope > h2').textContent.trim().slice(0,24), !c.classList.contains('closed')]), tg:[...document.querySelectorAll('#app .gp.open, #app .open')].length} : null;
+  let html = back + hero + liveSection(d) + mainPickCard(d) + marketBlocks(d);
+  html += acc('🧾 Picks registrados', recordCard(d), 'acc1');
+  html += acc('🧠 Análisis del modelo', (d.picks?picksSection(d):'') + probSection(d));
+  html += acc('💱 Cuotas y movimiento de línea', ((d.odds&&d.odds.src==='espn')?oddsSection(d):'') + marketSection(d) + splitsSection(d) + rlmSection(d) + movementSection(d));
+  html += acc(d.kind==='tennis'?'🎾 Jugadores y forma':'📊 Comparativa y estadísticas', d.kind==='tennis' ? tennisSections(d) : teamSections(d));
+  html += acc('🩺 Alineaciones, bajas y clima', (d.kind==='tennis'?'':lineupsSection(d)) + injSection(d) + (d.kind==='tennis'?'':weatherSection(d)));
+  if(d.gaps && d.gaps.length) html += acc('🕳️ Datos no disponibles', `<ul class="t">${d.gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`);
+  // conserva scroll y acordeones abiertos/cerrados al refrescar en vivo
+  const keyOf=c=>c.querySelector(':scope > h2').textContent.trim().slice(0,24);
+  const st = silent ? {y:window.scrollY, open:[...document.querySelectorAll('#app > .fold')].map(c=>[keyOf(c), !c.classList.contains('closed')])} : null;
   $app.innerHTML = html;
   mvDraw(); foldCards();
-  if(st){ const m=new Map(st.open); document.querySelectorAll('#app > .fold').forEach(c=>{ const k=c.querySelector(':scope > h2').textContent.trim().slice(0,24); if(m.has(k)) c.classList.toggle('closed',!m.get(k)); }); window.scrollTo(0,st.y); }
+  if(st){ const m=new Map(st.open); document.querySelectorAll('#app > .fold').forEach(c=>{ const k=keyOf(c); if(m.has(k)) c.classList.toggle('closed',!m.get(k)); }); window.scrollTo(0,st.y); }
   Live.start(async()=>{ if(!location.hash.startsWith('#/juego/')) return; try{ await viewGame(league,id,true); }catch(e){} }, 25000);
   if(!live) Live.stop();
   return d;
@@ -340,7 +390,6 @@ function teamSections(d){
   const recent=(t,T)=>`<div><div class="sub"><b>${esc(T.name)}</b> · últimos juegos</div><div class="tbl"><table><tbody>${(t.recent||[]).slice(0,8).map(r=>`<tr><td>${fmtShort(r.date)} ${r.home?'vs':'@'} ${esc(r.opp)}</td><td class="mono ${r.res==='W'?'pos':r.res==='L'?'neg':'amb'}">${r.res==='W'?'G':r.res==='L'?'P':'E'} ${r.pf}-${r.pa}</td></tr>`).join('')||`<tr><td>${SD}</td></tr>`}</tbody></table></div></div>`;
   html += `<div class="card" style="margin-top:10px"><h2>🗓️ Resultados recientes</h2><div class="two">${soc?recent(th,H)+recent(ta,A):recent(ta,A)+recent(th,H)}</div></div>`;
   // lesiones (detalle nuevo: extras.js), alineaciones y clima
-  html += lineupsSection(d) + injSection(d) + weatherSection(d);
   const leadBlock=(T)=>{ const l=(d.leaders||{})[T.id]; if(!l||!l.length) return `<div class="mut">${esc(T.name)}: ${SD}</div>`;
     return `<div><b>${esc(T.name)}</b>${l.map(x=>`<div class="row"><span class="sub">${esc(x.cat)}</span><span>${esc(x.name)} <span class="mono sub">${esc(x.value)}</span></span></div>`).join('')}</div>`; };
   html += `<div class="card" style="margin-top:10px"><h2>⭐ Jugadores clave (líderes del equipo)</h2><div class="two">${soc?leadBlock(H)+leadBlock(A):leadBlock(A)+leadBlock(H)}</div></div>`;
@@ -360,14 +409,12 @@ function teamSections(d){
 }
 
 function tennisSections(d){
-  const extra=injSection(d);
   const g=d.game, A=g.away, H=g.home; // en tenis: home=jugador 1 (orden ESPN), away=jugador 2
   const P=[H,A]; const m=d.model;
   const fm=(p,list)=>`<div><b>${esc(p.name)}</b> <span class="sub">${p.rank?`#${p.rank} · ${p.points} pts`:'Ranking: '+SD}${p.country?` · ${esc(p.country)}`:''}</span><div class="form">${(list||[]).slice(0,10).map(r=>`<span class="f f-${r.res}">${r.res==='W'?'G':'P'}</span>`).join('')||SD}</div>
     <div class="tbl"><table><tbody>${(list||[]).slice(0,6).map(r=>`<tr><td>${fmtShort(r.date)} vs ${esc(r.opp)} <span class="sub">${esc(r.round||'')}</span></td><td class="mono ${r.res==='W'?'pos':'neg'}">${r.res==='W'?'G':'P'} ${esc(r.score)}</td></tr>`).join('')||`<tr><td>${SD}</td></tr>`}</tbody></table></div></div>`;
   return `<div class="card" style="margin-top:10px"><h2>🎾 Jugadores y forma reciente</h2><div class="two">${fm(H,d.form.home)}${fm(A,d.form.away)}</div>
    <div class="sub" style="margin-top:6px">Forma = partidos de singles terminados en los torneos en curso/recientes que publica ESPN (muestra limitada). Superficie, H2H y lesiones: ${SD}.</div></div>
-   ${extra}
    ${m?`<div class="card" style="margin-top:10px"><h2>🧠 Detalle del modelo</h2><div class="row"><span>Prob. de victoria (heurística de ranking)</span><span class="mono">${esc(H.short)} ${pct(m.p_home)} · ${esc(A.short)} ${pct(m.p_away)}</span></div><div class="sub">${esc(m.label)}. No hay cuotas gratuitas en ESPN para tenis, así que no hay edge: sólo línea justa y el precio máximo sugerido.</div></div>`:''}`;
 }
 
@@ -664,10 +711,9 @@ function viewInfo(){
 
 // ------------------------------------------------------------ interacción (móvil): sugerencias y tarjetas plegables
 function foldCards(){
-  if(!matchMedia('(max-width:640px)').matches) return;
-  const keep=/Picks registrados|Mejores picks|Probabilidades|Comparador|Movimientos de l|En vivo|Marcador y estad/i;
+  const keep=/En vivo/i;   // sólo el marcador en vivo arranca abierto; todo lo demás va en acordeones cerrados
   document.querySelectorAll('#app > .card').forEach(c=>{
-    const h=c.querySelector(':scope > h2'); if(!h) return;
+    const h=c.querySelector(':scope > h2'); if(!h||c.classList.contains('mkc')) return;
     c.classList.add('fold'); if(!keep.test(h.textContent)) c.classList.add('closed');
   });
 }

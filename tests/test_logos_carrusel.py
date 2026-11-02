@@ -96,7 +96,7 @@ console.log(JSON.stringify({ini:[initials('Newcastle United'),initials('L. Darde
 
 def test_logos_y_carrusel_usados_en_toda_la_app():
     app, ex, css = SRC["app.js"], SRC["extras.js"], SRC["style.css"]
-    assert "badge(t,22)" in app and "badge(t,52)" in app and "recMatch(r)" in app and "matchup(g)" in app           # tarjetas, héroe, récord, picks
+    assert "badge(t,22)" in app and "badge(t,56)" in app and "recMatch(r)" in app and "matchup(g)" in app           # tarjetas, héroe, récord, picks
     assert "badge(x,30)" in ex and "matchup(g,true)" in ex                                                          # carrusel y picks del inicio
     assert "scroll-snap-type:x mandatory" in css and "scroll-snap-align:center" in css and ".car-dots" in css and ".tl.ini::after" in css
     assert "carPatch(lb," in ex and "data-gid" in ex and re.search(r"\.car-n.*textContent=`\$\{i\+1\}/\$\{n\}`", ex.replace("\n", " ")) is not None
@@ -142,7 +142,7 @@ def test_layout_inicio_y_picks_por_deporte_e2e():
         o = json.loads(r.stdout.strip().splitlines()[-1])
     finally:
         srv.terminate()
-    assert o["secciones"] == ["hm-live", "hm-sp", "hm-picks"]                          # en vivo -> deportes -> mejores picks
+    assert o["secciones"] == ["hm-live", "hm-search", "hm-sp", "hm-picks"]                          # en vivo -> deportes -> mejores picks
     assert o["texto_inicio_tiene"] == []                                              # sin Récord ni Bajas confirmadas en Inicio
     assert o["nav"] == ["⚾ MLB", "🏈 NFL", "🏀 NBA", "🏒 NHL", "⚽ Fútbol", "🎾 Tenis"] or [x.replace("\n", " ") for x in o["nav"]] == ["⚾ MLB", "🏈 NFL", "🏀 NBA", "🏒 NHL", "⚽ Fútbol", "🎾 Tenis"]
     assert o["nav_href"] == [f"#/deporte/{k}" for k in ("mlb", "nfl", "nba", "nhl", "futbol", "tenis")] and o["tap_nfl"] == "#/deporte/nfl"

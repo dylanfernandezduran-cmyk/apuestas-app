@@ -196,6 +196,34 @@ function carPatch(root, games){
   const v=tr.children[carIdx(tr)]; return v?v.dataset.gid:null;
 }
 
+// ---------- buscador del inicio: juegos, equipos, jugadores (tenis), ligas y torneos (GET /api/search, con debounce y cancelación)
+const srchWhen = x => x.state==='in' ? '<b class="srl">● En vivo</b>' : x.state==='post' ? 'Final' : `${esc(fmtShort(x.date))} ${esc(fmtTime(x.date))}`;
+function srchHtml(r){
+  const gl = x => `#/juego/${encodeURIComponent(x.league)}/${encodeURIComponent(x.id)}`;
+  const parts = [];
+  if(r.leagues.length) parts.push(`<div class="sr-h">Ligas y torneos</div>`+r.leagues.map(l=>`<a class="sr" href="#/deporte/${encodeURIComponent(l.sport)}/${encodeURIComponent(l.key)}"><span class="sr-em">${l.emoji}</span><div class="sr-t"><b>${esc(l.name)}</b><div class="sub">${esc(l.sub||'Liga')} · ${l.n} juego${l.n===1?'':'s'} cargado${l.n===1?'':'s'}</div></div><span class="sr-r sub">›</span></a>`).join(''));
+  if(r.teams.length) parts.push(`<div class="sr-h">Equipos y jugadores</div>`+r.teams.map(t=>`<a class="sr" href="#/juego/${encodeURIComponent(t.league)}/${encodeURIComponent(t.game_id)}">${badge(t,30)}<div class="sr-t"><b>${esc(t.name)}</b><div class="sub">${esc(t.league_name||'')} · vs ${esc(t.opp||SD)}</div></div><span class="sr-r sub">${srchWhen(t)}</span></a>`).join(''));
+  if(r.games.length) parts.push(`<div class="sr-h">Juegos</div>`+r.games.map(x=>{ const sd=sides({sport:x.sport});
+    return `<a class="sr" href="${gl(x)}"><span class="sr-pair">${badge(x[sd[0]],24)}${badge(x[sd[1]],24)}</span><div class="sr-t"><b>${esc(x[sd[0]].name)}</b> <span class="vs">${x.sport==='futbol'?'vs':x.sport==='tenis'?'vs':'@'}</span> <b>${esc(x[sd[1]].name)}</b><div class="sub">${esc(x.league_name||'')}</div></div><span class="sr-r sub">${srchWhen(x)}</span></a>`; }).join(''));
+  return parts.join('') || `<div class="sr-none">Sin resultados para «${esc(r.q)}».</div>`;
+}
+function srchInit(root){
+  const inp=root.querySelector('input'), box=root.querySelector('.srch-r'); let tm=0, seq=0, ac=null;
+  const run = async q=>{
+    const me=++seq; if(ac) ac.abort(); ac=new AbortController();
+    box.hidden=false; box.innerHTML='<div class="sr-none">Buscando…</div>';
+    try{
+      const r = await fetch('/api/search?q='+encodeURIComponent(q),{signal:ac.signal}); if(!r.ok) throw new Error(r.statusText);
+      const d = await r.json(); if(me!==seq) return;
+      box.innerHTML = srchHtml(d);
+    }catch(e){ if(me===seq && e.name!=='AbortError') box.innerHTML=`<div class="sr-none">${SD}: no se pudo buscar. Reintenta.</div>`; }
+  };
+  inp.addEventListener('input',()=>{ clearTimeout(tm); const q=inp.value.trim();
+    if(q.length<2){ seq++; if(ac) ac.abort(); box.hidden=true; box.innerHTML=''; return; }
+    tm=setTimeout(()=>run(q),250); });
+  box.addEventListener('click',e=>{ if(e.target.closest('a')){ inp.blur(); } });
+}
+
 // ---------- navegación minimalista de deportes (inicio): emoji arriba, nombre abajo, sin cajas
 const SNAV_ORDER = ['mlb','nfl','nba','nhl','futbol','tenis'];
 const sportNavItem = s => `<a href="#/deporte/${s.key}" data-sp="${s.key}"><span class="em">${s.emoji}</span><span class="nm">${esc(s.name)}</span></a>`;
@@ -212,9 +240,11 @@ async function viewHome(){
   const today = new Intl.DateTimeFormat('es-MX',{timeZone:TZ,weekday:'long',day:'numeric',month:'long'}).format(new Date());
   $app.innerHTML = `<div class="hm-h"><div class="sub">${esc(today)} · CDMX</div><h1>Resumen del día</h1></div>
    <section class="hm" id="hm-live"><h3>En vivo ahora</h3><div class="skel">Buscando juegos en vivo…</div></section>
+   <section class="hm" id="hm-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>
    <div class="hm snav" id="hm-sp" role="navigation" aria-label="Deportes">${SNAV_ORDER.map(k=>SPORTS.find(x=>x.key===k)).filter(Boolean).concat(SPORTS.filter(x=>!SNAV_ORDER.includes(x.key))).map(sportNavItem).join('')}</div>
    <section class="hm" id="hm-picks"><h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3><div class="skel">Calculando con el modelo…</div></section>
    <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo. Si algo no está disponible se muestra <b>${SD}</b>. Las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
+  srchInit(document.getElementById('hm-search'));
   let timer=null;
   const fillHome = async (first)=>{
     try{
