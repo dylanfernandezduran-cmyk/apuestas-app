@@ -38,8 +38,20 @@ def _bases(sit):
     b = [n for n, k in (("1ª", "onFirst"), ("2ª", "onSecond"), ("3ª", "onThird")) if sit.get(k)]
     return ("corredores en " + " y ".join(b)) if b else "bases vacías"
 
+def _yard(txt):
+    """'SEA 30' -> ('SEA', 30); '50' -> (None, 50). Posición real del balón según ESPN (possessionText)."""
+    m = re.match(r"^\s*([A-Za-z]{2,4})\s+(\d{1,2})\s*$", txt or "")
+    if m: return m.group(1).upper(), int(m.group(2))
+    m = re.match(r"^\s*(\d{1,2})\s*$", txt or "")
+    return (None, int(m.group(1))) if m else (None, None)
+
+def _last(sit):
+    lp = sit.get("lastPlay") or {}
+    t = lp.get("text") or lp.get("shortText")
+    return t if isinstance(t, str) and t.strip() else None
+
 def situation(family, sit, teams_by_id=None):
-    """Situación de juego (NFL: posesión/down; MLB: outs/cuenta/corredores). -> dict(text, ...) o None."""
+    """Situación de juego (NFL: posesión/down/yarda; MLB: outs/cuenta/corredores). -> dict(text, ...) o None. Sólo datos que ESPN publica."""
     if not sit: return None
     teams_by_id = teams_by_id or {}
     out = {}
@@ -51,7 +63,10 @@ def situation(family, sit, teams_by_id=None):
         poss = teams_by_id.get(str(sit.get("possession") or "")) or ""
         parts = [p for p in [f"Posesión {poss}" if poss else None, down, sit.get("possessionText")] if p]
         if sit.get("isRedZone"): parts.append("zona roja")
-        if parts: out = dict(text=" · ".join(parts), possession=str(sit.get("possession") or ""), red_zone=bool(sit.get("isRedZone")))
+        yt, yn = _yard(sit.get("possessionText"))
+        if parts: out = dict(text=" · ".join(parts), possession=str(sit.get("possession") or ""), red_zone=bool(sit.get("isRedZone")),
+                             down=sit.get("down") if isinstance(sit.get("down"), int) and sit.get("down") > 0 else None,
+                             distance=sit.get("distance") if isinstance(sit.get("distance"), int) else None, yard_team=yt, yard=yn, last_play=_last(sit))
     elif family == "baseball":
         outs = sit.get("outs")
         parts = []
@@ -62,7 +77,8 @@ def situation(family, sit, teams_by_id=None):
         pt = ((sit.get("pitcher") or {}).get("athlete") or {}).get("displayName")
         if bt: parts.append(f"al bat {bt}")
         if pt: parts.append(f"lanza {pt}")
-        out = dict(text=" · ".join(parts), outs=outs)
+        out = dict(text=" · ".join(parts), outs=outs, balls=sit.get("balls"), strikes=sit.get("strikes"),
+                   bases=[bool(sit.get("onFirst")), bool(sit.get("onSecond")), bool(sit.get("onThird"))], batter=bt, pitcher=pt, last_play=_last(sit))
     return out or None
 
 def live_core(comp, family, league, teams_by_id=None):

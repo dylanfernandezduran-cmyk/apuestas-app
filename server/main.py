@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, grading, enrich, injuries as INJ, weather as WX, live as LV
+from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -58,6 +58,8 @@ GRADE_STATE = {"last": None, "runs": 0, "graded": 0, "err": None, "last_result":
 
 async def grade_once():
     r = await grading.grade_pending()
+    try: r["pred"] = await PRED.grade_pending()
+    except Exception as ex: r["pred"] = dict(err=str(ex)[:80])
     GRADE_STATE.update(last=time.time(), runs=GRADE_STATE["runs"] + 1, graded=GRADE_STATE["graded"] + r["graded"] + r["void"], last_result=r, err=None)
     return r
 
@@ -270,7 +272,7 @@ async def game(league: str, eid: str):
 async def record(sport: str | None = None, type: str | None = None, days: int | None = None, limit: int = 60, basis: str | None = None):
     """Récord de picks: resumen (G-P-E, %, unidades a 1u plano con la cuota registrada) + últimos calificados. Filtros: sport, type=main|suggestion, days."""
     return dict(summary=REC.summary(sport, type, days, basis), recent=REC.query(sport, type, days, min(max(limit, 1), 300), basis=basis), grading=dict(GRADE_STATE, every_min=GRADE_MIN),
-                filters=dict(sport=sport, type=type, days=days, basis=basis), now=time.time())
+                filters=dict(sport=sport, type=type, days=days, basis=basis), pred=PRED.stats(sport, days), now=time.time())
 
 @app.post("/api/grade")
 async def grade_now():

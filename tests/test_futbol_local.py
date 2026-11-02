@@ -25,9 +25,9 @@ def test_migra_marcador_guardado_de_futbol(db):
 @pytest.mark.skipif(not shutil.which("node"), reason="sin node")
 def test_orden_de_equipos_en_frontend():
     src = open(os.path.join(ROOT, "static", "app.js"), encoding="utf-8").read()
-    pick = "\n".join(re.search(rf"^const {n} = .*$", src, re.M).group(0) for n in ("isSoc", "sides", "vsMark"))
+    pick = "\n".join(re.search(rf"^const {n} = .*$", src, re.M).group(0) for n in ("isSoc", "homeFirst", "sides", "vsMark"))
     js = pick + "\nconsole.log(JSON.stringify([sides({sport:'futbol'}), sides({sport:'nba'}), sides({sport:'tenis'}), vsMark({sport:'futbol'}), vsMark({sport:'nfl'})]))"
     out = json.loads(subprocess.check_output(["node", "-e", js], text=True))
-    assert out == [["home", "away"], ["away", "home"], ["away", "home"], "vs", "@"]
+    assert out == [["home", "away"], ["away", "home"], ["home", "away"], "vs", "@"]      # tenis también va local primero (como fútbol)
     # el render de tarjetas y héroe usa el orden por deporte (no away/home fijos)
     assert "sides(g).map(sd=>team(g[sd],sd))" in src and "heroSide(g,d,sides(g)[0])" in src

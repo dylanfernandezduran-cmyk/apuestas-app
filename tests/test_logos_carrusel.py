@@ -80,7 +80,7 @@ def test_record_junta_logos_de_equipos(db):
 @pytest.mark.skipif(not shutil.which("node"), reason="sin node")
 def test_helpers_de_logo_en_frontend():
     app = SRC["app.js"]
-    names = ("isSoc", "sides", "vsMark", "imgSrc", "initials", "badge", "matchup")
+    names = ("isSoc", "homeFirst", "sides", "vsMark", "imgSrc", "initials", "badge", "matchup")
     pick = "\n".join(re.search(rf"^const {n} = .*(?:\n  .*)*$", app, re.M).group(0) for n in names)
     js = "const esc=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n" + pick + """
 const g={sport:'futbol',home:{name:'Newcastle United',short:'Newcastle',logo:'https://a.espncdn.com/i/teamlogos/soccer/500/361.png'},away:{name:'Everton',short:'Everton',logo:null}};

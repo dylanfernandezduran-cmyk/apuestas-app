@@ -79,51 +79,6 @@ function liveSection(d){
   return `<div class="card ${live?'hot':''}" style="margin-top:10px"><h2>📡 ${live?'En vivo':'Marcador y estadísticas'} ${live?'<span class="badge b-live">● EN VIVO</span>':'<span class="badge b-fin">FINAL</span>'}</h2>${body}</div>`;
 }
 
-// ---------- detalle: lesiones
-const BK = {out:['b-out','Baja'], doubt:['b-dbt','Dudoso'], dtd:['b-dtd','Duda leve']};
-function injSide(T, side, f, retIds){
-  const S=f.sides[side]; if(!S) return `<div class="mut">${esc(T.name)}: ${SD}</div>`;
-  const c=S.counts||{}, es=S.entries||[];
-  const chips=[c.out?`<span class="cchip c-out">${c.out} baja${c.out>1?'s':''}</span>`:'', c.doubt?`<span class="cchip c-dtd">${c.doubt} dudoso${c.doubt>1?'s':''}</span>`:'', c.dtd?`<span class="cchip">${c.dtd} duda leve</span>`:'', (S.returning||[]).length?`<span class="cchip c-ret">🔁 ${S.returning.length} regresa${S.returning.length>1?'n':''}</span>`:''].join('');
-  const row=e=>{ const b=BK[e.bucket]||BK.dtd; const note=e.note&&e.note.length>3?e.note:null;
-    return `<div class="irow"><div class="il"><b>${esc(e.name)}</b> <span class="sub">${esc(e.pos||'')}</span>${e.key?' <span class="cchip c-key" title="Líder de su equipo en una categoría estadística (ESPN)">⭐ clave</span>':''}<div class="sub">${esc(e.detail||e.status)}${e.location&&!(e.detail||'').includes(e.location)?' · '+esc(e.location):''}</div>
-      ${e.ret?`<div class="sub">Regreso estimado: <b>${esc(fmtDM(e.ret))}</b></div>`:''}${note?`<div class="sub inote" title="${esc(note)}">ESPN: ${esc(note.length>150?note.slice(0,147)+'…':note)}</div>`:''}</div>
-      <div class="ir"><span class="badge ${b[0]}">${esc(e.status_es||b[1])}</span>${e.date?`<div class="sub mono">${fmtDM(e.date)}</div>`:''}</div></div>`; };
-  const first=es.slice(0,8), rest=es.slice(8);
-  const ret=(S.returning||[]).map(r=>`<div class="irow ret"><div class="il"><b>${esc(r.name)}</b> <span class="sub">${esc(r.pos||'')}</span><div class="sub">${r.kind==='salio'?`Salió del reporte (antes: ${esc(r.old||'—')})`:`Mejoró: ${esc(r.old||'—')} → ${esc(r.new||'—')}`}</div></div><div class="ir"><span class="badge b-ret">🔁 Regresa</span><div class="sub mono">${fmtDM(r.ts)}</div></div></div>`).join('');
-  return `<div><div class="ih"><b>${esc(T.name)}</b><span class="chips">${chips||'<span class="sub">Sin lesionados reportados</span>'}</span></div>
-    ${first.map(row).join('')}${rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">Ver ${rest.length} más</div><div class="sg">${rest.map(row).join('')}</div></div>`:''}
-    ${ret?`<div class="sub rh">🔁 Regresan de lesión (según nuestro seguimiento)</div>${ret}`:''}</div>`;
-}
-function injSection(d){
-  const f=d.injuries_full, g=d.game;
-  if(f&&f.tennis) return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones y retiros</h2><div class="mut">ESPN no publica lesiones de tenis (${SD}). Los retiros o W.O. aparecen en el partido terminado${g.wd?`: <b>${esc(g.wd)}</b>`:''}.</div></div>`;
-  if(!f) return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones</h2><div class="mut">${SD}</div></div>`;
-  const any=['home','away'].some(s=>f.sides[s]&&(f.sides[s].entries||[]).length);
-  if(!f.supported&&!any) return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones y suspensiones</h2><div class="mut">ESPN no publica lesiones ni suspensiones para esta liga (${SD}). Revisa las noticias del equipo antes del partido.</div></div>`;
-  const since = f.tracking_since ? `Seguimiento propio desde ${fmtDMH(f.tracking_since)} CDMX: «Regresa» = el jugador salió del reporte de ESPN o mejoró de estado en los últimos 10 días (puede ser alta médica, o que fue cortado/traspasado; no es una confirmación de que jugará).` : '';
-  return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones ${f.fetched?`<span class="badge b-fin">ESPN · ${fmtHMS(f.fetched)}</span>`:''}</h2><div class="two">${sides(d.game).map(sd=>injSide(d.game[sd],sd,f)).join('')}</div>
-    <div class="sub" style="margin-top:8px">Baja = Out / reserva de lesionados / suspendido · Dudoso · Duda leve = cuestionable / día a día. ⭐ clave = líder estadístico del equipo.</div>${since?`<div class="sub" style="margin-top:4px">${since}</div>`:''}</div>`;
-}
-
-// ---------- detalle: clima
-function wxWindArrow(deg){ return deg==null?'':`<span class="warr" style="transform:rotate(${Math.round(deg+180)}deg)">↑</span>`; }
-function weatherSection(d){
-  const w=d.weather, g=d.game; if(!w||w.status==='no_aplica') return '';
-  const head=`<h2>🌤️ Clima del estadio ${w.status==='ok'||w.status==='retractil'?'<span class="badge b-fin">Open-Meteo</span>':''}</h2>`;
-  if(w.status==='techado') return `<div class="card" style="margin-top:10px">${head}<div><span class="cchip">🏟️ Techado</span> <span class="sub">${esc(w.venue||'')}: recinto cubierto, el clima exterior no influye.</span></div></div>`;
-  if(w.status==='sin_dato'){
-    const e=w.espn; return `<div class="card" style="margin-top:10px">${head}<div class="mut">${SD}: ${esc(w.reason||'')}</div>${e?`<div class="sub">ESPN: ${e.temp_f}°F${e.gust?` · ráfagas ${e.gust} mph`:''}${e.precip?` · lluvia ${e.precip}%`:''}</div>`:''}</div>`; }
-  const cell=(k,v,s='')=>`<div><small>${k}</small><b class="mono">${v}</b>${s?`<div class="sub">${s}</div>`:''}</div>`;
-  return `<div class="card" style="margin-top:10px">${head}
-    <div class="stats wx">${cell('Cielo',`${w.icon||''} ${esc(w.text||SD)}`)}${cell('Temperatura',w.temp_c!=null?Math.round(w.temp_c)+' °C':SD, w.feels_c!=null?'sensación '+Math.round(w.feels_c)+' °C':'')}
-      ${cell('Viento',w.wind_kmh!=null?`${wxWindArrow(w.wind_dir)} ${Math.round(w.wind_kmh)} km/h`:SD, w.wind_from?`del ${esc(w.wind_from)}${w.gust_kmh?` · ráfagas ${Math.round(w.gust_kmh)}`:''}`:'')}
-      ${cell('Prob. de lluvia',w.precip_prob!=null?Math.round(w.precip_prob)+'%':SD, w.precip_mm?w.precip_mm.toFixed(1)+' mm':'')}${cell('Humedad',w.humidity!=null?Math.round(w.humidity)+'%':SD)}${w.elevation_m!=null&&w.elevation_m>=800?cell('Altitud',Math.round(w.elevation_m)+' m'):''}</div>
-    ${(w.notes||[]).length?`<ul class="t wxn">${w.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>`:''}
-    ${w.roof==='retractil'?`<div class="sub">🏟️ Estadio con techo retráctil: si lo cierran, el clima exterior pesa menos.</div>`:''}
-    <div class="sub" style="margin-top:6px">Pronóstico para ${esc(fmtDMH(w.at))} CDMX (hora del juego) en ${esc(w.venue||'el estadio')}${w.city?', '+esc(w.city):''}. Es contexto: <b>no modifica</b> las probabilidades del modelo.</div></div>`;
-}
-
 // ---------- detalle: alineaciones
 const LS_BADGE = {confirmado:['b-ok','✅ CONFIRMADA'], proyectado:['b-prob','❓ PROYECTADA'], sin_publicar:['b-fin','Sin publicar'], profundidad:['b-prob','Depth chart']};
 function lineupSide(T, S, d, side){
@@ -148,8 +103,8 @@ function lineupSide(T, S, d, side){
 function lineupsSection(d){
   const L=d.lineups; if(!L||!L.sides) return '';
   const g=d.game, ttl = g.sport==='nhl'?'Porteros':g.sport==='mlb'?'Alineaciones y abridores':g.sport==='nfl'?'Profundidad de plantilla':'Alineaciones';
-  return `<div class="card" style="margin-top:10px"><h2>🧑‍🤝‍🧑 ${ttl}</h2><div class="two">${sides(g).map(sd=>lineupSide(g[sd],L.sides[sd],d,sd)).join('')}</div>${L.note?`<div class="sub" style="margin-top:8px">${esc(L.note)}</div>`:''}
-    <div class="sub" style="margin-top:6px">✅ confirmada = publicada por ESPN · ❓ proyectada = deducida del último juego real, puede cambiar. Los cambios se comparan contra la foto anterior guardada por el servidor.</div></div>`;
+  const body=`<div class="two">${sides(g).map(sd=>lineupSide(g[sd],L.sides[sd],d,sd)).join('')}</div>${L.note?`<div class="fine">${esc(L.note)}</div>`:''}`;
+  return ds('lin',ttl,body,{info:'Confirmada = publicada por ESPN · proyectada = deducida del último juego real, puede cambiar. Los cambios se comparan contra la foto anterior guardada por el servidor.'});
 }
 
 // ---------- descanso (filas para la tabla comparativa)

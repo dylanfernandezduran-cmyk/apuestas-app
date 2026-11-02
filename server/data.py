@@ -1,5 +1,5 @@
 """Obtención de datos reales (ESPN + MLB StatsAPI) y armado de análisis por juego."""
-import asyncio, time
+import asyncio, re, time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from .cache import get_json
@@ -9,6 +9,7 @@ from . import ratings as RT
 from . import model as M
 from . import market as MK
 from . import probs as PR
+from . import prediction as PRED
 from . import record as REC
 from . import live as LV
 
@@ -151,8 +152,11 @@ async def tennis_games(league):
                                 status=st.get("shortDetail"), home=_t_side(a, rk), away=_t_side(b, rk), venue=(c.get("venue") or {}).get("fullName"),
                                 court=(c.get("venue") or {}).get("court"), neutral=True, tournament=e.get("name"),
                                 note=f"{e.get('name')} · {(c.get('round') or {}).get('displayName', '')}".strip(" ·"), odds=None, tv=None,
-                                round=(c.get("round") or {}).get("displayName")))
-                if st["state"] == "in": out[-1]["live"] = dict(text=LV.status_es("tennis", league, c["status"]) or "En juego", clock=None, period=None, situation=None, linescores=None)
+                                round=(c.get("round") or {}).get("displayName"),
+                                best_of=(5 if (league == "atp" and re.search(r"Australian Open|Roland Garros|French Open|Wimbledon|US Open", e.get("name") or "", re.I)) else 3)))
+                if st["state"] == "in":
+                    srv = next((("home" if x.get("homeAway") == "home" else "away") for x in (a, b) if x.get("possession") is True or x.get("serving") is True or x.get("isServing") is True), None)
+                    out[-1]["live"] = dict(text=LV.status_es("tennis", league, c["status"]) or "En juego", clock=None, period=None, situation=None, linescores=None, server=srv)
                 desc = (st.get("description") or "")
                 if st["state"] == "post" and desc.lower() in ("retired", "walkover", "default", "disqualified", "abandoned"):
                     out[-1]["wd"] = {"retired": "Retiro de un jugador (abandonó el partido)", "walkover": "Pasa por W.O. (un jugador no se presentó)", "default": "Descalificación",
@@ -197,6 +201,7 @@ async def tennis_detail(league, mid):
         odds["src"] = "mk"
         gaps[0] = "Cuotas: sólo Pinnacle (referencia sharp, vía guest API pública); ESPN no publica momios de tenis. % tickets/% dinero: Sin dato"
     res = dict(game=g, kind="tennis", odds=odds, gaps=gaps, form={"home": fa, "away": fb}, market=mk, odds_note=("Cuotas tomadas de Pinnacle (ESPN no publica tenis)." if odds else None))
+    if g.get("live"): res["live"] = dict(g["live"], state=g["state"], stats=[], plays=[])
     if g["state"] == "pre": res["probs"] = PR.build(g, mdl, odds, mk, w=(M.blend_weight(mdl) if mdl else None))
     if mdl and g["state"] == "pre":
         cands = M.build_candidates(mdl, odds, A["name"], B["name"]) if odds else []
@@ -204,6 +209,7 @@ async def tennis_detail(league, mid):
         M.apply_confidence(cands, conf)
         dec = M.decide(cands, mdl, A["name"], B["name"])
         if mk: MK.attach_signals(dec["candidates"], mk)
+        res["pred"] = PRED.build(g, mdl, odds, "tennis")
         res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label="Heurística por puntos de ranking (logística sobre ln de puntos)")
         res["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
     else:
@@ -324,6 +330,8 @@ async def analyze(league, eid):
     """Análisis del juego + registro automático de pick principal/sugerencias (sólo pre-juego) + picks ya registrados con su calificación."""
     out = await _analyze(league, eid)
     if out:
+        try: PRED.attach(out)
+        except Exception: out.pop("pred", None)
         try:
             REC.record_analysis(out)
             out["record"] = REC.game_rows(league, eid)
@@ -409,6 +417,12 @@ async def _analyze(league, eid):
                 lam_home=mdl.get("lam_home"), lam_away=mdl.get("lam_away"), pitcher_adj=extra if league == "mlb" else None,
                 rating_home=mdl.get("rating_home"), rating_away=mdl.get("rating_away"), top_scores=mdl.get("mat_top"), key_injuries=key_names)
     out["model"] = mout
+    if game["state"] == "pre":
+        cor = None
+        if fam == "soccer":
+            try: cor = await PRED.corners_info(league, cfg["path"], tsum[H["id"]], tsum[A["id"]], H["id"], A["id"])
+            except Exception: cor = None
+        out["pred"] = PRED.build(game, mdl, odds, fam, cor)
     if game["state"] == "pre":
         cands = M.build_candidates(mdl, odds, H["name"], A["name"])
         dec = M.decide(cands, mdl, H["name"], A["name"])

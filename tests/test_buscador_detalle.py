@@ -5,7 +5,7 @@ from server import search as S
 from server.config import LEAGUES, SPORTS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = {f: open(os.path.join(ROOT, "static", f), encoding="utf-8").read() for f in ("app.js", "extras.js", "style.css", "index.html", "sw.js")}
+SRC = {f: open(os.path.join(ROOT, "static", f), encoding="utf-8").read() for f in ("app.js", "extras.js", "detalle.js", "style.css", "index.html", "sw.js")}
 
 def T(i, name, short, logo=None): return dict(id=str(i), name=name, short=short, abbr=short, logo=logo)
 def G(i, lg, sport, h, a, state="pre", date="2026-11-03T20:00Z", note=None):
@@ -51,12 +51,15 @@ def test_fuente_ui_buscador_y_detalle_limpio():
     ex, js, css = SRC["extras.js"], SRC["app.js"], SRC["style.css"]
     assert 'id="hm-search"' in ex and ex.index('id="hm-live"') < ex.index('id="hm-search"') < ex.index('id="hm-sp"') and "setTimeout(()=>run(q),250)" in ex and "AbortController" in ex
     assert re.search(r"\.srch input\{[^}]*font-size:16px", css)                                                      # sin zoom en iPhone
-    for fn in ("mainPickCard", "marketBlocks", "heroMid", "acc("):
-        assert fn in js
-    assert "acc('🧠 Análisis del modelo'" in js and "acc('💱 Cuotas y movimiento de línea'" in js and "acc('🩺 Alineaciones, bajas y clima'" in js
-    assert "if(!matchMedia('(max-width:640px)').matches) return;" not in js                                         # acordeones también en escritorio
+    dj = SRC["detalle.js"]
+    for fn in ("function dPred", "function ds(", "function stadiumWidget", "function courtLive", "detailSections"):
+        assert fn in dj
+    assert "acc('🧠" not in js and "#app > .acc" not in css.split("Detalle premium (pt75u)")[-1]                  # sin acordeones en el detalle nuevo
+    ds_ = dj[dj.index("function detailSections"):]
+    assert ds_.index("dPred") < ds_.index("dRec") < ds_.index("dPicks") and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
-    assert [v("index.html", n) for n in ("style.css", "app.js", "extras.js")] == [v("sw.js", n) for n in ("style.css", "app.js", "extras.js")] == ["13", "12", "11"] and "shell-v15" in SRC["sw.js"]
+    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == ["16", "3", "14", "12"] and "shell-v17" in SRC["sw.js"]
+    assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
 
 def _py_playwright():
     py = shutil.which("python3")
@@ -82,15 +85,19 @@ def test_buscador_y_detalle_limpio_e2e():
     assert o["grupos"] == ["LIGAS Y TORNEOS", "EQUIPOS Y JUGADORES", "JUEGOS"] and o["corto_oculta"] is True
     assert o["hrefs"] == ["#/deporte/futbol/mex.1", "#/juego/ita.1/77", "#/juego/ita.1/77"] and o["tap_liga"] == "#/deporte/futbol/mex.1"
     assert o["juego_home_first"].startswith("Roma vs Lazio")
-    # detalle: encabezado -> pick -> mercados -> acordeones, todos cerrados
-    for k in ("soc", "nfl"):
+    # detalle premium: secciones .ds en orden fijo (Predicción NRNM primero), sin acordeones ni bordes, títulos compactos en mayúsculas
+    ORDER = ["pred", "rec", "picks", "prob", "splits", "rlm", "move", "odds", "mkt", "players", "cmp", "pitch", "trd", "rcn", "lin", "inj", "wx", "h2h", "key", "mdl"]
+    for k in ("soc", "nfl", "tenis"):
         d = o[k]
-        assert d["top"][:3] == ["hero", "pick", "mercados"] and set(d["top"][3:]) == {"acc"}
-        assert all(c for _, c in d["accs"]) and d["visibles_acc_body"] == 0 and d["notas_visibles"] == 0
-        assert len(d["pick"]) == 1 and all(n >= 2 for n in d["botones"])
-    assert o["soc"]["nombres"] == ["Necaxa", "Tijuana"] and o["soc"]["botones"] == [3, 2, 2, 3] and o["soc"]["bloques"][0] == "RESULTADO FINAL" and "DOBLE OPORTUNIDAD" in o["soc"]["bloques"]
+        assert d["keys"][0] == "pred" and d["accs"] == 0 and d["bordes"] == 0 and all(t == ["uppercase", True] for t in d["heads"])
+    for k in ("soc", "nfl"):
+        ks = [x for x in o[k]["keys"] if x in ORDER]
+        assert ks == sorted(ks, key=ORDER.index) and o["orden_ok"][k] is True
+    assert o["soc"]["nombres"] == ["Necaxa", "Tijuana"] and o["soc"]["bloques"][0] == "RESULTADO FINAL" and "DOBLE OPORTUNIDAD" in o["soc"]["bloques"]
     assert o["nfl"]["nombres"] == ["Chicago Bears", "Seattle Seahawks"] and o["nfl"]["bloques"] == ["GANADOR", "TOTAL DE PUNTOS", "HÁNDICAP (SPREAD)"]   # NFL: visitante primero
-    assert o["soc"]["h"] < 2000 and o["nfl"]["h"] < 2000
-    # en vivo: marcador al centro, "En vivo" abierto, el acordeón abierto por el usuario y el scroll sobreviven al refresco
-    assert o["en_vivo_abierto"][0].startswith("📡 En vivo") and len(o["en_vivo_abierto"]) == 1 and o["marcador"] == "1 – 0"
-    assert o["refrescos"] >= 2 and o["abierto_tras_refresco"] == [False, True, False, False, False, False] and o["scroll"] == 150 and o["errores"] == []
+    assert o["tenis"]["nombres"] == ["Carlos Alcaraz", "Jannik Sinner"] and o["tenis_home_primero"][0] == "Carlos Alcaraz"                               # tenis: local primero
+    # ⓘ, plegado y la lista de predicción (fútbol: ganador, marcador, total, córners, hándicap con su resumen compacto)
+    assert (o["info_oculta"], o["info_abierta"], o["plegada"], o["pred_rows"]) == (True, True, True, 4)
+    assert o["pred_soc"] == ["GANADOR", "MARCADOR EXACTO", "TOTAL DE GOLES", "CÓRNERS", "HÁNDICAP"] and len(o["pred_resumen"]) == 5 and o["pred_resumen"][2] == "Menos de 2.5 goles" and "córners" in o["pred_resumen"][3]
+    # en vivo: cancha arriba y el estado (ⓘ, plegado, scroll) sobreviven al refresco
+    assert o["marcador"] == "2–1" and o["cancha_arriba"] <= 3 and o["refrescos"] >= 2 and o["estado_tras_refresco"] == [True, True] and o["scroll"] == 150 and o["errores"] == []
