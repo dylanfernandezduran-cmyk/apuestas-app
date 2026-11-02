@@ -17,18 +17,23 @@ def test_rest_days_and_back_to_back():
 
 def test_brand_manifest_and_index(monkeypatch):
     from server import main
+    import os
+    monkeypatch.delenv("BRAND", raising=False)
+    cfg = json.load(open(os.path.join(os.path.dirname(__file__), "..", "static", "brand", "brand.json"), encoding="utf-8"))
+    act = cfg["active"]; o = cfg["options"][act]
     c = TestClient(main.app)
     b = c.get("/api/brand").json()
-    assert b["id"] == "ventaja" and set(b["options"]) == {"ventaja", "pizarra", "vigia", "avizor", "atalaya", "zahori", "lince", "nrnm", "nrnm_degradado", "nrnm_azul", "nrnm_oro", "nrnm_v2_1", "nrnm_v2_2", "nrnm_v2_3", "nrnm_v2_4", "nrnm_v2_5", "tri_bola", "tri_rayos", "tri_avizor", "tri_badge"}
+    assert b["id"] == act and {"ventaja", "pizarra", "vigia", "nrnm_final"} <= set(b["options"])
     m = c.get("/manifest.webmanifest").json()
-    assert m["display"] == "standalone" and m["short_name"] == "Ventaja" and any(i["purpose"] == "maskable" for i in m["icons"])
+    assert m["display"] == "standalone" and m["short_name"] == o.get("short", o["name"]) and any(i["purpose"] == "maskable" for i in m["icons"])
     html = c.get("/").text
-    assert "Ventaja" in html and "__NAME__" not in html and "__GLYPH__" not in html and "apple-touch-icon" in html and "apple-mobile-web-app-capable" in html
+    assert o["name"] in html and "__NAME__" not in html and "__SHORT__" not in html and "__THEME__" not in html and "__GLYPH__" not in html and "apple-touch-icon" in html and "apple-mobile-web-app-capable" in html
     sw = c.get("/sw.js"); assert sw.status_code == 200 and sw.headers["service-worker-allowed"] == "/"
     monkeypatch.setenv("BRAND", "pizarra")
     assert c.get("/api/brand").json()["name"] == "Pizarra" and c.get("/manifest.webmanifest").json()["short_name"] == "Pizarra"
+    assert "--acc" not in c.get("/").text.split('id="brand-theme">')[1].split("</style>")[0]      # otras marcas: sin paleta, colores por defecto
     monkeypatch.setenv("BRAND", "no-existe")
-    assert c.get("/api/brand").json()["id"] == "ventaja"
+    assert c.get("/api/brand").json()["id"] == act
 
 def test_brand_assets_exist():
     import os

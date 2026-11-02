@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Genera los iconos PWA (192/512/maskable/apple-touch-icon 180/favicon) de la marca activa (static/brand/brand.json) con Chrome headless.
-Uso:  python3 scripts/make_icons.py [opcion] [--preview]     (si das la opción, también la deja como activa: ventaja | pizarra | vigia)
+Uso:  python3 scripts/make_icons.py [opcion] [--preview]     (si das la opción, también la deja como activa: nrnm_final | ventaja | pizarra | vigia | ... (ver brand.json))
 Requiere: playwright (python) + google-chrome. Cambiar de marca = editar brand.json (active) o pasar la opción aquí; no hay que tocar código."""
 import json, os, sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")

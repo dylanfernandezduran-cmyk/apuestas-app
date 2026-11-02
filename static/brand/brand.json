@@ -1,8 +1,8 @@
 {
- "active": "ventaja",
+ "active": "nrnm_final",
  "theme": {
   "bg": "#0b0e13",
-  "accent": "#34d399"
+  "accent": "#FF1179"
  },
  "options": {
   "ventaja": {
@@ -198,6 +198,86 @@
    },
    "label": "5 · Degradado rosa→azul + teal",
    "desc": "Triángulo, ojo y barra con degradado rosa→azul; iris teal.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_final": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Final · pupila",
+   "desc": "Triángulo completo + ojo, todo rosa; pupila oscura con brillo.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_final_futbol": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Fútbol",
+   "desc": "Iris/pupila = balón de fútbol (pentágono central).",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_final_basket": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Básquetbol",
+   "desc": "Iris/pupila = balón de básquetbol (cruz y arcos).",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_final_beisbol": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Béisbol",
+   "desc": "Iris/pupila = pelota de béisbol (costuras con puntadas).",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_final_americano": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Fútbol americano",
+   "desc": "Iris/pupila = balón ovalado con cordones.",
    "icon_bg": "#171b21"
   }
  }
