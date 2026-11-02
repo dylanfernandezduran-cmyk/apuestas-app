@@ -1,348 +1,450 @@
 {
- "active": "nrnm_final_blanco_americano",
- "theme": {
-  "bg": "#0b0e13",
-  "accent": "#FF1179"
- },
- "options": {
-  "ventaja": {
-   "name": "Ventaja",
-   "tagline": "Tu ventaja en cada juego",
-   "desc": "«Ventaja» = edge: la diferencia entre el modelo y el mercado. Logo: una V cuyo trazo derecho sube como flecha (verde). Se lee bien a 16 px."
+  "active": "nrnm_final_blanco_americano",
+  "theme": {
+    "bg": "#0b0e13",
+    "accent": "#FF1179"
   },
-  "pizarra": {
-   "name": "Pizarra",
-   "tagline": "Datos, jugada a jugada",
-   "desc": "La pizarra del entrenador: un círculo, una X y una jugada punteada en verde. Aire de análisis táctico, cero casino."
-  },
-  "vigia": {
-   "name": "Vigía",
-   "tagline": "Todo el deporte, en vigilancia",
-   "desc": "Vigilancia en tiempo real (en vivo, lesiones, alineaciones). Logo: señal tipo radar con un punto verde de «live»."
-  },
-  "avizor": {
-   "name": "Avizor",
-   "tagline": "Ojo avizor en cada jugada",
-   "desc": "«Ojo avizor»: vigilante y atento. El ojo que todo lo ve, con la iris convertida en pelota (costuras de béisbol/tenis) en verde."
-  },
-  "atalaya": {
-   "name": "Atalaya",
-   "tagline": "Todo el juego, a la vista",
-   "desc": "La atalaya es la torre desde donde se vigila todo. Ojo dentro de un triángulo que descansa sobre la línea de cancha."
-  },
-  "zahori": {
-   "name": "Zahorí",
-   "tagline": "Ve lo que otros no ven",
-   "desc": "El zahorí detecta lo oculto. Un ojo visto como estadio desde arriba: la iris es la cancha con su línea media y círculo central."
-  },
-  "lince": {
-   "name": "Lince",
-   "tagline": "Vista de lince en cada juego",
-   "desc": "«Vista de lince» = ver hasta el último detalle. La pupila es una diana con retícula: precisión sobre el partido."
-  },
-  "nrnm": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Rosa neón (recomendada)",
-   "desc": "Triángulo rosa, ojo blanco, pupila-pelota teal y línea de cancha rosa. Paleta: rosa = marca/CTA, teal = ganado/positivo, azul = en vivo/info, naranja-rojo = pérdida."
-  },
-  "nrnm_oro": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "label": "Recomendada en dorado",
-   "desc": "Misma variante A con acento dorado (#e2b44f) en lugar de verde, más cerca del negro/dorado de la referencia. El resto de la app usa verde."
-  },
-  "tri_bola": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "label": "A · Ojo con pelota",
-   "desc": "Triángulo + ojo; pupila = pelota con costuras; la base se alarga como línea de cancha."
-  },
-  "tri_rayos": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "label": "B · Rayos y momios",
-   "desc": "Triángulo + ojo, pocos rayos finos y un + / − (momios) a los lados. Los rayos desaparecen a 16 px, el resto se lee."
-  },
-  "tri_avizor": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "label": "C · Ojo Avizor-base",
-   "desc": "El ojo Avizor (iris = pelota) es la base de la pirámide: sus esquinas son las esquinas del triángulo."
-  },
-  "tri_badge": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "label": "D · Insignia monolínea",
-   "desc": "Aro + triángulo + ojo mínimo, un solo grosor; base (línea de cancha) y pupila en verde."
-  },
-  "nrnm_degradado": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Degradado rosa→azul",
-   "desc": "Triángulo con degradado sutil rosa→azul, pupila-pelota rosa."
-  },
-  "nrnm_azul": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Azul + teal",
-   "desc": "Triángulo azul, base y pelota teal: la versión más fría."
-  },
-  "nrnm_v2_1": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "1 · Todo rosa",
-   "desc": "Triángulo, ojo y barra rosa; iris rosa con pupila oscura y brillo.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_v2_2": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "2 · Rosa + iris teal",
-   "desc": "Triángulo rosa, iris teal #06AAC4.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_v2_3": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "3 · Rosa + iris azul",
-   "desc": "Triángulo rosa, iris azul Porsche #3C85F7.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_v2_4": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "4 · Rosa metálico + teal",
-   "desc": "Brillo metálico: degradado rosa claro → rosa → rosa profundo; iris teal.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_v2_5": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "5 · Degradado rosa→azul + teal",
-   "desc": "Triángulo, ojo y barra con degradado rosa→azul; iris teal.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Final · pupila",
-   "desc": "Triángulo completo + ojo, todo rosa; pupila oscura con brillo.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_futbol": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Fútbol",
-   "desc": "Iris/pupila = balón de fútbol (pentágono central).",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_basket": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Básquetbol",
-   "desc": "Iris/pupila = balón de básquetbol (cruz y arcos).",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_beisbol": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Béisbol",
-   "desc": "Iris/pupila = pelota de béisbol (costuras con puntadas).",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_americano": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Fútbol americano",
-   "desc": "Iris/pupila = balón ovalado con cordones.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_americano_blanco": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Americano blanco",
-   "desc": "Triángulo y ojo rosas; el balón ovalado es blanco con cordones oscuros.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_americano_contorno": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Americano contorno blanco",
-   "desc": "Triángulo y ojo rosas; balón solo con contorno y cordones blancos, interior oscuro.",
-   "icon_bg": "#171b21"
-  },
-  "nrnm_final_blanco": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Blanco · pupila",
-   "desc": "Todo blanco sobre negro puro #000: triángulo completo, ojo y pupila.",
-   "icon_bg": "#000000"
-  },
-  "nrnm_final_blanco_americano": {
-   "name": "No Risk No Money",
-   "short": "NRNM",
-   "tagline": "Riesgo medido, picks con datos",
-   "palette": {
-    "acc": "#FF1179",
-    "grn": "#06AAC4",
-    "red": "#FF1179",
-    "amb": "#fbbf24",
-    "blu": "#3C85F7",
-    "live": "#3C85F7"
-   },
-   "label": "Blanco · balón americano",
-   "desc": "Todo blanco sobre negro puro #000; el iris es un balón americano con cordones en negativo (negros).",
-   "icon_bg": "#000000"
+  "options": {
+    "ventaja": {
+      "name": "Ventaja",
+      "tagline": "Tu ventaja en cada juego",
+      "desc": "«Ventaja» = edge: la diferencia entre el modelo y el mercado. Logo: una V cuyo trazo derecho sube como flecha (verde). Se lee bien a 16 px."
+    },
+    "pizarra": {
+      "name": "Pizarra",
+      "tagline": "Datos, jugada a jugada",
+      "desc": "La pizarra del entrenador: un círculo, una X y una jugada punteada en verde. Aire de análisis táctico, cero casino."
+    },
+    "vigia": {
+      "name": "Vigía",
+      "tagline": "Todo el deporte, en vigilancia",
+      "desc": "Vigilancia en tiempo real (en vivo, lesiones, alineaciones). Logo: señal tipo radar con un punto verde de «live»."
+    },
+    "avizor": {
+      "name": "Avizor",
+      "tagline": "Ojo avizor en cada jugada",
+      "desc": "«Ojo avizor»: vigilante y atento. El ojo que todo lo ve, con la iris convertida en pelota (costuras de béisbol/tenis) en verde."
+    },
+    "atalaya": {
+      "name": "Atalaya",
+      "tagline": "Todo el juego, a la vista",
+      "desc": "La atalaya es la torre desde donde se vigila todo. Ojo dentro de un triángulo que descansa sobre la línea de cancha."
+    },
+    "zahori": {
+      "name": "Zahorí",
+      "tagline": "Ve lo que otros no ven",
+      "desc": "El zahorí detecta lo oculto. Un ojo visto como estadio desde arriba: la iris es la cancha con su línea media y círculo central."
+    },
+    "lince": {
+      "name": "Lince",
+      "tagline": "Vista de lince en cada juego",
+      "desc": "«Vista de lince» = ver hasta el último detalle. La pupila es una diana con retícula: precisión sobre el partido."
+    },
+    "nrnm": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Rosa neón (recomendada)",
+      "desc": "Triángulo rosa, ojo blanco, pupila-pelota teal y línea de cancha rosa. Paleta: rosa = marca/CTA, teal = ganado/positivo, azul = en vivo/info, naranja-rojo = pérdida."
+    },
+    "nrnm_oro": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "label": "Recomendada en dorado",
+      "desc": "Misma variante A con acento dorado (#e2b44f) en lugar de verde, más cerca del negro/dorado de la referencia. El resto de la app usa verde."
+    },
+    "tri_bola": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "label": "A · Ojo con pelota",
+      "desc": "Triángulo + ojo; pupila = pelota con costuras; la base se alarga como línea de cancha."
+    },
+    "tri_rayos": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "label": "B · Rayos y momios",
+      "desc": "Triángulo + ojo, pocos rayos finos y un + / − (momios) a los lados. Los rayos desaparecen a 16 px, el resto se lee."
+    },
+    "tri_avizor": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "label": "C · Ojo Avizor-base",
+      "desc": "El ojo Avizor (iris = pelota) es la base de la pirámide: sus esquinas son las esquinas del triángulo."
+    },
+    "tri_badge": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "label": "D · Insignia monolínea",
+      "desc": "Aro + triángulo + ojo mínimo, un solo grosor; base (línea de cancha) y pupila en verde."
+    },
+    "nrnm_degradado": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Degradado rosa→azul",
+      "desc": "Triángulo con degradado sutil rosa→azul, pupila-pelota rosa."
+    },
+    "nrnm_azul": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Azul + teal",
+      "desc": "Triángulo azul, base y pelota teal: la versión más fría."
+    },
+    "nrnm_v2_1": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "1 · Todo rosa",
+      "desc": "Triángulo, ojo y barra rosa; iris rosa con pupila oscura y brillo.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_v2_2": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "2 · Rosa + iris teal",
+      "desc": "Triángulo rosa, iris teal #06AAC4.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_v2_3": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "3 · Rosa + iris azul",
+      "desc": "Triángulo rosa, iris azul Porsche #3C85F7.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_v2_4": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "4 · Rosa metálico + teal",
+      "desc": "Brillo metálico: degradado rosa claro → rosa → rosa profundo; iris teal.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_v2_5": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "5 · Degradado rosa→azul + teal",
+      "desc": "Triángulo, ojo y barra con degradado rosa→azul; iris teal.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Final · pupila",
+      "desc": "Triángulo completo + ojo, todo rosa; pupila oscura con brillo.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_futbol": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Fútbol",
+      "desc": "Iris/pupila = balón de fútbol (pentágono central).",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_basket": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Básquetbol",
+      "desc": "Iris/pupila = balón de básquetbol (cruz y arcos).",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_beisbol": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Béisbol",
+      "desc": "Iris/pupila = pelota de béisbol (costuras con puntadas).",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_americano": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Fútbol americano",
+      "desc": "Iris/pupila = balón ovalado con cordones.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_americano_blanco": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Americano blanco",
+      "desc": "Triángulo y ojo rosas; el balón ovalado es blanco con cordones oscuros.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_americano_contorno": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Americano contorno blanco",
+      "desc": "Triángulo y ojo rosas; balón solo con contorno y cordones blancos, interior oscuro.",
+      "icon_bg": "#171b21"
+    },
+    "nrnm_final_blanco": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Blanco · pupila",
+      "desc": "Todo blanco sobre negro puro #000: triángulo completo, ojo y pupila.",
+      "icon_bg": "#000000"
+    },
+    "nrnm_final_blanco_americano": {
+      "name": "No Risk No Money",
+      "short": "NRNM",
+      "tagline": "Riesgo medido, picks con datos",
+      "palette": {
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
+        "amb": "#fbbf24",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
+        "bg": "#000000",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
+        "ink": "#000000"
+      },
+      "label": "Blanco · balón americano",
+      "desc": "Todo blanco sobre negro puro #000; el iris es un balón americano con cordones en negativo (negros).",
+      "icon_bg": "#000000"
+    }
   }
- }
 }

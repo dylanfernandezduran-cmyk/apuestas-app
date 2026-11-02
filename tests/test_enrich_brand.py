@@ -40,3 +40,12 @@ def test_brand_assets_exist():
     root = os.path.join(os.path.dirname(__file__), "..", "static", "brand")
     for k in json.load(open(os.path.join(root, "brand.json")))["options"]: assert os.path.exists(os.path.join(root, k, "glyph.svg"))
     for f in ("icon-192.png", "icon-512.png", "maskable-512.png", "apple-touch-icon.png", "favicon-32.png"): assert os.path.exists(os.path.join(root, "icons", f))
+
+def test_nrnm_fondo_negro(monkeypatch):
+    monkeypatch.setenv("BRAND", "nrnm_final_blanco_americano")
+    from server import main
+    c = TestClient(main.app)
+    m = c.get("/manifest.webmanifest").json()
+    assert m["background_color"] == "#000000" and m["theme_color"] == "#000000"
+    html = c.get("/").text
+    assert 'name="theme-color" content="#000000"' in html and "--bg:#000000" in html and "--panel:#0d0d0d" in html
