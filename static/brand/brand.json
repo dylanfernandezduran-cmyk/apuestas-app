@@ -1,0 +1,24 @@
+{
+ "active": "ventaja",
+ "theme": {
+  "bg": "#0b0e13",
+  "accent": "#34d399"
+ },
+ "options": {
+  "ventaja": {
+   "name": "Ventaja",
+   "tagline": "Tu ventaja en cada juego",
+   "desc": "«Ventaja» = edge: la diferencia entre el modelo y el mercado. Logo: una V cuyo trazo derecho sube como flecha (verde). Se lee bien a 16 px."
+  },
+  "pizarra": {
+   "name": "Pizarra",
+   "tagline": "Datos, jugada a jugada",
+   "desc": "La pizarra del entrenador: un círculo, una X y una jugada punteada en verde. Aire de análisis táctico, cero casino."
+  },
+  "vigia": {
+   "name": "Vigía",
+   "tagline": "Todo el deporte, en vigilancia",
+   "desc": "Vigilancia en tiempo real (en vivo, lesiones, alineaciones). Logo: señal tipo radar con un punto verde de «live»."
+  }
+ }
+}

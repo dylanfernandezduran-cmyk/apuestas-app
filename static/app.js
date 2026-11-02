@@ -40,12 +40,14 @@ function setNav(n){ document.querySelectorAll('nav a').forEach(a=>{ const on=a.d
 
 // ------------------------------------------------------------ rutas
 async function route(){
+  Live.stop();
   const h = location.hash.replace(/^#\/?/,'').split('/').map(decodeURIComponent);
   window.scrollTo(0,0);
   try{
     if(!h[0]||h[0]==='') { setNav('home'); return viewHome(); }
-    if(h[0]==='deporte'){ setNav('home'); return viewSport(h[1], h[2]); }
-    if(h[0]==='juego'){ setNav('home'); return viewGame(h[1], h[2]); }
+    if(h[0]==='deportes'){ setNav('sports'); return viewSports(); }
+    if(h[0]==='deporte'){ setNav('sports'); return viewSport(h[1], h[2]); }
+    if(h[0]==='juego'){ setNav('sports'); return viewGame(h[1], h[2]); }
     if(h[0]==='picks'){ setNav('picks'); return viewPicks(h[1]||'24h'); }
     if(h[0]==='record'){ setNav('record'); return viewRecord(); }
     if(h[0]==='info'){ setNav('info'); return viewInfo(); }
@@ -55,19 +57,19 @@ async function route(){
 window.addEventListener('hashchange', route); route();
 
 // ------------------------------------------------------------ home
-async function viewHome(){
+async function viewSports(){
   SPORTS = SPORTS || await api('/api/sports');
   $app.innerHTML = `<h1>Elige un deporte</h1>
   <div class="grid g3">${SPORTS.map(s=>`<a class="card sport" href="#/deporte/${s.key}"><span class="em">${s.emoji}</span>${esc(s.name)}<span class="sub">${s.leagues.map(l=>esc(l.name)).join(' · ')}</span></a>`).join('')}</div>
   <div style="height:14px"></div>
   <a class="card sport" href="#/picks" style="border-color:#1b6b4a"><span class="em">🔥</span>Top picks del día (todos los deportes)<span class="sub">Ranking de los mejores spots según el modelo vs. el mercado</span></a>
-  <div class="note">Datos reales de ESPN y MLB StatsAPI (sin llaves). Si algo no está disponible se muestra <b>${SD}</b>. Todas las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
+  <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo (sin llaves). Si algo no está disponible se muestra <b>${SD}</b>. Todas las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
 }
 
 // ------------------------------------------------------------ deporte
 async function viewSport(sport, league){
   SPORTS = SPORTS || await api('/api/sports');
-  const sp = SPORTS.find(s=>s.key===sport); if(!sp) return viewHome();
+  const sp = SPORTS.find(s=>s.key===sport); if(!sp) return viewSports();
   league = league || sp.leagues[0].key;
   loading(`Cargando juegos de ${sp.name}…`);
   const d = await api('/api/games?league='+encodeURIComponent(league));
@@ -80,8 +82,35 @@ async function viewSport(sport, league){
     d.games.forEach(g=>{ const k=dayKey(g.date); (groups[k]=groups[k]||[]).push(g); });
     body = Object.keys(groups).sort().map(k=>`<div class="day">${esc(dayLabel(groups[k][0].date))}</div><div class="glist">${groups[k].map(gameCard).join('')}</div>`).join('');
   }
-  $app.innerHTML = `<a class="back" href="#/">← Deportes</a><h1>${sp.emoji} ${esc(sp.name)}${sp.leagues.length>1?'':''}</h1>${pills}${body}`;
+  const anyLive = d.games.some(g=>g.state==='in');
+  $app.innerHTML = `<a class="back" href="#/deportes">← Deportes</a><h1>${sp.emoji} ${esc(sp.name)}</h1>${pills}<div class="updline">${updTag(d.now,anyLive)}</div>${body}`;
   if(d.ok&&d.games.some(g=>g.state==='pre')) fillBriefs(league);
+  fillWx(league);
+  Live.start(()=>tickSport(league), 25000);
+}
+// ---- auto-actualización de la lista: sólo repinta tarjetas que están en vivo / cambiaron de estado (conserva lo desplegado)
+async function tickSport(league){
+  const cards=[...document.querySelectorAll('[data-gid]')]; if(!cards.length) return;
+  const soon=cards.some(c=>c.dataset.state==='pre'&&c.dataset.ts&&(+c.dataset.ts-Date.now())<10*60e3);
+  if(!cards.some(c=>c.dataset.state==='in')&&!soon) return;
+  let d; try{ d=await api('/api/games?league='+encodeURIComponent(league)); }catch(e){ return; }
+  d.games.forEach(g=>{
+    const el=document.querySelector(`[data-gid="${CSS.escape(g.id)}"]`); if(!el) return;
+    if(g.state==='pre'&&el.dataset.state==='pre'){ GAMES[g.id]=Object.assign(GAMES[g.id]||{},{inj:g.inj}); return; }
+    if(g.state==='post'&&el.dataset.state==='post') return;
+    const open=[...el.querySelectorAll('.gp.open')].length>0;
+    const tmp=document.createElement('div'); tmp.innerHTML=gameCard(g); const nu=tmp.firstElementChild;
+    if(open) nu.querySelectorAll('.gp').forEach(x=>x.classList.add('open'));
+    const wx=el.querySelector('.wxc'); if(wx&&nu.querySelector('.wxc')) nu.querySelector('.wxc').innerHTML=wx.innerHTML;
+    el.replaceWith(nu);
+  });
+  const u=document.getElementById('upd'); if(u) u.outerHTML=updTag(d.now,d.games.some(g=>g.state==='in'));
+}
+async function fillWx(league){
+  try{
+    const r=await api('/api/league_wx?league='+encodeURIComponent(league));
+    document.querySelectorAll('.wxc[data-id]').forEach(el=>{ el.innerHTML=wxChip(r.items[el.dataset.id]); });
+  }catch(e){}
 }
 function stBadge(g){ return g.state==='in'?`<span class="badge b-live">● EN VIVO</span>`:g.state==='post'?`<span class="badge b-fin">FINAL</span>`:`<span class="badge b-pre">PROGRAMADO</span>`; }
 // ---- helpers de la vista compacta
@@ -116,8 +145,9 @@ function briefBlock(g,items){
 function recBlock(g){
   const r=g.rec||[]; if(!r.length) return '';
   const m=r.find(x=>x.type==='main'), rest=r.filter(x=>x!==m);
-  const row=x=>`<div class="sgr"><span class="mk">${esc(MKL[x.market]||String(x.market).slice(0,3).toUpperCase())}</span><span class="lb">${esc(shortLbl(x.label,g))}</span>${gradeBadge(x,false)}</div>`;
-  return `<div class="gp">${m?`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(m.label,g))}</span>${gradeBadge(m,false)}</div>`:''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;
+  const gb=x=>x.status==='PENDIENTE'&&g.state==='in' ? (provBadge(g.prov,x.market,x.selection)||gradeBadge(x,false)) : gradeBadge(x,false);
+  const row=x=>`<div class="sgr"><span class="mk">${esc(MKL[x.market]||String(x.market).slice(0,3).toUpperCase())}</span><span class="lb">${esc(shortLbl(x.label,g))}</span>${gb(x)}</div>`;
+  return `<div class="gp">${m?`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(m.label,g))}</span>${gb(m)}</div>`:''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;
 }
 function marketRow(g){
   const o=g.odds; if(!o) return g.state==='pre'?`<div class="sub" style="margin-top:8px">Cuotas: ${SD}</div>`:'';
@@ -131,39 +161,55 @@ function gameCard(g){
   GAMES[g.id]=g;
   const sc = g.state!=='pre', o=g.odds;
   const team=(t,side)=>{ const ml=o&&o.ml?o.ml[side]:null;
-    return `<div class="tm">${t.logo?`<img src="${esc(t.logo)}" loading="lazy" alt="">`:'<span style="width:22px;flex:none"></span>'}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(t.score??'')}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
+    return `<div class="tm">${t.logo?`<img src="${esc(t.logo)}" loading="lazy" alt="">`:'<span style="width:22px;flex:none"></span>'}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(g.sport==='tenis'?(t.sets||[]).join(' '):(t.score??''))}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
   const where=[g.note||g.league_name, g.venue].filter(Boolean).map(esc).join(' · ');
-  return `<a class="card game" href="#/juego/${encodeURIComponent(g.league)}/${g.id}">
-    <div class="gh"><span class="time mono">${fmtTime(g.date)}</span><span class="gl">${where}</span>${sc?stBadge(g):''}</div>
+  const live=g.state==='in', chips=[injChip(g), `<span class="wxc" data-id="${esc(g.id)}"></span>`].filter(Boolean).join('');
+  const tennisWd = g.wd ? `<div class="sub" style="margin-top:6px">⚠️ ${esc(g.wd)}</div>` : '';
+  return `<a class="card game ${live?'is-live':''}" href="#/juego/${encodeURIComponent(g.league)}/${g.id}" data-gid="${esc(g.id)}" data-state="${g.state}" data-ts="${new Date(g.date).getTime()}">
+    <div class="gh">${live?`<span class="time mono lv-clock">${esc((g.live&&g.live.text)||g.status||'')}</span>`:`<span class="time mono">${fmtTime(g.date)}</span>`}<span class="gl">${where}</span>${sc?stBadge(g):''}</div>
     ${team(g.away,'away')}${team(g.home,'home')}
+    ${liveLine(g)}${tennisWd}
     ${marketRow(g)}
+    ${chips?`<div class="cchips">${chips}</div>`:''}
     ${g.state==='pre'?`<div class="gp" data-id="${esc(g.id)}"><span class="sub">⏳ Probabilidades…</span></div>`:recBlock(g)}</a>`;
 }
 
 // ------------------------------------------------------------ juego
-async function viewGame(league, id){
-  loading('Analizando partido con datos reales…');
+async function viewGame(league, id, silent){
+  if(!silent) loading('Analizando partido con datos reales…');
   const d = await api(`/api/game/${encodeURIComponent(league)}/${id}`);
   const g = d.game;
   const back = `<a class="back" href="#/deporte/${g.sport}/${encodeURIComponent(league)}">← ${esc(g.league_name)}</a>`;
-  const hero = `<div class="card"><div class="sub" style="text-align:center">${esc(g.league_name)} · ${esc(fmtDay(g.date))} · <b>${fmtTime(g.date)}</b> CDMX ${stBadge(g)}${g.neutral&&d.kind!=='tennis'?' · cancha neutral':''}</div>
+  const live = g.state==='in';
+  const stTxt = g.state!=='pre' && d.live && d.live.text ? ` · <b class="${live?'lv-clock':''}">${esc(d.live.text)}</b>` : '';
+  const hero = `<div class="card"><div class="sub" style="text-align:center">${esc(g.league_name)} · ${esc(fmtDay(g.date))} · <b>${fmtTime(g.date)}</b> CDMX ${stBadge(g)}${stTxt}${g.neutral&&d.kind!=='tennis'?' · cancha neutral':''}</div>
     <div class="hero" style="margin-top:10px">
-      <div>${g.away.logo?`<img src="${esc(g.away.logo)}" alt="">`:''}<div class="n">${esc(g.away.name)}</div><div class="sub">${esc(g.away.record||'')}${d.kind==='tennis'&&g.away.rank?` · #${g.away.rank} ranking · ${g.away.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(g.away.score??'')}</div>`:''}</div>
+      <div>${g.away.logo?`<img src="${esc(g.away.logo)}" alt="">`:''}<div class="n">${esc(g.away.name)}</div><div class="sub">${esc(g.away.record||'')}${d.kind==='tennis'&&g.away.rank?` · #${g.away.rank} ranking · ${g.away.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(d.kind==='tennis'?(g.away.sets||[]).join(' '):(g.away.score??''))}</div>`:''}</div>
       <div class="vs">${d.kind==='tennis'?'VS':'@'}</div>
-      <div>${g.home.logo?`<img src="${esc(g.home.logo)}" alt="">`:''}<div class="n">${esc(g.home.name)}</div><div class="sub">${esc(g.home.record||'')}${d.kind==='tennis'&&g.home.rank?` · #${g.home.rank} ranking · ${g.home.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(g.home.score??'')}</div>`:''}</div>
+      <div>${g.home.logo?`<img src="${esc(g.home.logo)}" alt="">`:''}<div class="n">${esc(g.home.name)}</div><div class="sub">${esc(g.home.record||'')}${d.kind==='tennis'&&g.home.rank?` · #${g.home.rank} ranking · ${g.home.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(d.kind==='tennis'?(g.home.sets||[]).join(' '):(g.home.score??''))}</div>`:''}</div>
     </div>
-    <div class="sub" style="text-align:center;margin-top:8px">${esc(g.venue||'')}${g.court?' · '+esc(g.court):''}${g.note?' · '+esc(g.note):''}${g.weather?` · 🌡️ ${g.weather.temp_f}°F`:''}</div></div>`;
-  REC_MAP = {}; (d.record||[]).forEach(r=>{ REC_MAP[r.market+'.'+r.selection]=r; });
+    <div class="sub" style="text-align:center;margin-top:8px">${esc(g.venue||'')}${g.court?' · '+esc(g.court):''}${g.note?' · '+esc(g.note):''}${g.weather&&!d.weather?` · 🌡️ ${g.weather.temp_f}°F`:''}</div>
+    ${g.wd?`<div class="sub" style="text-align:center;margin-top:4px">⚠️ ${esc(g.wd)}</div>`:''}
+    ${restTags(d)?`<div style="text-align:center;margin-top:8px">${restTags(d)}</div>`:''}
+    <div style="text-align:center;margin-top:8px">${updTag(d.updated,live)}</div></div>`;
+  REC_MAP = {}; (d.record||[]).forEach(r=>{ REC_MAP[r.market+'.'+r.selection]=r; }); PROV = d.prov||{};
   let html = back + hero;
-  html += recordCard(d) + picksSection(d) + probSection(d);
+  html += liveSection(d) + recordCard(d) + picksSection(d) + probSection(d);
   html += marketSection(d) + splitsSection(d) + rlmSection(d) + movementSection(d);
   if(d.odds && d.odds.src==='espn') html += oddsSection(d);
   if(d.kind==='tennis') html += tennisSections(d); else html += teamSections(d);
   if(d.gaps && d.gaps.length) html += `<div class="note gap"><b>🕳️ Datos no disponibles (${SD}):</b><ul class="t">${d.gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
   html += `<div class="note">⚖️ <b>Estimación del modelo, no certeza.</b> Sin promesas de rentabilidad. Revisa lesiones/alineaciones de último minuto antes de apostar.</div>`;
+  // conserva scroll y tarjetas plegadas/abiertas al refrescar en vivo
+  const st = silent ? {y:window.scrollY, open:[...document.querySelectorAll('#app > .fold')].map(c=>[c.querySelector(':scope > h2').textContent.trim().slice(0,24), !c.classList.contains('closed')]), tg:[...document.querySelectorAll('#app .gp.open, #app .open')].length} : null;
   $app.innerHTML = html;
   mvDraw(); foldCards();
+  if(st){ const m=new Map(st.open); document.querySelectorAll('#app > .fold').forEach(c=>{ const k=c.querySelector(':scope > h2').textContent.trim().slice(0,24); if(m.has(k)) c.classList.toggle('closed',!m.get(k)); }); window.scrollTo(0,st.y); }
+  Live.start(async()=>{ if(!location.hash.startsWith('#/juego/')) return; try{ await viewGame(league,id,true); }catch(e){} }, 25000);
+  if(!live) Live.stop();
+  return d;
 }
+let PROV = {};
 
 function candRow(c){
   const e = c.edge;
@@ -249,6 +295,7 @@ function teamSections(d){
    ${row(`… últimos 5`,pfpa(ta.last5),pfpa(th.last5))}
    ${m&&m.rating_home!=null?row('Rating del modelo (SRS ajustado, '+unit.toLowerCase()+')',sg(m.rating_away,2),sg(m.rating_home,2)):''}
    ${m&&m.lam_home!=null?row('Goles esperados (Poisson)',num(m.lam_away,2),num(m.lam_home,2)):''}
+   ${restRows(d)}
    </tbody></table></div>
    <div class="two" style="margin-top:10px"><div><div class="sub">Forma ${esc(A.abbr||A.name)} (más antiguo → reciente)</div>${formPills(ta.form)}</div><div><div class="sub">Forma ${esc(H.abbr||H.name)}</div>${formPills(th.form)}</div></div>
    <div class="sub">G = ganó · P = perdió · E = empate. Calculado con resultados finales de la temporada (n=${ta.n} / ${th.n} juegos).</div></div>`;
@@ -262,11 +309,8 @@ function teamSections(d){
   // últimos juegos
   const recent=(t,T)=>`<div><div class="sub"><b>${esc(T.name)}</b> · últimos juegos</div><div class="tbl"><table><tbody>${(t.recent||[]).slice(0,8).map(r=>`<tr><td>${fmtShort(r.date)} ${r.home?'vs':'@'} ${esc(r.opp)}</td><td class="mono ${r.res==='W'?'pos':r.res==='L'?'neg':'amb'}">${r.res==='W'?'G':r.res==='L'?'P':'E'} ${r.pf}-${r.pa}</td></tr>`).join('')||`<tr><td>${SD}</td></tr>`}</tbody></table></div></div>`;
   html += `<div class="card" style="margin-top:10px"><h2>🗓️ Resultados recientes</h2><div class="two">${recent(ta,A)}${recent(th,H)}</div></div>`;
-  // lesiones y jugadores clave
-  const injBlock=(T)=>{ const l=(d.injuries||{})[T.id]; if(l==null) return `<div class="mut">${esc(T.name)}: lesiones ${SD}</div>`;
-    if(!l.length) return `<div><b>${esc(T.name)}</b><div class="mut">Sin lesionados reportados por la fuente.</div></div>`;
-    return `<div><b>${esc(T.name)}</b>${l.slice(0,14).map(i=>`<div class="row"><span>${esc(i.name)} <span class="sub">${esc(i.pos||'')}</span><br><span class="sub">${esc(i.detail||'')}</span></span><span>${i.kind==='confirmado'?'<span class="badge b-ok">✅ '+esc(i.status)+'</span>':'<span class="badge b-prob">❓ '+esc(i.status)+'</span>'}</span></div>`).join('')}</div>`; };
-  html += `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones</h2><div class="two">${injBlock(A)}${injBlock(H)}</div><div class="sub" style="margin-top:6px">✅ confirmado = baja oficial (Out/IR) · ❓ por confirmar = dudoso / día a día / cuestionable. El modelo <b>no</b> ajusta por lesiones; sólo reduce la confianza si un líder del equipo está en la lista.${m&&m.key_injuries&&m.key_injuries.length?` <span class="amb">⚠️ Líder lesionado: ${esc(m.key_injuries.join(', '))}</span>`:''}</div></div>`;
+  // lesiones (detalle nuevo: extras.js), alineaciones y clima
+  html += lineupsSection(d) + injSection(d) + weatherSection(d);
   const leadBlock=(T)=>{ const l=(d.leaders||{})[T.id]; if(!l||!l.length) return `<div class="mut">${esc(T.name)}: ${SD}</div>`;
     return `<div><b>${esc(T.name)}</b>${l.map(x=>`<div class="row"><span class="sub">${esc(x.cat)}</span><span>${esc(x.name)} <span class="mono sub">${esc(x.value)}</span></span></div>`).join('')}</div>`; };
   html += `<div class="card" style="margin-top:10px"><h2>⭐ Jugadores clave (líderes del equipo)</h2><div class="two">${leadBlock(A)}${leadBlock(H)}</div></div>`;
@@ -286,12 +330,14 @@ function teamSections(d){
 }
 
 function tennisSections(d){
+  const extra=injSection(d);
   const g=d.game, A=g.away, H=g.home; // en tenis: home=jugador 1 (orden ESPN), away=jugador 2
   const P=[H,A]; const m=d.model;
   const fm=(p,list)=>`<div><b>${esc(p.name)}</b> <span class="sub">${p.rank?`#${p.rank} · ${p.points} pts`:'Ranking: '+SD}${p.country?` · ${esc(p.country)}`:''}</span><div class="form">${(list||[]).slice(0,10).map(r=>`<span class="f f-${r.res}">${r.res==='W'?'G':'P'}</span>`).join('')||SD}</div>
     <div class="tbl"><table><tbody>${(list||[]).slice(0,6).map(r=>`<tr><td>${fmtShort(r.date)} vs ${esc(r.opp)} <span class="sub">${esc(r.round||'')}</span></td><td class="mono ${r.res==='W'?'pos':'neg'}">${r.res==='W'?'G':'P'} ${esc(r.score)}</td></tr>`).join('')||`<tr><td>${SD}</td></tr>`}</tbody></table></div></div>`;
   return `<div class="card" style="margin-top:10px"><h2>🎾 Jugadores y forma reciente</h2><div class="two">${fm(H,d.form.home)}${fm(A,d.form.away)}</div>
    <div class="sub" style="margin-top:6px">Forma = partidos de singles terminados en los torneos en curso/recientes que publica ESPN (muestra limitada). Superficie, H2H y lesiones: ${SD}.</div></div>
+   ${extra}
    ${m?`<div class="card" style="margin-top:10px"><h2>🧠 Detalle del modelo</h2><div class="row"><span>Prob. de victoria (heurística de ranking)</span><span class="mono">${esc(H.short)} ${pct(m.p_home)} · ${esc(A.short)} ${pct(m.p_away)}</span></div><div class="sub">${esc(m.label)}. No hay cuotas gratuitas en ESPN para tenis, así que no hay edge: sólo línea justa y el precio máximo sugerido.</div></div>`:''}`;
 }
 
@@ -302,7 +348,7 @@ function recordCard(d){
   const items = rows.map(r=>`<div class="rrow"><div>${typeLbl(r.type)} <b>${esc(r.label)}</b>${r.basis==='mercado'?' <span class="sub" title="Sin probabilidad del modelo para este mercado: se eligió el lado con mayor probabilidad de mercado">(sólo mercado)</span>':''}
      <div class="sub mono">Cuota registrada ${oddsTxt(r)}${r.line!=null?' · línea '+(/spread$/.test(r.market)?sg(r.line):r.line):''}${r.p_model!=null?' · modelo '+pct(r.p_model,0):''}</div>
      ${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
-     <div class="rr">${gradeBadge(r,false)}${r.units!=null?`<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div>`:''}</div></div>`).join('');
+     <div class="rr">${r.status==='PENDIENTE'&&g.state==='in'?(provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)):gradeBadge(r,false)}${r.units!=null?`<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div>`:''}</div></div>`).join('');
   return `<div class="card hot" style="margin-top:10px"><h2>🧾 Picks registrados · ¿se ganaron? ${fin?'<span class="badge b-fin">FINAL</span>':g.state==='in'?'<span class="badge b-live">● EN VIVO</span>':'<span class="badge b-pre">PRE-JUEGO</span>'}</h2>
     ${fin?`<div class="mono" style="margin-bottom:8px">Marcador final: <b>${esc(fin.score_text)}</b></div>`:''}${items}
     <div class="sub" style="margin-top:8px">Línea y cuota = las primeras registradas (no se actualizan). Se califican solos con el marcador final de ESPN (cada ~10 min); mientras no haya final confirmado, quedan ⏳ Pendiente. Unidades a 1u plano.</div></div>`;
@@ -335,7 +381,7 @@ async function viewRecord(){
   if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
   else html+=`<div class="day">Últimos picks calificados</div><div class="rec-list">`+d.recent.map(r=>`<div class="rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
      <div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div><div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
-     <div class="rr">${gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
+     <div class="rr">${r.status==='PENDIENTE'&&g.state==='in'?(provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)):gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
   $app.innerHTML=html;
 }
 function setRecF(k,v){ RECF[k]=v; viewRecord(); }
@@ -579,7 +625,7 @@ function viewInfo(){
 // ------------------------------------------------------------ interacción (móvil): sugerencias y tarjetas plegables
 function foldCards(){
   if(!matchMedia('(max-width:640px)').matches) return;
-  const keep=/Picks registrados|Mejores picks|Probabilidades|Comparador|Movimientos de l/i;
+  const keep=/Picks registrados|Mejores picks|Probabilidades|Comparador|Movimientos de l|En vivo|Marcador y estad/i;
   document.querySelectorAll('#app > .card').forEach(c=>{
     const h=c.querySelector(':scope > h2'); if(!h) return;
     c.classList.add('fold'); if(!keep.test(h.textContent)) c.classList.add('closed');

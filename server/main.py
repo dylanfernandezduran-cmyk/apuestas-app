@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from . import data, ratings, market as MK, history, record as REC, grading
+from . import data, ratings, market as MK, history, record as REC, grading, enrich, injuries as INJ, weather as WX, live as LV
+from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
 
@@ -19,6 +20,8 @@ async def warm():
     asyncio.create_task(w())
     asyncio.create_task(snapshot_loop())
     asyncio.create_task(grade_loop())
+    asyncio.create_task(injuries_loop())
+    asyncio.create_task(lineups_loop())
 
 SNAP_MIN = float(os.environ.get("SNAP_MIN", "10"))   # minutos entre snapshots de líneas
 SNAP_STATE = {"last": None, "games": 0, "runs": 0, "err": None}
@@ -65,9 +68,49 @@ async def grade_loop():
         except Exception as ex: GRADE_STATE["err"] = str(ex)[:200]
         await asyncio.sleep(max(60, GRADE_MIN * 60))
 
+INJ_MIN = float(os.environ.get("INJ_MIN", "10"))
+INJ_STATE = {"last": None, "runs": 0, "err": None}
+
+async def injuries_loop():
+    """Sigue el reporte de lesiones de cada liga para detectar regresos (nuevo/mejora/sale del reporte) y los guarda en SQLite."""
+    await asyncio.sleep(30)
+    while True:
+        try:
+            for l, cfg in LEAGUES.items():
+                if cfg["family"] in ("tennis", "soccer"): continue
+                try: await INJ.league_injuries(l)
+                except Exception: pass
+            INJ_STATE.update(last=time.time(), runs=INJ_STATE["runs"] + 1, err=None)
+        except Exception as ex: INJ_STATE["err"] = str(ex)[:200]
+        await asyncio.sleep(max(120, INJ_MIN * 60))
+
+LU_STATE = {"last": None, "runs": 0, "games": 0, "err": None}
+
+async def lineups_loop():
+    """Cada 10 min guarda la foto de alineaciones de los juegos que empiezan en las próximas 4 h (para detectar cambios de último momento)."""
+    await asyncio.sleep(60)
+    while True:
+        try:
+            now = datetime.now(timezone.utc); n = 0
+            for l, cfg in LEAGUES.items():
+                if cfg["family"] in ("tennis", "football"): continue
+                try: gs, ok = await data.list_games(l, 0)
+                except Exception: continue
+                for g in gs:
+                    d = data.parse_dt(g["date"])
+                    if g["state"] in ("pre", "in") and d and now - timedelta(hours=1) <= d <= now + timedelta(hours=4):
+                        try: await enrich.lineup_snapshot(l, g); n += 1
+                        except Exception: pass
+            LU_STATE.update(last=time.time(), runs=LU_STATE["runs"] + 1, games=n, err=None)
+        except Exception as ex: LU_STATE["err"] = str(ex)[:200]
+        await asyncio.sleep(600)
+
 @app.get("/api/sports")
 async def sports():
     return [dict(s, leagues=[dict(key=k, name=LEAGUES[k]["name"]) for k in s["leagues"]]) for s in SPORTS]
+
+def _rec_short(r):
+    return dict(market=r["market"], selection=r["selection"], line=r.get("line"), type=r["type"], status=r["status"], label=r["label"])
 
 @app.get("/api/games")
 async def games(league: str, days: int | None = None):
@@ -75,9 +118,104 @@ async def games(league: str, days: int | None = None):
     gs, ok = await data.list_games(league, days)
     try:
         rr = REC.games_rows(league, [g["id"] for g in gs])
-        for g in gs: g["rec"] = [dict(market=r["market"], selection=r["selection"], type=r["type"], status=r["status"], label=r["label"]) for r in rr.get(g["id"], [])]
+        fam = LEAGUES[league]["family"]
+        for g in gs:
+            g["rec"] = [_rec_short(r) for r in rr.get(g["id"], [])]
+            if g["state"] == "in": g["prov"] = LV.provisional(g["rec"], g, fam)
     except Exception: pass
-    return dict(league=league, name=LEAGUES[league]["name"], ok=ok, games=gs, now=time.time())
+    inj_ok = None
+    try:
+        inj, inj_ok = await asyncio.wait_for(enrich.list_injury_counts(league, [g for g in gs if g["state"] != "post"]), 6)
+        for g in gs:
+            if g["id"] in inj: g["inj"] = inj[g["id"]]
+    except Exception: pass
+    return dict(league=league, name=LEAGUES[league]["name"], ok=ok, games=gs, now=time.time(), inj_supported=inj_ok)
+
+@app.get("/api/live")
+async def live(league: str | None = None):
+    """Juegos en vivo (marcador, reloj, situación) + calificación PROVISIONAL de nuestros picks. Ligero: se consulta cada ~25 s mientras haya juegos en vivo."""
+    leagues = [league] if league else list(LEAGUES.keys())
+    lists = await asyncio.gather(*[data.list_games(l) for l in leagues], return_exceptions=True)
+    out = []
+    for l, r in zip(leagues, lists):
+        if isinstance(r, Exception): continue
+        live_g = [g for g in r[0] if g["state"] == "in"]
+        if not live_g: continue
+        rr = REC.games_rows(l, [g["id"] for g in live_g])
+        for g in live_g:
+            g["rec"] = [_rec_short(x) for x in rr.get(g["id"], [])]
+            g["prov"] = LV.provisional(g["rec"], g, LEAGUES[l]["family"])
+            out.append(g)
+    return dict(games=out, n=len(out), now=time.time())
+
+_home_cache = {}
+
+@app.get("/api/home")
+async def home():
+    """Resumen del día: en vivo, mejores picks de hoy, récord, bajas confirmadas en juegos de hoy y acceso por deporte."""
+    ent = _home_cache.get("h")
+    if ent and time.time() - ent[0] < 20: return ent[1]
+    leagues = list(LEAGUES.keys())
+    lists = await asyncio.gather(*[data.list_games(l) for l in leagues], return_exceptions=True)
+    today = data.now_cdmx().strftime("%Y-%m-%d")
+    live_g, sports = [], {s["key"]: dict(key=s["key"], name=s["name"], emoji=s["emoji"], today=0, live=0) for s in SPORTS}
+    inj_targets = {}
+    for l, r in zip(leagues, lists):
+        if isinstance(r, Exception): continue
+        fam = LEAGUES[l]["family"]
+        for g in r[0]:
+            sp = sports[LEAGUES[l]["sport"]]
+            if g["state"] == "in":
+                sp["live"] += 1; sp["today"] += 1; live_g.append(g)
+            elif g["state"] == "pre" and (data.local_date_str(g["date"]) or "") == today:
+                sp["today"] += 1
+                if fam not in ("tennis", "soccer"): inj_targets.setdefault(l, []).append(g)
+    for g in live_g:
+        rr = REC.games_rows(g["league"], [g["id"]]).get(g["id"], [])
+        g["rec"] = [_rec_short(x) for x in rr]
+        g["prov"] = LV.provisional(g["rec"], g, LEAGUES[g["league"]]["family"])
+    # bajas confirmadas de equipos que juegan hoy (QB primero en NFL; sin inventar "clave")
+    inj = []
+    for l, gs in inj_targets.items():
+        try:
+            by, ts, ok = await INJ.league_injuries(l)
+        except Exception: continue
+        for g in gs[:12]:
+            for sd in ("away", "home"):
+                tm = by.get(str(g[sd]["id"])) or {}
+                outs = [e for e in tm.get("entries", []) if e["bucket"] == "out"]
+                outs.sort(key=lambda e: (e["pos"] != "QB", e["name"] or ""))
+                for e in outs[:1]:
+                    inj.append(dict(league=l, id=g["id"], team=g[sd]["short"], name=e["name"], pos=e["pos"], status=e["status_es"], detail=e["detail"], n_out=len([x for x in tm["entries"] if x["bucket"] == "out"])))
+    inj.sort(key=lambda e: (e["pos"] != "QB", -e["n_out"]))
+    res = dict(live=live_g, record=REC.summary(days=30), record_all=REC.summary(), injuries=inj[:6], sports=list(sports.values()), now=time.time())
+    _home_cache["h"] = (time.time(), res)
+    return res
+
+_wx_cache = {}
+
+@app.get("/api/league_wx")
+async def league_wx(league: str, hours: int = 96):
+    """Clima compacto (Open-Meteo) de los juegos próximos al aire libre de la liga: para las tarjetas de lista."""
+    if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")
+    fam = LEAGUES[league]["family"]
+    if fam not in WX.OUTDOOR_FAMILIES: return dict(league=league, items={}, now=time.time())
+    ent = _wx_cache.get(league)
+    if ent and time.time() - ent[0] < 600: return ent[1]
+    gs, ok = await data.list_games(league)
+    gs = [g for g in gs if g["state"] in ("pre", "in")][:30]
+    sem = asyncio.Semaphore(4)
+    async def one(g):
+        async with sem:
+            try:
+                w = await WX.game_weather(g, fam, data.parse_dt(g["date"]))
+            except Exception:
+                return g["id"], None
+        keep = ("status", "roof", "temp_c", "wind_kmh", "wind_from", "precip_prob", "icon", "text")
+        return g["id"], dict({k: w.get(k) for k in keep}, notes=len(w.get("notes") or []), warn=bool(w.get("notes")))
+    res = dict(league=league, items=dict(await asyncio.gather(*[one(g) for g in gs])), now=time.time())
+    _wx_cache[league] = (time.time(), res)
+    return res
 
 _brief_cache = {}
 
@@ -107,6 +245,8 @@ async def game(league: str, eid: str):
     if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")
     r = await data.analyze(league, eid)
     if not r: raise HTTPException(404, "Juego no encontrado o sin datos")
+    try: await enrich.detail(r, league, eid)
+    except Exception: pass
     return r
 
 @app.get("/api/record")
@@ -139,10 +279,43 @@ async def snap_now():
 
 @app.get("/api/health")
 async def health():
-    return dict(ok=True, grading=dict(GRADE_STATE, every_min=GRADE_MIN), record=REC.summary(), cache=STATS, ratings={k: v["n_games"] for k, v in ratings._ratings.items()}, ts=time.time(), snapshots=dict(SNAP_STATE, every_min=SNAP_MIN, db=history.stats()))
+    return dict(ok=True, grading=dict(GRADE_STATE, every_min=GRADE_MIN), record=REC.summary(), cache=STATS, ratings={k: v["n_games"] for k, v in ratings._ratings.items()}, ts=time.time(), snapshots=dict(SNAP_STATE, every_min=SNAP_MIN, db=history.stats()), injuries=dict(INJ_STATE, every_min=INJ_MIN), lineups=LU_STATE)
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
+# ------------------------------------------------------------------ marca (nombre/logo intercambiables: static/brand/brand.json) + PWA
+import json as _json
+
+def brand():
+    d = _json.load(open(os.path.join(STATIC, "brand", "brand.json"), encoding="utf-8"))
+    act = os.environ.get("BRAND") or d["active"]
+    if act not in d["options"]: act = d["active"]
+    o = d["options"][act]
+    return dict(id=act, name=o["name"], tagline=o["tagline"], theme=d["theme"], options={k: dict(v) for k, v in d["options"].items()})
+
+@app.get("/api/brand")
+async def brand_api():
+    return brand()
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    b = brand(); i = "/static/brand/icons/"
+    return JSONResponse(dict(name=f"{b['name']} · picks deportivos", short_name=b["name"], description=b["tagline"], start_url="/", scope="/", display="standalone",
+                             orientation="portrait", background_color=b["theme"]["bg"], theme_color=b["theme"]["bg"], lang="es-MX",
+                             icons=[dict(src=i + "icon-192.png", sizes="192x192", type="image/png", purpose="any"), dict(src=i + "icon-512.png", sizes="512x512", type="image/png", purpose="any"),
+                                    dict(src=i + "maskable-512.png", sizes="512x512", type="image/png", purpose="maskable"), dict(src=i + "apple-touch-icon.png", sizes="180x180", type="image/png")]),
+                        media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
+
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(os.path.join(STATIC, "sw.js"), media_type="application/javascript", headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join(STATIC, "index.html"), headers={"Cache-Control": "no-cache"})
+    from fastapi.responses import HTMLResponse
+    b = brand()
+    html = open(os.path.join(STATIC, "index.html"), encoding="utf-8").read()
+    glyph = open(os.path.join(STATIC, "brand", b["id"], "glyph.svg"), encoding="utf-8").read()
+    for k, v in (("__NAME__", b["name"]), ("__TAGLINE__", b["tagline"]), ("__BRAND_ID__", b["id"]), ("__GLYPH__", glyph), ("__BG__", b["theme"]["bg"])):
+        html = html.replace(k, v)
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

@@ -10,6 +10,7 @@ from . import model as M
 from . import market as MK
 from . import probs as PR
 from . import record as REC
+from . import live as LV
 
 CDMX = ZoneInfo(TZ)
 SD = "Sin dato"
@@ -51,6 +52,15 @@ def _game_from_event(league, e):
              state=st["state"], status=st.get("shortDetail") or st.get("description"), home=side(hc), away=side(ac),
              venue=(comp.get("venue") or {}).get("fullName"), neutral=bool(comp.get("neutralSite")),
              note=(comp.get("notes") or [{}])[0].get("headline") if comp.get("notes") else None, tv=comp.get("broadcast"))
+    va = (comp.get("venue") or {}).get("address") or {}
+    g.update(venue_city=va.get("city"), venue_state=va.get("state"), venue_country=va.get("country"), indoor=(comp.get("venue") or {}).get("indoor"))
+    if st["state"] in ("in", "post"):
+        g["status"] = LV.status_es(LEAGUES[league]["family"], league, comp["status"])
+    if st["state"] == "in":
+        try:
+            g["live"] = LV.live_core(comp, LEAGUES[league]["family"], league, {str(c["team"]["id"]): c["team"].get("abbreviation") for c in comp["competitors"]})
+        except Exception:
+            g["live"] = None
     o = None
     if st["state"] == "pre" and comp.get("odds"):
         o = extract_odds(comp["odds"][0])
@@ -71,7 +81,7 @@ async def list_games(league, days=None, include_past_today=True):
     days = cfg["days"] if days is None else days
     today = now_cdmx().date()
     dates = [(today + timedelta(days=i)).strftime("%Y%m%d") for i in range(0, days + 1)]
-    res = await asyncio.gather(*[get_json(f"{ESPN}/{cfg['path']}/scoreboard", ttl=90, params={"dates": d}) for d in dates])
+    res = await asyncio.gather(*[get_json(f"{ESPN}/{cfg['path']}/scoreboard", ttl=(20 if d == dates[0] else 90), params={"dates": d}) for d in dates])
     seen = {}; ok = False
     for d in res:
         if not d: continue
@@ -99,7 +109,7 @@ async def tennis_rankings(league):
     return m
 
 async def tennis_events(league):
-    d = await get_json(f"{ESPN}/{LEAGUES[league]['path']}/scoreboard", ttl=120)
+    d = await get_json(f"{ESPN}/{LEAGUES[league]['path']}/scoreboard", ttl=30)
     return (d or {}).get("events", []), d is not None
 
 def _t_side(c, rk):
@@ -131,6 +141,11 @@ async def tennis_games(league):
                                 court=(c.get("venue") or {}).get("court"), neutral=True, tournament=e.get("name"),
                                 note=f"{e.get('name')} · {(c.get('round') or {}).get('displayName', '')}".strip(" ·"), odds=None, tv=None,
                                 round=(c.get("round") or {}).get("displayName")))
+                if st["state"] == "in": out[-1]["live"] = dict(text=LV.status_es("tennis", league, c["status"]) or "En juego", clock=None, period=None, situation=None, linescores=None)
+                desc = (st.get("description") or "")
+                if st["state"] == "post" and desc.lower() in ("retired", "walkover", "default", "disqualified", "abandoned"):
+                    out[-1]["wd"] = {"retired": "Retiro de un jugador (abandonó el partido)", "walkover": "Pasa por W.O. (un jugador no se presentó)", "default": "Descalificación",
+                                     "disqualified": "Descalificación", "abandoned": "Partido abandonado"}[desc.lower()]
     out.sort(key=lambda g: g["date"])
     return out, ok
 
@@ -308,7 +323,7 @@ async def analyze(league, eid):
 async def _analyze(league, eid):
     cfg = LEAGUES[league]; fam = cfg["family"]
     if fam == "tennis": return await tennis_detail(league, eid)
-    summ = await get_json(f"{ESPN}/{cfg['path']}/summary", ttl=150, params={"event": eid})
+    summ = await get_json(f"{ESPN}/{cfg['path']}/summary", ttl=30, params={"event": eid})
     if not summ or not summ.get("header"): return None
     comp = summ["header"]["competitions"][0]
     hc = next(c for c in comp["competitors"] if c["homeAway"] == "home"); ac = next(c for c in comp["competitors"] if c["homeAway"] == "away")
@@ -320,7 +335,7 @@ async def _analyze(league, eid):
     H, A = side(hc), side(ac)
     gi = summ.get("gameInfo") or {}
     game = dict(id=eid, league=league, league_name=cfg["name"], sport=cfg["sport"], date=comp.get("date"), state=st.get("state", "pre"),
-                status=st.get("shortDetail") or st.get("description"), home=H, away=A, venue=(gi.get("venue") or {}).get("fullName"),
+                status=LV.status_es(fam, league, comp.get("status")) if st.get("state") in ("in", "post") else (st.get("shortDetail") or st.get("description")), home=H, away=A, venue=(gi.get("venue") or {}).get("fullName"),
                 neutral=bool(comp.get("neutralSite")), note=((comp.get("notes") or [{}])[0] or {}).get("headline"))
     wx = gi.get("weather")
     if wx and wx.get("temperature") is not None:

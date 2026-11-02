@@ -1,16 +1,41 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0e13">
-<title>Apuestas · Terminal de picks</title>
-<link rel="stylesheet" href="/static/style.css?v=5">
-</head><body>
+<meta name="theme-color" content="__BG__">
+<meta name="color-scheme" content="dark">
+<meta name="application-name" content="__NAME__">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="__NAME__">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/brand/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/brand/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/brand/icons/icon-192.png">
+<title>__NAME__ · picks deportivos</title>
+<link rel="stylesheet" href="/static/style.css?v=7">
+</head><body data-brand="__BRAND_ID__">
+<div id="splash" role="presentation"><div class="sp-in"><div class="sp-logo">__GLYPH__</div><div class="sp-name">__NAME__</div><div class="sp-tag">__TAGLINE__</div></div><div class="sp-skip">Toca para entrar</div></div>
 <header><div class="bar">
-  <a href="#/" class="logo">▌PICKS<span>·TERMINAL</span></a>
+  <a href="#/" class="logo"><span class="lg-mark">__GLYPH__</span><b>__NAME__</b></a>
   <span id="clock" class="mono"></span>
-  <nav><a href="#/" data-n="home">Deportes</a><a href="#/picks" data-n="picks">Top picks</a><a href="#/record" data-n="record">Récord</a><a href="#/info" data-n="info">Metodología</a></nav>
+  <nav><a href="#/" data-n="home">Inicio</a><a href="#/deportes" data-n="sports">Deportes</a><a href="#/picks" data-n="picks">Picks</a><a href="#/record" data-n="record">Récord</a><a href="#/info" data-n="info">Método</a></nav>
 </div></header>
 <main id="app"><div class="loading">Cargando…</div></main>
-<footer>Estimaciones de un modelo estadístico simple con datos públicos (ESPN, MLB StatsAPI). No son consejos financieros ni garantizan ganancias. Apuesta con responsabilidad; sólo mayores de edad.</footer>
-<script src="/static/app.js?v=5"></script>
+<footer>Estimaciones de un modelo estadístico simple con datos públicos (ESPN, MLB StatsAPI, Open-Meteo). No son consejos financieros ni garantizan ganancias. Apuesta con responsabilidad; sólo mayores de edad.</footer>
+<script>
+/* splash: breve, saltable, una vez por sesión (o ?splash=1 para forzarlo) */
+(function(){var s=document.getElementById('splash'),force=/[?&]splash=1/.test(location.search);
+ var seen=false;try{seen=sessionStorage.getItem('splash_seen')==='1'}catch(e){}
+ if(seen&&!force){s.remove();return}
+ try{sessionStorage.setItem('splash_seen','1')}catch(e){}
+ document.documentElement.classList.add('splashing');
+ var done=false;function end(){if(done)return;done=true;s.classList.add('out');document.documentElement.classList.remove('splashing');setTimeout(function(){s.remove()},380)}
+ if(/[?&]hold=1/.test(location.search))return;
+ s.addEventListener('click',end);document.addEventListener('keydown',end);setTimeout(end,matchMedia('(prefers-reduced-motion:reduce)').matches?500:1500);})();
+</script>
+<script src="/static/extras.js?v=7"></script>
+<script src="/static/app.js?v=7"></script>
+<script>if('serviceWorker' in navigator&&window.isSecureContext){addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}</script>
 </body></html>
