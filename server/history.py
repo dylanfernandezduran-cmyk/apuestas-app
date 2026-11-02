@@ -24,6 +24,11 @@ def _open():
             c.execute("CREATE INDEX IF NOT EXISTS ix_lines ON lines(league, eid, market)")
             c.execute("CREATE TABLE IF NOT EXISTS splits(league TEXT, eid TEXT, ts INTEGER, market TEXT, side TEXT, tickets INTEGER, money INTEGER)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_splits ON splits(league, eid, market)")
+            c.execute("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)")
+            if not c.execute("SELECT 1 FROM meta WHERE k='tennis_games_v1'").fetchone():
+                # antes del fix, spread/total de tenis guardaban SETS (±1.5 / 2.5) bajo el mismo nombre que ahora usa JUEGOS: se descartan para no mezclar unidades
+                c.execute("DELETE FROM lines WHERE league IN ('atp','wta') AND market IN ('spread','total')")
+                c.execute("INSERT INTO meta VALUES('tennis_games_v1', ?)", (str(int(time.time())),))
             c.commit()
             for r in c.execute("SELECT l.league,l.eid,l.book,l.market,l.side,l.line,l.price FROM lines l JOIN (SELECT league,eid,book,market,side,MAX(ts) m FROM lines GROUP BY 1,2,3,4,5) x "
                                "ON l.league=x.league AND l.eid=x.eid AND l.book=x.book AND l.market=x.market AND l.side=x.side AND l.ts=x.m"):
@@ -49,12 +54,14 @@ def record(league, eid, books, splits, ts=None):
             for side in ("home", "away", "draw"):
                 v = (b.get("ml") or {}).get(side)
                 if v is not None: rows_l.append((league, eid, bid, "ml", side, None, v))
-            for side in ("home", "away"):
-                v = (b.get("spread") or {}).get(side)
-                if v: rows_l.append((league, eid, bid, "spread", side, v["line"], v["price"]))
-            for side in ("over", "under"):
-                v = (b.get("total") or {}).get(side)
-                if v: rows_l.append((league, eid, bid, "total", side, v["line"], v["price"]))
+            for mk_, key_ in (("spread", "spread"), ("sspread", "sspread")):
+                for side in ("home", "away"):
+                    v = (b.get(key_) or {}).get(side)
+                    if v: rows_l.append((league, eid, bid, mk_, side, v["line"], v["price"]))
+            for mk_, key_ in (("total", "total"), ("stotal", "stotal")):
+                for side in ("over", "under"):
+                    v = (b.get(key_) or {}).get(side)
+                    if v: rows_l.append((league, eid, bid, mk_, side, v["line"], v["price"]))
         ins_l = []
         for r in rows_l:
             k = tuple(r[:5]); val = (r[5], r[6])

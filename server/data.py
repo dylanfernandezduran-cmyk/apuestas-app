@@ -9,6 +9,7 @@ from . import ratings as RT
 from . import model as M
 from . import market as MK
 from . import probs as PR
+from . import record as REC
 
 CDMX = ZoneInfo(TZ)
 SD = "Sin dato"
@@ -294,6 +295,17 @@ def _trends(league, fam, tsum, hid, aid, hname, aname, odds, injuries):
     return t
 
 async def analyze(league, eid):
+    """Análisis del juego + registro automático de pick principal/sugerencias (sólo pre-juego) + picks ya registrados con su calificación."""
+    out = await _analyze(league, eid)
+    if out:
+        try:
+            REC.record_analysis(out)
+            out["record"] = REC.game_rows(league, eid)
+        except Exception:
+            out["record"] = []
+    return out
+
+async def _analyze(league, eid):
     cfg = LEAGUES[league]; fam = cfg["family"]
     if fam == "tennis": return await tennis_detail(league, eid)
     summ = await get_json(f"{ESPN}/{cfg['path']}/summary", ttl=150, params={"event": eid})

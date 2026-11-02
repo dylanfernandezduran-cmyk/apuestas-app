@@ -69,6 +69,7 @@ def _flip_book(b):
     n = dict(b)
     if b.get("ml"): n["ml"] = {("away" if k == "home" else "home" if k == "away" else k): v for k, v in b["ml"].items()}
     if b.get("spread"): n["spread"] = {("away" if k == "home" else "home"): v for k, v in b["spread"].items()}
+    if b.get("sspread"): n["sspread"] = {("away" if k == "home" else "home"): v for k, v in b["sspread"].items()}
     return n
 
 def _flip_splits(sp):
@@ -76,6 +77,12 @@ def _flip_splits(sp):
     for mk, d in (sp or {}).items():
         out[mk] = {("away" if k == "home" else "home" if k == "away" else k): v for k, v in d.items()} if mk in ("ml", "spread") else dict(d)
     return out
+
+def _flip_q(q):
+    """Intercambia las designaciones home/away de un mercado (cada precio conserva sus puntos: pertenecen al mismo jugador)."""
+    sw = {"home": "away", "away": "home"}
+    n = dict(q); n["prices"] = [dict(p, designation=sw.get(p.get("designation"), p.get("designation"))) for p in q.get("prices", [])]
+    return n
 
 def _dt(s):
     try: return datetime.fromisoformat(str(s).replace("Z", "+00:00")).astimezone(timezone.utc)
@@ -143,8 +150,8 @@ async def an_events(slug, d, week=None):
     return out, ts
 
 # ---------------------------------------------------------------- Pinnacle: parseo
-def _pin_entry(markets):
-    """markets: lista de mercados straight de un matchup. Toma periodo 0, línea principal (no alterna)."""
+def _pin_parse(markets):
+    """markets: lista de mercados straight de un matchup. Toma periodo 0, línea principal (no alterna). Devuelve (ml, spread, total)."""
     ml, sp, tt = {}, {}, {}
     cand_sp, cand_tt = [], []
     for q in markets:
@@ -160,6 +167,18 @@ def _pin_entry(markets):
     bal = lambda c, k: abs(am_to_prob(c[k[0]]["price"]) - am_to_prob(c[k[1]]["price"]))
     if cand_sp: sp = min(cand_sp, key=lambda c: bal(c, ("home", "away")))
     if cand_tt: tt = min(cand_tt, key=lambda c: bal(c, ("over", "under")))
+    return ml, sp, tt
+
+def _pin_entry(markets, games_markets=None):
+    """Entrada de Pinnacle. Tenis: el matchup principal trae ML + hándicap/total de SETS; los de JUEGOS viven en un matchup
+    relacionado (units='Games'). Convención del app: spread/total = lo principal de cada deporte (en tenis, JUEGOS);
+    sspread/stotal = hándicap/total de SETS (sólo tenis)."""
+    ml, sp, tt = _pin_parse(markets)
+    if games_markets is not None:
+        _, gsp, gtt = _pin_parse(games_markets)
+        b = dict(id="pin", name="Pinnacle", kind="sharp", ml=ml, spread=gsp, total=gtt, sspread=sp, stotal=tt)
+        if not (ml or gsp or gtt or sp or tt): return None
+        return b
     if not (ml or sp or tt): return None
     return dict(id="pin", name="Pinnacle", kind="sharp", ml=ml, spread=sp, total=tt)
 
@@ -193,11 +212,26 @@ async def pin_events(league):
         t = fetched_at(f"{PIN_URL}/leagues/{lid}/markets/straight"); ts = max(ts or 0, t or 0) or ts
         by = {}
         for q in ks: by.setdefault(q["matchupId"], []).append(q)
+        rel = {}
+        if sid == 33:
+            for y in ms:
+                if y.get("parentId") and y.get("type") == "matchup" and y.get("units") == "Games": rel.setdefault(y["parentId"], y)
         for x in ms:
             if x.get("type") != "matchup" or x.get("parentId") or x.get("status") not in ("pending", "started"): continue
             ps = {p.get("alignment"): p.get("name") for p in x.get("participants", [])}
             if "home" not in ps or "away" not in ps: continue
-            b = _pin_entry(by.get(x["id"], []))
+            gm = None
+            if sid == 33:
+                gm = []
+                y = rel.get(x["id"])
+                if y:
+                    gps = {p.get("alignment"): re.sub(r"\s*\(Games\)\s*$", "", p.get("name") or "") for p in y.get("participants", [])}
+                    q = by.get(y["id"], [])
+                    # verifica que local/visitante del matchup de juegos coincidan con el principal; si vinieran invertidos se voltean
+                    if gps.get("home") == ps["home"] and gps.get("away") == ps["away"]: gm = q
+                    elif gps.get("home") == ps["away"] and gps.get("away") == ps["home"]: gm = [_flip_q(z) for z in q]
+                    else: gm = []     # nombres no coinciden: no se usa (nunca se arriesga un lado cambiado)
+            b = _pin_entry(by.get(x["id"], []), gm)
             if b: out.append(dict(src="pin", id=x["id"], home=ps["home"], away=ps["away"], start=_dt(x.get("startTime")), books=[b], splits={}, ts=t))
     return out, ts
 
@@ -215,6 +249,12 @@ def nv_of(b):
     tt = b.get("total") or {}
     if "over" in tt and "under" in tt:
         ps, ov = devig([am_to_prob(tt["over"]["price"]), am_to_prob(tt["under"]["price"])]); out["total"] = dict(over=ps[0], under=ps[1], line=tt["over"]["line"]); out["total_vig"] = ov
+    ss = b.get("sspread") or {}
+    if "home" in ss and "away" in ss:
+        ps, ov = devig([am_to_prob(ss["home"]["price"]), am_to_prob(ss["away"]["price"])]); out["sspread"] = dict(home=ps[0], away=ps[1], line=ss["home"]["line"])
+    st = b.get("stotal") or {}
+    if "over" in st and "under" in st:
+        ps, ov = devig([am_to_prob(st["over"]["price"]), am_to_prob(st["under"]["price"])]); out["stotal"] = dict(over=ps[0], under=ps[1], line=st["over"]["line"])
     return out
 
 def as_odds(mk, prefer=("consensus", "sharp")):

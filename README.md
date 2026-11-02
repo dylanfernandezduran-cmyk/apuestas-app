@@ -46,13 +46,24 @@ En cada juego (antes de empezar) la ficha muestra:
 
 Opción con llave gratuita (no incluida): The Odds API (más casas, sin splits). Estas APIs no son oficiales y pueden cambiar o bloquearse: el app degrada a "Sin dato".
 
-Variables de entorno opcionales: `SNAP_MIN` (default 10), `PINNACLE=0` (desactiva Pinnacle), `PINNACLE_GUEST_KEY`, `APUESTAS_DB` (ruta del SQLite; default `data/history.db`).
+Variables de entorno opcionales: `SNAP_MIN` (default 10), `PINNACLE=0` (desactiva Pinnacle), `PINNACLE_GUEST_KEY`, `GRADE_MIN` (min entre calificaciones, default 10), `APUESTAS_DB` (ruta del SQLite; default `data/history.db`).
 
 ## Probabilidades por resultado
 Cada juego (pre-juego) tiene una sección **Probabilidades** con todos los resultados de ganador/1X2, doble oportunidad (fútbol), hándicap/spread/run line/puck line y over/under, siempre con el nombre del equipo/jugador (p. ej. «Lakers (local)»): prob. del modelo, prob. sin vig del consenso y de Pinnacle, prob. final (mezcla), línea justa, mejor precio y casa, y edge. Las tarjetas de lista y Top picks muestran el mejor resultado por mercado (`/api/league_brief?league=nba`). Sin dato del modelo (p. ej. hándicap/totales de tenis, líneas de cuarto): sólo mercado y «Modelo: Sin dato».
 
+**Tenis:** ganador (sin empate, 1X2 ni doble oportunidad) + **Hándicap de juegos** (p. ej. «Sinner -3.5 juegos»), **Total de juegos** (p. ej. «Over 22.5 juegos») y, cuando Pinnacle los publica, **Hándicap de sets** y **Total de sets**. En Pinnacle el matchup principal de tenis trae los mercados de SETS (±1.5 / 2.5); los de JUEGOS viven en un matchup relacionado (units «Games»), que ahora se lee aparte. Convención interna: `spread`/`total` = juegos, `sspread`/`stotal` = sets. Sólo el ganador tiene modelo; el resto es mercado.
+
+## Récord: ¿se ganó el pick? (`📒 Récord`)
+- **Registro:** cada vez que se genera el análisis de un juego *pre-juego* (al abrirlo, en listas/Top picks, o por el snapshot automático de las próximas 72 h) se guardan en SQLite (tabla `picks`) el **pick principal** y las **sugerencias**: deporte, liga, juego, hora, equipos, mercado, selección, línea, cuota/casa, prob. del modelo, tipo y `created_at`. Una fila por juego+mercado+selección; se conserva **la primera línea/cuota** (nunca se sobrescribe), un solo principal por juego y un solo lado por mercado. Nada se registra una vez iniciado el juego.
+- **Calificación:** `grade_loop` cada `GRADE_MIN` min (default 10) y `POST /api/grade` (botón «Calificar ahora»). Sólo con el **marcador final confirmado** de ESPN (summary para equipos, scoreboard para tenis); si no hay final sigue ⏳ Pendiente (nunca se inventa). Estados: ✅ Ganado · ❌ Perdido · ➖ Push · medio ganado/perdido (líneas de cuarto, p. ej. -0.75, 2.25) · ⚪ Anulado (cancelado/WO/retiro; pospuesto >7 días).
+- **Reglas:** tiempo extra cuenta en NBA/NFL/NHL/MLB; NHL: el gol de la tanda de penales no cuenta para el total; fútbol 1X2/hándicap/total a 90' (+descuento; con prórroga se usa la suma de los dos tiempos o queda pendiente); empate en ML de 2 vías (NFL) = push; tenis: hándicap/total de **juegos** y de **sets** calculados desde el marcador por sets.
+- **Unidades:** apuesta plana de 1u a la cuota registrada (picks sin cuota no entran en unidades/ROI).
+- **Historial desde que se empezó a registrar:** no hay backfill — no existen las cuotas/probabilidades pre-juego de partidos pasados y regenerarlos usaría el resultado. Filas con `source` ≠ `live` (p. ej. `scripts/demo_grade_finals.py`) se avisan en la UI.
+- **Límites:** el scoreboard de tenis de ESPN sólo lista torneos actuales (un partido que ya no aparece queda pendiente con nota); MLB está en receso; marcadores atípicos (súper tie-break) quedan pendientes.
+- **Pruebas:** `pip install -r requirements-dev.txt && pytest` (liquidación, fixtures reales de ESPN, registro/dedupe, tenis). `scripts/demo_grade_finals.py` califica en vivo picks SINTÉTICOS sobre finales reales de ayer (BD aparte) y los compara con un cálculo independiente; `scripts/check_tennis_live.py` revisa lados/unidades de tenis en vivo.
+
 ## API
-`/api/sports` · `/api/games?league=nba&days=3` · `/api/game/{league}/{eventId}` (incluye `market`) · `/api/history/{league}/{eventId}` · `/api/picks?scope=24h|hoy|manana|72h` · `POST /api/snapshot` · `/api/health`
+`/api/sports` · `/api/games?league=nba&days=3` · `/api/game/{league}/{eventId}` (incluye `market`) · `/api/history/{league}/{eventId}` · `/api/picks?scope=24h|hoy|manana|72h` · `POST /api/snapshot` · `/api/record?sport=&type=main|suggestion&basis=modelo|mercado&days=&limit=` (resumen + últimos calificados) · `/api/record/game/{league}/{eventId}` · `POST /api/grade` · `/api/health`
 
 ## Windows
 `py -m venv .venv` · `.venv\Scripts\pip install -r requirements.txt` (incluye `tzdata`, necesario en Windows) · `.venv\Scripts\python -m uvicorn server.main:app --host 0.0.0.0 --port 8765`

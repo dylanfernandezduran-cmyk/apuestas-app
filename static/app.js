@@ -24,6 +24,18 @@ const STATUS = {PICK:['🔥','PICK','b-pick'],LEAN:['🟡','LEAN LIGERO','b-lean
 const badgeSt = s => { const x=STATUS[s]||STATUS.PASS; return `<span class="badge ${x[2]}">${x[0]} ${x[1]}</span>` };
 const confBadge = c => c ? `<span class="badge b-conf">${c.emoji} Confianza ${c.level}</span>` : '';
 
+// ------------------------------------------------------------ calificación (ganó / perdió)
+const GRADE = {GANADO:['✅','Ganado','g-w'],PERDIDO:['❌','Perdido','g-l'],PUSH:['➖','Push','g-p'],PENDIENTE:['⏳','Pendiente','g-n'],
+  MEDIO_GANADO:['✅','Medio ganado','g-w'],MEDIO_PERDIDO:['❌','Medio perdido','g-l'],ANULADO:['⚪','Anulado','g-v']};
+const gradeBadge = (r,withScore) => { if(!r) return ''; const x=GRADE[r.status]||GRADE.PENDIENTE;
+  return `<span class="gbadge ${x[2]}" title="${esc(r.note||'')}">${x[0]} ${x[1]}</span>${withScore&&r.score_text?` <span class="sub mono">${esc(r.score_text)}</span>`:''}`; };
+const typeLbl = t => t==='main' ? '<span class="badge b-pick">PICK PRINCIPAL</span>' : '<span class="badge b-model">SUGERENCIA</span>';
+const mktKey = c => ({ML:'ml',Spread:'spread',Total:'total'})[c.market]||c.market;
+let REC_MAP = {};
+const recFor = (market, side, line) => { const r = REC_MAP[market+'.'+side]; return r && (line==null || r.line==null || Number(r.line)===Number(line)) ? r : null; };   // sólo si es la MISMA línea registrada
+const units = u => u==null ? '—' : (u>0?'+':'')+Number(u).toFixed(2)+'u';
+const oddsTxt = r => r.odds==null ? 'sin cuota' : am(r.odds)+(r.book?' · '+esc(r.book):'');
+const SPORT_EM = {mlb:'⚾',nfl:'🏈',nba:'🏀',nhl:'🏒',tenis:'🎾',futbol:'⚽'};
 function setNav(n){ document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===n)); }
 
 // ------------------------------------------------------------ rutas
@@ -35,6 +47,7 @@ async function route(){
     if(h[0]==='deporte'){ setNav('home'); return viewSport(h[1], h[2]); }
     if(h[0]==='juego'){ setNav('home'); return viewGame(h[1], h[2]); }
     if(h[0]==='picks'){ setNav('picks'); return viewPicks(h[1]||'24h'); }
+    if(h[0]==='record'){ setNav('record'); return viewRecord(); }
     if(h[0]==='info'){ setNav('info'); return viewInfo(); }
     viewHome();
   }catch(e){ $app.innerHTML = `<div class="err">⚠️ ${esc(e.message)}</div>`; }
@@ -79,6 +92,12 @@ function oddsChips(g){
   if(o.total.over) c.push(`<span class="chip mono">O/U ${o.total.over.line}</span>`);
   return c.join('');
 }
+function recChips(g){
+  const r=g.rec||[]; if(!r.length) return '';
+  const m=r.filter(x=>x.type==='main'), sg_=r.filter(x=>x.type!=='main');
+  const ic=x=>(GRADE[x.status]||GRADE.PENDIENTE)[0];
+  return `<div class="brief"><span class="pchip" title="Pick principal registrado: ${esc(m.map(x=>x.label).join(', '))}"><b>Principal</b> ${m.map(ic).join(' ')||'—'}</span><span class="pchip"><b>Sugerencias</b> ${sg_.map(ic).join(' ')||'—'}</span></div>`;
+}
 function gameCard(g){
   const sc = g.state!=='pre';
   return `<a class="card game" href="#/juego/${encodeURIComponent(g.league)}/${g.id}">
@@ -87,7 +106,7 @@ function gameCard(g){
       <div class="tm">${g.away.logo?`<img src="${esc(g.away.logo)}" loading="lazy" alt="">`:''}<b>${esc(g.away.name)}</b><span class="sub">${esc(g.away.record||'')}</span>${sc?`<span class="sc mono ${g.away.winner?'pos':''}">${esc(g.away.score??'')}</span>`:''}</div>
       <div class="tm">${g.home.logo?`<img src="${esc(g.home.logo)}" loading="lazy" alt="">`:''}<b>${esc(g.home.name)}</b><span class="sub">${esc(g.home.record||'')}</span>${sc?`<span class="sc mono ${g.home.winner?'pos':''}">${esc(g.home.score??'')}</span>`:''}</div>
       <div class="sub">${esc(g.note||g.league_name)}${g.venue?' · '+esc(g.venue):''}</div>
-      ${g.state==='pre'?`<div class="brief" data-id="${esc(g.id)}"><span class="sub">⏳ Probabilidades…</span></div>`:''}
+      ${g.state==='pre'?`<div class="brief" data-id="${esc(g.id)}"><span class="sub">⏳ Probabilidades…</span></div>`:recChips(g)}
     </div>
     <div class="chips hide-m">${oddsChips(g)}</div></a>`;
 }
@@ -105,8 +124,9 @@ async function viewGame(league, id){
       <div>${g.home.logo?`<img src="${esc(g.home.logo)}" alt="">`:''}<div class="n">${esc(g.home.name)}</div><div class="sub">${esc(g.home.record||'')}${d.kind==='tennis'&&g.home.rank?` · #${g.home.rank} ranking · ${g.home.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(g.home.score??'')}</div>`:''}</div>
     </div>
     <div class="sub" style="text-align:center;margin-top:8px">${esc(g.venue||'')}${g.court?' · '+esc(g.court):''}${g.note?' · '+esc(g.note):''}${g.weather?` · 🌡️ ${g.weather.temp_f}°F`:''}</div></div>`;
+  REC_MAP = {}; (d.record||[]).forEach(r=>{ REC_MAP[r.market+'.'+r.selection]=r; });
   let html = back + hero;
-  html += picksSection(d) + probSection(d);
+  html += recordCard(d) + picksSection(d) + probSection(d);
   html += marketSection(d) + splitsSection(d) + rlmSection(d) + movementSection(d);
   if(d.odds && d.odds.src==='espn') html += oddsSection(d);
   if(d.kind==='tennis') html += tennisSections(d); else html += teamSections(d);
@@ -118,7 +138,8 @@ async function viewGame(league, id){
 
 function candRow(c){
   const e = c.edge;
-  return `<div class="cand"><div>${esc(c.label)} ${badgeSt(c.status)}${c.clipped?' <span class="sub" title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''}</div>
+  const rr = recFor(mktKey(c), c.side, c.line);
+  return `<div class="cand"><div>${esc(c.label)} ${badgeSt(c.status)}${rr?' '+gradeBadge(rr,false):''}${c.clipped?' <span class="sub" title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''}</div>
   <div class="mono" data-l="Precio">${esc(c.price_txt||SD)}</div>
   <div class="mono" data-l="Modelo">${pct(c.p_model)}</div>
   <div class="mono" data-l="Mercado s/vig">${pct(c.p_nv)}</div>
@@ -131,12 +152,12 @@ function leanBlock(d){
   const st=STATUS[p.status];
   const lines = [];
   if(l.price_txt){
-    lines.push(`<div class="big">${st[0]} ${st[1]} · ${esc(l.label)} <span class="mono">(${esc(l.price_txt)})</span></div>`);
+    lines.push(`<div class="big">${st[0]} ${st[1]} · ${esc(l.label)} <span class="mono">(${esc(l.price_txt)})</span> ${gradeBadge(recFor(mktKey(l),l.side,l.line),true)||'<span class="gbadge g-n">⏳ Pendiente</span>'}</div>`);
     lines.push(`📊 Modelo <b class="mono">${pct(l.p_model)}</b> vs implícita s/vig <b class="mono">${pct(l.p_nv)}</b> (con vig ${pct(l.implied_raw)})`);
     lines.push(`🧮 Prob. final (mezcla modelo/mercado) <b class="mono">${pct(l.p_final)}</b> · ⚡ Edge <b class="mono ${l.edge>0?'pos':'neg'}">${sg(l.edge)} pp</b> · EV <b class="mono ${l.ev>0?'pos':'neg'}">${sg(l.ev)}%</b>`);
     lines.push(`🎯 Línea justa <b class="mono">${esc(l.fair_txt)}</b> · 💰 Precio máximo para apostar <b class="mono">${esc(l.max_txt)}</b> <span class="sub">(EV ≥ +2% sobre la prob. final)</span>`);
   } else {
-    lines.push(`<div class="big">${st[0]} ${st[1]} · Lean del modelo: ${esc(l.label)}</div>`);
+    lines.push(`<div class="big">${st[0]} ${st[1]} · Lean del modelo: ${esc(l.label)} ${gradeBadge(recFor(mktKey(l),l.side,l.line),true)||'<span class="gbadge g-n">⏳ Pendiente</span>'}</div>`);
     lines.push(`📊 Modelo <b class="mono">${pct(l.p_model)}</b> · Edge: ${SD} (no hay precio de mercado)`);
     lines.push(`🎯 Línea justa <b class="mono">${esc(l.fair_txt)}</b> · 💰 Precio máximo para apostar <b class="mono">${esc(l.max_txt)}</b> <span class="sub">(sólo valdría la pena apostar a ese momio o mejor)</span>`);
   }
@@ -243,6 +264,52 @@ function tennisSections(d){
    ${m?`<div class="card" style="margin-top:10px"><h2>🧠 Detalle del modelo</h2><div class="row"><span>Prob. de victoria (heurística de ranking)</span><span class="mono">${esc(H.short)} ${pct(m.p_home)} · ${esc(A.short)} ${pct(m.p_away)}</span></div><div class="sub">${esc(m.label)}. No hay cuotas gratuitas en ESPN para tenis, así que no hay edge: sólo línea justa y el precio máximo sugerido.</div></div>`:''}`;
 }
 
+function recordCard(d){
+  const rows=d.record||[]; const g=d.game;
+  if(!rows.length) return g.state!=='pre' ? `<div class="card" style="margin-top:10px"><h2>🧾 Picks registrados</h2><div class="mut">No se registró ningún pick para este juego antes de que empezara (el historial empieza cuando el servidor lo vio pre-juego). Nunca se reconstruye después.</div></div>` : '';
+  const fin = rows.find(r=>r.score_text);
+  const items = rows.map(r=>`<div class="rrow"><div>${typeLbl(r.type)} <b>${esc(r.label)}</b>${r.basis==='mercado'?' <span class="sub" title="Sin probabilidad del modelo para este mercado: se eligió el lado con mayor probabilidad de mercado">(sólo mercado)</span>':''}
+     <div class="sub mono">Cuota registrada ${oddsTxt(r)}${r.line!=null?' · línea '+(/spread$/.test(r.market)?sg(r.line):r.line):''}${r.p_model!=null?' · modelo '+pct(r.p_model,0):''}</div>
+     ${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
+     <div class="rr">${gradeBadge(r,false)}${r.units!=null?`<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div>`:''}</div></div>`).join('');
+  return `<div class="card hot" style="margin-top:10px"><h2>🧾 Picks registrados · ¿se ganaron? ${fin?'<span class="badge b-fin">FINAL</span>':g.state==='in'?'<span class="badge b-live">● EN VIVO</span>':'<span class="badge b-pre">PRE-JUEGO</span>'}</h2>
+    ${fin?`<div class="mono" style="margin-bottom:8px">Marcador final: <b>${esc(fin.score_text)}</b></div>`:''}${items}
+    <div class="sub" style="margin-top:8px">Línea y cuota = las primeras registradas (no se actualizan). Se califican solos con el marcador final de ESPN (cada ~10 min); mientras no haya final confirmado, quedan ⏳ Pendiente. Unidades a 1u plano.</div></div>`;
+}
+
+// ------------------------------------------------------------ récord / historial
+let RECF = {sport:'', type:'', basis:'', days:''};
+async function viewRecord(){
+  SPORTS = SPORTS || await api('/api/sports');
+  loading('Cargando récord…');
+  const q = Object.entries(RECF).filter(([k,v])=>v).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&');
+  const d = await api('/api/record?limit=80'+(q?'&'+q:''));
+  const S=d.summary;
+  const pills=(key,opts)=>`<div class="pills">${opts.map(([v,l])=>`<span class="pill ${RECF[key]===v?'on':''}" onclick="setRecF('${key}','${v}')">${l}</span>`).join('')}</div>`;
+  const f=n=>Number.isInteger(n)?n:n.toFixed(1);
+  const since = S.since ? tsFmt(S.since) : SD;
+  const kpi=(l,v,c='')=>`<div class="kpi"><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
+  let html=`<h1>📒 Historial / Récord</h1>
+   <div class="sub" style="margin-bottom:8px">¿Se ganaron el pick principal y las sugerencias? Se registran al generarse (antes del juego) y se califican con el marcador final real. Historial desde <b>${since}</b> (no hay datos anteriores: nunca se reconstruyen picks de juegos pasados).</div>
+   ${S.backfilled?`<div class="card" style="border-color:var(--amb);margin-bottom:8px">⚠️ Incluye <b>${S.backfilled}</b> picks que NO son del modelo en vivo (source ≠ live: demostración/retroactivos). Los picks reales sólo se registran antes del juego.</div>`:''}
+   ${pills('sport',[['','Todos'],...SPORTS.map(s=>[s.key,s.emoji+' '+s.name])])}
+   ${pills('type',[['','Principal + sugerencias'],['main','Sólo pick principal'],['suggestion','Sólo sugerencias']])}
+   ${pills('basis',[['','Toda base'],['modelo','Con modelo'],['mercado','Sólo mercado']])}
+   ${pills('days',[['','Todo'],['7','7 días'],['30','30 días']])}
+   <div class="kpis">${kpi('Récord G-P-E',`${f(S.W)}-${f(S.L)}-${f(S.P)}`)}${kpi('% acierto',S.win_pct==null?SD:S.win_pct.toFixed(1)+'%',S.win_pct>=52.4?'pos':'')}
+    ${kpi('Unidades (1u plano)',S.n_priced?units(S.units):SD,S.units>0?'pos':S.units<0?'neg':'')}${kpi('ROI',S.roi==null?SD:sg(S.roi)+'%',S.roi>0?'pos':S.roi<0?'neg':'')}
+    ${kpi('Calificados',S.graded)}${kpi('⏳ Pendientes',S.pending)}${kpi('⚪ Anulados',S.void)}</div>
+   <div class="sub">G = ganado · P = perdido · E = push (devolución). % acierto = G/(G+P) sin pushes. Medio ganado/perdido (líneas de cuarto) cuenta 0.5 en G o P y 0.5 en E. Unidades = ganancia/pérdida de apostar 1u a la cuota registrada${S.n_unpriced?` (${S.n_unpriced} calificados sin cuota registrada no entran en unidades/ROI)`:''}.
+   <button class="btn" onclick="gradeNow(this)">🔄 Calificar ahora</button> <span class="sub">Automático cada ${d.grading.every_min} min${d.grading.last?' · última '+tsFmt(d.grading.last):''}</span></div>`;
+  if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
+  else html+=`<div class="day">Últimos picks calificados</div>`+d.recent.map(r=>`<div class="card rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
+     <div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div><div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
+     <div class="rr">${gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('');
+  $app.innerHTML=html;
+}
+function setRecF(k,v){ RECF[k]=v; viewRecord(); }
+async function gradeNow(btn){ btn.disabled=true; btn.textContent='Calificando…'; try{ await fetch('/api/grade',{method:'POST'}); }catch(e){} viewRecord(); }
+
 // ------------------------------------------------------------ picks del día
 async function viewPicks(scope){
   loading('Calculando picks de todos los deportes (primera vez puede tardar ~20 s)…');
@@ -277,7 +344,8 @@ function probSection(d){
       const pinTxt = o.p_pin==null ? `<span class="mut">${SD}</span>` : `<span class="mono">${pct(o.p_pin)}</span>${o.pin_line!=null&&o.line!=null&&o.pin_line!==o.line?` <span class="sub" title="Pinnacle ofrece otra línea; no es comparable directamente">(línea ${m.key==='total'?o.pin_line:sg(o.pin_line)})</span>`:''}`;
       const consTxt = o.p_nv==null ? `<span class="mut">${SD}</span>` : (o.nv_src&&o.nv_src.startsWith('Pinnacle') ? `<span class="sub">= Pinnacle</span>` : `<span class="mono">${pct(o.p_nv)}</span> <span class="sub">${esc(am(o.fair_nv_txt?parseInt(o.fair_nv_txt):null))}</span>`);
       const mod = o.p_model_raw==null ? `<span class="mut" title="${esc(o.model_note||'Modelo: Sin dato')}">Modelo: ${SD}</span>` : `<span class="mono"><b>${pct(o.p_model)}</b></span>${o.clipped?' <span title="Recortada a ±20 pp del mercado">✂️</span>':''}${o.p_push?` <span class="sub" title="Probabilidad aprox. de push (devolución); excluida del cálculo">push ${(o.p_push*100).toFixed(0)}%</span>`:''}`;
-      return `<tr class="${hi?'hi':''}"><td class="lb"><b>${esc(o.label)}</b>${o.model_note&&o.p_model_raw==null&&m.key!=='dc'?`<div class="sub">${esc(o.model_note)}</div>`:''}</td>
+      const rr=recFor(o.market,o.side,o.line);
+      return `<tr class="${hi?'hi':''}"><td class="lb"><b>${esc(o.label)}</b>${rr?' '+gradeBadge(rr,false)+' <span class="sub">'+(rr.type==='main'?'principal':'sugerencia')+'</span>':''}${o.model_note&&o.p_model_raw==null&&m.key!=='dc'?`<div class="sub">${esc(o.model_note)}</div>`:''}</td>
        <td>${mod}</td><td>${consTxt}</td><td>${pinTxt}</td>
        <td class="mono">${o.p_final==null?`<span class="mut">${SD}</span>`:pct(o.p_final)}</td>
        <td class="mono">${o.fair_txt?esc(o.fair_txt):`<span class="mut">${SD}</span>`}</td>
@@ -285,7 +353,7 @@ function probSection(d){
        <td class="mono ${e>0?'pos':e<0?'neg':''}">${e==null?`<span class="mut">${SD}</span>`:sg(e)+' pp'}</td></tr>`;
     }).join('');
     const src=[...new Set(m.outcomes.map(o=>o.nv_src).filter(Boolean))].join(' · ');
-    return `<div class="tbl"><div class="sub tt">${esc(m.title)}${m.outcomes[0]&&m.outcomes[0].line!=null&&m.key!=='ml'?` · línea actual ${m.key==='spread'?sg(m.outcomes[0].line):m.outcomes[0].line}`:''}${m.derived?' · derivado del 1X2':''}${src?` · mercado: ${esc(src)}`:''}</div>
+    return `<div class="tbl"><div class="sub tt">${esc(m.title)}${m.outcomes[0]&&m.outcomes[0].line!=null&&m.key!=='ml'?` · línea actual ${/spread$/.test(m.key)?sg(m.outcomes[0].line):m.outcomes[0].line}${m.unit?' '+m.unit:''}`:''}${m.derived?' · derivado del 1X2':''}${src?` · mercado: ${esc(src)}`:''}</div>
       <table class="prob"><thead><tr><th>Resultado</th><th>Modelo</th><th>Mercado s/vig</th><th>Pinnacle s/vig</th><th title="Probabilidad final = mezcla modelo/mercado">Prob. final</th><th>Línea justa</th><th>Mejor precio</th><th>Edge</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   };
   return `<div class="card" style="margin-top:10px"><h2>🎲 Probabilidades <span class="badge b-model">ESTIMACIÓN DEL MODELO</span></h2>
@@ -295,7 +363,7 @@ function probSection(d){
    ${g.neutral&&d.kind!=='tennis'?`<div class="sub" style="margin-top:4px">Cancha neutral: “local” es sólo la designación del calendario; el modelo no aplica ventaja de local.</div>`:''}
    <div class="note" style="margin-bottom:0">Son estimaciones de un modelo simple, no certezas ni recomendaciones de apuesta.</div></div>`;
 }
-const briefChips = (items) => !items||!items.length ? `<span class="chip mut">Probabilidades: ${SD}</span>` : items.map(b=>`<span class="pchip" title="${esc(b.title)} · mejor resultado (mayor edge, o mayor prob. del modelo)"><b>${esc(({ml:'ML',spread:b.title,total:'Total'})[b.market]||b.title)}</b> ${esc(b.label)} <span class="mono">${b.p_model!=null?'Mod '+pct(b.p_model,0):'Mod: '+SD}</span>${b.clipped?'<span title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''} <span class="sub mono">Mkt ${b.p_nv!=null?pct(b.p_nv,0):SD}</span>${b.edge!=null?` <span class="mono ${b.edge>0?'pos':'neg'}">${sg(b.edge)}pp</span>`:''}</span>`).join('');
+const briefChips = (items) => !items||!items.length ? `<span class="chip mut">Probabilidades: ${SD}</span>` : items.map(b=>`<span class="pchip" title="${esc(b.title)} · mejor resultado (mayor edge, o mayor prob. del modelo)"><b>${esc(({ml:'ML',spread:b.title,total:'Total',sspread:'Hánd. sets',stotal:'Total sets'})[b.market]||b.title)}</b> ${esc(b.label)} <span class="mono">${b.p_model!=null?'Mod '+pct(b.p_model,0):'Mod: '+SD}</span>${b.clipped?'<span title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''} <span class="sub mono">Mkt ${b.p_nv!=null?pct(b.p_nv,0):SD}</span>${b.edge!=null?` <span class="mono ${b.edge>0?'pos':'neg'}">${sg(b.edge)}pp</span>`:''}</span>`).join('');
 async function fillBriefs(league){
   try{
     const r=await api('/api/league_brief?league='+encodeURIComponent(league));
@@ -335,19 +403,20 @@ function marketSection(d){
         return `<td class="mono ${fl==='best'?'best':fl==='line'?'bline':''}" title="${fl==='best'?'Mejor precio en la misma línea':fl==='line'?'Mejor línea (número más favorable)':''}">${c}</td>`}).join('')}</tr>`;}).join('');
     let nvrow='';
     const cn=(mk.consensus_nv||{})[key], sn=(mk.sharp_nv||{})[key];
-    const nvr=(lbl,o,cls)=>o?`<tr class="nv ${cls}"><td>${lbl} <span class="sub">(${o.n?o.n+' casas':'1 casa'}${o.line!=null?' · línea '+(key==='spread'?sg(o.line):o.line):''})</span></td>${sides.map(s=>`<td class="mono">${o[s]!=null?`<b>${pct(o[s])}</b> <span class="sub">${am(fairAm(o[s]))}</span>`:SD}</td>`).join('')}</tr>`:'';
+    const nvr=(lbl,o,cls)=>o?`<tr class="nv ${cls}"><td>${lbl} <span class="sub">(${o.n?o.n+' casas':'1 casa'}${o.line!=null?' · línea '+(/spread$/.test(key)?sg(o.line):o.line):''})</span></td>${sides.map(s=>`<td class="mono">${o[s]!=null?`<b>${pct(o[s])}</b> <span class="sub">${am(fairAm(o[s]))}</span>`:SD}</td>`).join('')}</tr>`:'';
     nvrow=nvr('Consenso s/vig',cn,'cons')+nvr('Pinnacle s/vig',sn,'sharp');
     return `<div class="tbl"><div class="sub tt">${title}</div><table class="cmp"><thead>${head}</thead><tbody>${rows}${nvrow}</tbody></table></div>`;
   };
   const sideCell=(key,s)=>b=>b[key]&&b[key][s]!=null?am(b[key][s]):'<span class="mut">—</span>';
-  const lp=(key)=>(b,s)=>{const c=(b[key]||{})[s]; return c?`${key==='spread'?sg(c.line):(s==='over'?'O ':'U ')+c.line} <span class="${c.price>0?'pos':''}">${am(c.price)}</span>`:'<span class="mut">—</span>'};
+  const lp=(key)=>(b,s)=>{const c=(b[key]||{})[s]; return c?`${/spread$/.test(key)?sg(c.line):(s==='over'?'O ':'U ')+c.line} <span class="${c.price>0?'pos':''}">${am(c.price)}</span>`:'<span class="mut">—</span>'};
   const mlSides = books.some(b=>b.ml&&b.ml.draw!=null)?['away','draw','home']:['away','home'];
   const ts=(mk.sources||[]).map(s=>`${esc(s.name)} (${s.n_books} ${s.n_books===1?'casa':'casas'}) · ${tsFmt(s.ts)}`).join(' · ');
   const nreal=books.filter(b=>b.kind==='book'||b.kind==='sharp').length;
   return `<div class="card" style="margin-top:10px"><h2>📚 Comparador de casas <span class="badge b-ok">${nreal} CASAS</span></h2>
    ${tbl('Moneyline','ml',mlSides,(b,s)=>sideCell('ml',s)(b))}
-   ${tbl(d.game.sport==='mlb'?'Run line':d.game.sport==='futbol'?'Hándicap':d.game.sport==='tenis'?'Hándicap de sets':'Spread','spread',['away','home'],(b,s)=>lp('spread')(b,s))}
-   ${tbl(d.game.sport==='tenis'?'Total de sets':'Total','total',['over','under'],(b,s)=>lp('total')(b,s))}
+   ${tbl(d.game.sport==='mlb'?'Run line':d.game.sport==='futbol'?'Hándicap':d.game.sport==='tenis'?'Hándicap de juegos':d.game.sport==='nhl'?'Puck line':'Spread','spread',['away','home'],(b,s)=>lp('spread')(b,s))}
+   ${tbl(d.game.sport==='tenis'?'Total de juegos':'Total','total',['over','under'],(b,s)=>lp('total')(b,s))}
+   ${d.game.sport==='tenis'?tbl('Hándicap de sets','sspread',['away','home'],(b,s)=>lp('sspread')(b,s))+tbl('Total de sets','stotal',['over','under'],(b,s)=>lp('stotal')(b,s)):''}
    <div class="legend"><span class="best mono">verde</span> = mejor precio en la misma línea · <span class="bline mono">subrayado</span> = mejor línea (número más favorable) · filas “s/vig” = probabilidad sin comisión (normalización proporcional) y su momio justo. Consenso = promedio de las casas en la línea de referencia.</div>
    <div class="sub" style="margin-top:6px">Fuentes: ${ts||SD}. Los precios cambian; confirma en tu casa antes de apostar.</div></div>`;
 }
@@ -461,7 +530,7 @@ function viewInfo(){
   <div class="card kv" style="margin-top:10px"><h2>Modelo (transparente y simple)</h2><ul class="t">
   <li><b>NFL / NBA / NHL / MLB:</b> rating SRS (margen promedio ajustado por rival y localía) calculado con todos los resultados reales de la liga, suavizado hacia 0 según juegos jugados, + ajuste por forma (últimos 5). Probabilidad = normal(margen esperado, σ). En MLB se añade un ajuste pequeño por ERA de abridores probables.</li>
   <li><b>Fútbol:</b> Poisson con fuerza de ataque/defensa suavizada y ventaja de local de la liga → 1X2, hándicap y totales.</li>
-  <li><b>Tenis:</b> logística sobre ln(puntos de ranking). Sin cuotas gratuitas ⇒ sin edge.</li>
+  <li><b>Tenis:</b> logística sobre ln(puntos de ranking) sólo para el ganador. Hándicap y total son de <b>JUEGOS</b> (p. ej. Sinner -3.5 juegos, Over 22.5 juegos) y además hay hándicap/total de <b>SETS</b>, todos sólo mercado (Pinnacle). No hay empate ni 1X2 en tenis.</li><li><b>Récord (¿se ganó?):</b> cada pick principal y sugerencia se guarda al generarse (antes del juego) con la primera línea y cuota; se califica con el marcador final real de ESPN (tenis: juegos y sets del marcador por sets). Ganado / Perdido / Push / medio ganado-perdido (líneas de cuarto) / Anulado; pendiente hasta que haya final confirmado. Unidades a 1u plano con la cuota registrada. El historial empieza cuando el servidor empezó a registrar.</li>
   <li><b>Prob. final</b> = mezcla del modelo y el mercado sin vig; el peso del modelo (máx. 50%) crece con la muestra. El modelo se recorta a ±20 pp del mercado.</li>
   <li><b>Edge</b> = prob. final − prob. implícita sin vig (pp). <b>EV</b> = prob. final × momio decimal − 1. <b>Línea justa</b> = momio de la prob. final. <b>Precio máx.</b> = momio con EV = +2%.</li>
   <li><b>Estados:</b> 🔥 PICK (edge ≥ 3 pp, EV ≥ 0 y confianza Media/Alta) · 🟡 LEAN (edge ≥ 1 pp) · ⛔ PASS (sin edge; igual se muestra el lean) · 🔍 SIN LÍNEA (no hay precio).</li>
