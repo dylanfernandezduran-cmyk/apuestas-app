@@ -279,6 +279,38 @@
    "label": "Fútbol americano",
    "desc": "Iris/pupila = balón ovalado con cordones.",
    "icon_bg": "#171b21"
+  },
+  "nrnm_final_americano_blanco": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Americano blanco",
+   "desc": "Triángulo y ojo rosas; el balón ovalado es blanco con cordones oscuros.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_final_americano_contorno": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "Americano contorno blanco",
+   "desc": "Triángulo y ojo rosas; balón solo con contorno y cordones blancos, interior oscuro.",
+   "icon_bg": "#171b21"
   }
  }
 }

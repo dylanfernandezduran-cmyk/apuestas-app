@@ -21,15 +21,22 @@ futbol = ball_base() + f'<polygon points="{pent(15)}" fill="{DK}" stroke="{DK}" 
 basket = ball_base() + f'<g stroke="{DK}" stroke-width="5"><path d="M{CX} {CY - 38} V{CY + 38}"/><path d="M{CX - 38} {CY} H{CX + 38}"/><path d="M{CX - 27} {CY - 27} Q{CX - 10} {CY} {CX - 27} {CY + 27}"/><path d="M{CX + 27} {CY - 27} Q{CX + 10} {CY} {CX + 27} {CY + 27}"/></g>'
 # béisbol: dos costuras curvas con puntadas
 beis = ball_base() + f'<g stroke="{DK}" stroke-width="4.5"><path d="M{CX - 24} {CY - 28} Q{CX - 8} {CY} {CX - 24} {CY + 28}"/><path d="M{CX + 24} {CY - 28} Q{CX + 8} {CY} {CX + 24} {CY + 28}"/>' + "".join(f'<path d="M{CX - 18} {CY + y} h-8"/><path d="M{CX + 18} {CY + y} h8"/>' for y in (-14, 0, 14)) + '</g>'
-# americano: balón ovalado inclinado con cordones y franjas
-amer = (f'<g transform="rotate(-28 {CX} {CY})"><ellipse cx="{CX}" cy="{CY}" rx="46" ry="28" fill="{PINK}"/><g stroke="{DK}" stroke-width="5">'
-        f'<path d="M{CX - 16} {CY} H{CX + 16}"/><path d="M{CX - 9} {CY - 9} V{CY + 9}"/><path d="M{CX} {CY - 9} V{CY + 9}"/><path d="M{CX + 9} {CY - 9} V{CY + 9}"/>'
-        f'<path d="M{CX - 33} {CY - 15} Q{CX - 38} {CY} {CX - 33} {CY + 15}"/><path d="M{CX + 33} {CY - 15} Q{CX + 38} {CY} {CX + 33} {CY + 15}"/></g></g>')
+# americano: balón ovalado inclinado con cordones y franjas (fill/line configurables)
+def americano(fill=PINK, line=DK, stroke=None):
+    el = f'<ellipse cx="{CX}" cy="{CY}" rx="46" ry="28" fill="{fill}"' + (f' stroke="{stroke}" stroke-width="6"/>' if stroke else '/>')
+    return (f'<g transform="rotate(-28 {CX} {CY})">{el}<g stroke="{line}" stroke-width="5">'
+            f'<path d="M{CX - 16} {CY} H{CX + 16}"/><path d="M{CX - 9} {CY - 9} V{CY + 9}"/><path d="M{CX} {CY - 9} V{CY + 9}"/><path d="M{CX + 9} {CY - 9} V{CY + 9}"/>'
+            f'<path d="M{CX - 33} {CY - 15} Q{CX - 38} {CY} {CX - 33} {CY + 15}"/><path d="M{CX + 33} {CY - 15} Q{CX + 38} {CY} {CX + 33} {CY + 15}"/></g></g>')
+amer = americano()
+amer_w = americano(fill="#FFFFFF", line=DK)                       # balón blanco, cordones oscuros
+amer_wo = americano(fill=DK, line="#FFFFFF", stroke="#FFFFFF")   # solo contorno blanco, interior oscuro
 OPT = {"nrnm_final": ("Final · pupila", "Triángulo completo + ojo, todo rosa; pupila oscura con brillo.", plain),
        "nrnm_final_futbol": ("Fútbol", "Iris/pupila = balón de fútbol (pentágono central).", futbol),
        "nrnm_final_basket": ("Básquetbol", "Iris/pupila = balón de básquetbol (cruz y arcos).", basket),
        "nrnm_final_beisbol": ("Béisbol", "Iris/pupila = pelota de béisbol (costuras con puntadas).", beis),
-       "nrnm_final_americano": ("Fútbol americano", "Iris/pupila = balón ovalado con cordones.", amer)}
+       "nrnm_final_americano": ("Fútbol americano", "Iris/pupila = balón ovalado con cordones.", amer),
+       "nrnm_final_americano_blanco": ("Americano blanco", "Triángulo y ojo rosas; el balón ovalado es blanco con cordones oscuros.", amer_w),
+       "nrnm_final_americano_contorno": ("Americano contorno blanco", "Triángulo y ojo rosas; balón solo con contorno y cordones blancos, interior oscuro.", amer_wo)}
 if __name__ == "__main__":
     bj = os.path.join(ROOT, "static/brand/brand.json"); b = json.load(open(bj, encoding="utf-8")); pal = b["options"]["nrnm"]["palette"]
     for k, (lab, desc, inner) in OPT.items():
