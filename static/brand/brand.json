@@ -119,6 +119,86 @@
    },
    "label": "Azul + teal",
    "desc": "Triángulo azul, base y pelota teal: la versión más fría."
+  },
+  "nrnm_v2_1": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "1 · Todo rosa",
+   "desc": "Triángulo, ojo y barra rosa; iris rosa con pupila oscura y brillo.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_v2_2": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "2 · Rosa + iris teal",
+   "desc": "Triángulo rosa, iris teal #06AAC4.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_v2_3": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "3 · Rosa + iris azul",
+   "desc": "Triángulo rosa, iris azul Porsche #3C85F7.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_v2_4": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "4 · Rosa metálico + teal",
+   "desc": "Brillo metálico: degradado rosa claro → rosa → rosa profundo; iris teal.",
+   "icon_bg": "#171b21"
+  },
+  "nrnm_v2_5": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "palette": {
+    "acc": "#FF1179",
+    "grn": "#06AAC4",
+    "red": "#FF6B4A",
+    "amb": "#fbbf24",
+    "blu": "#3C85F7",
+    "live": "#3C85F7"
+   },
+   "label": "5 · Degradado rosa→azul + teal",
+   "desc": "Triángulo, ojo y barra con degradado rosa→azul; iris teal.",
+   "icon_bg": "#171b21"
   }
  }
 }

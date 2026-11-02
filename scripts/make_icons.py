@@ -13,7 +13,7 @@ if args:
     if not PREVIEW:
         cfg["active"] = args[0]
         json.dump(cfg, open(os.path.join(B, "brand.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-act = args[0] if args else cfg["active"]; bg = cfg["theme"]["bg"]
+act = args[0] if args else cfg["active"]; bg = cfg["options"][act].get("icon_bg", cfg["theme"]["bg"])
 glyph = open(os.path.join(B, act, "glyph.svg"), encoding="utf-8").read()
 inner = glyph[glyph.index(">") + 1: glyph.rindex("</svg>")]
 head = glyph[:glyph.index(">") + 1]
