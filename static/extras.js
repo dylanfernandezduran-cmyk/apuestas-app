@@ -160,11 +160,47 @@ function restRows(d){
 }
 const restTags = d => { const R=d.rest||{}, g=d.game; return ['away','home'].filter(s=>R[s]&&R[s].b2b).map(s=>`<span class="cchip c-warn">${esc(g[s].abbr||g[s].short)}: back-to-back</span>`).join(' '); };
 
+// ---------- carrusel de juegos en vivo (inicio): UNA tarjeta a la vez, deslizable (scroll-snap). Se actualiza EN SITIO por data-gid para no perder la diapositiva actual
+const carIdx = tr => Math.max(0, Math.min(tr.children.length-1, Math.round(tr.scrollLeft / (tr.clientWidth||1))));
+function carSync(root){
+  const tr=root.querySelector('.car-track'); if(!tr) return;
+  const n=tr.children.length, i=carIdx(tr);
+  root.querySelectorAll('.car-dots button').forEach((b,k)=>{ b.classList.toggle('on',k===i); b.setAttribute('aria-current',k===i?'true':'false'); });
+  const c=root.querySelector('.car-n'); if(c) c.textContent=`${i+1}/${n}`;
+}
+function carGo(root,i){ const tr=root.querySelector('.car-track'); if(tr) tr.scrollTo({left:i*tr.clientWidth,behavior:'smooth'}); }
+/* Parchea el carrusel con la lista nueva de juegos. Devuelve el gid visible. Si el conjunto de juegos no cambió sólo se reemplaza el contenido de cada tarjeta: el scroll no se toca. */
+function carPatch(root, games){
+  let car=root.querySelector('.car');
+  if(!car){
+    root.insertAdjacentHTML('beforeend','<div class="car"><div class="car-track" tabindex="0" aria-label="Juegos en vivo"></div></div><div class="car-nav"><div class="car-dots"></div><span class="car-n mono"></span></div>');
+    car=root.querySelector('.car');
+    const tr=car.querySelector('.car-track'); let raf=0;
+    tr.addEventListener('scroll',()=>{ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; carSync(root); }); },{passive:true});
+    root.querySelector('.car-dots').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) carGo(root,+b.dataset.i); });
+  }
+  const tr=car.querySelector('.car-track');
+  const cur=tr.children[carIdx(tr)], curId=cur?cur.dataset.gid:null;
+  const have=[...tr.children].map(x=>x.dataset.gid), want=games.map(g=>String(g.id));
+  if(have.join()===want.join()){
+    games.forEach((g,k)=>{ tr.children[k].innerHTML=liveRowHtml(g); });
+  }else{
+    const old={}; [...tr.children].forEach(x=>old[x.dataset.gid]=x);
+    tr.innerHTML=games.map(g=>`<div class="car-slide" data-gid="${esc(g.id)}">${liveRowHtml(g)}</div>`).join('');
+    const k=Math.max(0,want.indexOf(curId));
+    tr.scrollLeft=k*tr.clientWidth;
+    root.querySelector('.car-dots').innerHTML=games.map((g,j)=>`<button type="button" data-i="${j}" aria-label="Juego ${j+1} de ${games.length}"></button>`).join('');
+    root.querySelector('.car-nav').classList.toggle('one',games.length<2);
+  }
+  carSync(root);
+  const v=tr.children[carIdx(tr)]; return v?v.dataset.gid:null;
+}
+
 // ---------- resumen del día (inicio)
 const liveRowHtml = g => {
   const pv = Object.values(g.prov||{}); const main=(g.rec||[]).find(r=>r.type==='main');
   const mp = main && provBadge(g.prov, main.market, main.selection);
-  const t=(x)=>`<div class="lr-t"><span class="nm">${esc(x.short||x.name)}</span><span class="sc mono">${x.score!=null&&x.score!==''?esc(x.score):(x.sets&&x.sets.length?esc(x.sets.join(' ')):'')}</span></div>`;
+  const t=(x)=>`<div class="lr-t">${badge(x,30)}<span class="nm">${esc(x.short||x.name)}</span><span class="sc mono">${x.score!=null&&x.score!==''?esc(x.score):(x.sets&&x.sets.length?esc(x.sets.join(' ')):'')}</span></div>`;
   return `<a class="card lrow" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="lr-h"><span class="badge b-live">● ${esc((g.live&&g.live.text)||g.status||'EN VIVO')}</span><span class="sub">${esc(g.league_name)}</span></div>${sides(g).map(sd=>t(g[sd])).join('')}${g.live&&g.live.situation?`<div class="sub">${esc(g.live.situation.text)}</div>`:''}${mp?`<div style="margin-top:6px"><span class="sub">${esc(shortLbl(main.label,g))}</span> ${mp}</div>`:''}</a>`; };
 
 async function viewHome(){
@@ -182,8 +218,11 @@ async function viewHome(){
     try{
       const h = await api('/api/home');
       const el=document.getElementById('hm-live'); if(!el) return;
-      el.querySelector('div,a')&&0;
-      el.innerHTML = `<h3>En vivo ahora${h.live.length?` <span class="badge b-live">${h.live.length}</span>`:''} ${updTag(h.now,h.live.length>0)}</h3>` + (h.live.length ? `<div class="glist">${h.live.slice(0,12).map(liveRowHtml).join('')}</div>` : `<div class="card mut">No hay juegos en vivo en este momento.</div>`);
+      if(!el.querySelector('.hm-lh')) el.innerHTML='<h3 class="hm-lh"></h3><div class="hm-lb"></div>';
+      el.querySelector('.hm-lh').innerHTML=`En vivo ahora${h.live.length?` <span class="badge b-live">${h.live.length}</span>`:''} ${updTag(h.now,h.live.length>0)}`;
+      const lb=el.querySelector('.hm-lb');
+      if(h.live.length){ const nc=lb.querySelector('.hm-none'); if(nc) nc.remove(); carPatch(lb,h.live.slice(0,12)); }
+      else lb.innerHTML=`<div class="card mut hm-none">No hay juegos en vivo en este momento.</div>`;
       h.sports.forEach(s=>{ const x=document.querySelector(`[data-sp="${s.key}"]`); if(x) x.innerHTML = s.today||s.live ? `${s.live?`<b class="pos">● ${s.live} en vivo</b> · `:''}${s.today} juego${s.today===1?'':'s'} hoy` : 'Sin juegos hoy'; });
       if(first){
         const r=h.record, ra=h.record_all;
@@ -201,7 +240,7 @@ async function viewHome(){
       const it = (p.items||[]).filter(x=>x.status==='PICK'||x.status==='LEAN').slice(0,3);
       const el=document.getElementById('hm-picks'); if(!el) return;
       el.innerHTML = `<h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3>` + (it.length ? it.map(x=>{ const g=x.game, l=x.lean;
-        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${sides(g).map(sd=>esc(g[sd].short||g[sd].name)).join(' '+vsMark(g)+' ')} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks con ventaja suficiente hoy (o los juegos de hoy ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
+        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${matchup(g,true)} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks con ventaja suficiente hoy (o los juegos de hoy ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
     }catch(e){ const el=document.getElementById('hm-picks'); if(el) el.innerHTML=`<h3>Mejores picks de hoy</h3><div class="card mut">${SD}</div>`; }
   };
   fillHome(true);

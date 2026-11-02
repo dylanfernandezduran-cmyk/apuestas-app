@@ -1,9 +1,9 @@
 import asyncio, os, time
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import data, ratings, market as MK, history, record as REC, grading, enrich, injuries as INJ, weather as WX, live as LV
+from . import imgproxy, data, ratings, market as MK, history, record as REC, grading, enrich, injuries as INJ, weather as WX, live as LV
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -104,6 +104,14 @@ async def lineups_loop():
             LU_STATE.update(last=time.time(), runs=LU_STATE["runs"] + 1, games=n, err=None)
         except Exception as ex: LU_STATE["err"] = str(ex)[:200]
         await asyncio.sleep(600)
+
+@app.get("/api/img")
+async def img(u: str, w: int = 64):
+    """Logo/foto de ESPN reducido y cacheado (sólo hosts de imágenes de ESPN). 404 si no existe -> el frontend muestra iniciales."""
+    if not imgproxy.validate(u): raise HTTPException(400, "url de imagen no permitida")
+    r = await imgproxy.get_image(u, w)
+    if not r: raise HTTPException(404, "sin imagen")
+    return Response(r[0], media_type=r[1] or "image/png", headers={"Cache-Control": "public, max-age=604800"})
 
 @app.get("/api/sports")
 async def sports():

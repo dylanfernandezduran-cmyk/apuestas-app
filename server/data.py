@@ -75,7 +75,7 @@ def local_date_str(iso):
     d = parse_dt(iso)
     return d.astimezone(CDMX).strftime("%Y-%m-%d") if d else None
 
-async def list_games(league, days=None, include_past_today=True):
+async def _list_games(league, days=None, include_past_today=True):
     cfg = LEAGUES[league]
     if cfg["family"] == "tennis": return await tennis_games(league)
     days = cfg["days"] if days is None else days
@@ -112,14 +112,25 @@ async def tennis_events(league):
     d = await get_json(f"{ESPN}/{LEAGUES[league]['path']}/scoreboard", ttl=30)
     return (d or {}).get("events", []), d is not None
 
+HEADSHOT = "https://a.espncdn.com/i/headshots/tennis/players/full/{}.png"
+
 def _t_side(c, rk):
     a = c.get("athlete") or {}
     aid = str(c.get("id") or "")
     r = rk.get(aid, {})
     return dict(id=aid, name=a.get("displayName") or SD, short=a.get("shortName") or a.get("displayName"), abbr=None,
-                logo=(a.get("flag") or {}).get("href"), country=(a.get("flag") or {}).get("alt"), rank=r.get("rank"), points=r.get("points"),
+                logo=(HEADSHOT.format(aid) if aid else None), flag=(a.get("flag") or {}).get("href"), country=(a.get("flag") or {}).get("alt"), rank=r.get("rank"), points=r.get("points"),
                 score=None, winner=c.get("winner"), sets=[int(x["value"]) for x in c.get("linescores", []) if x.get("value") is not None],
                 record=(f"#{r['rank']} ATP/WTA" if r.get("rank") else None))
+
+async def list_games(league, days=None, include_past_today=True):
+    r = await _list_games(league, days, include_past_today)
+    try:
+        from . import record as _rec_mod
+        _rec_mod.remember_logos(league, r[0] if isinstance(r, tuple) else r)
+    except Exception:
+        pass
+    return r
 
 async def tennis_games(league):
     evs, ok = await tennis_events(league)

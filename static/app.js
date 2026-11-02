@@ -134,6 +134,12 @@ function stBadge(g){ return g.state==='in'?`<span class="badge b-live">● EN VI
 const isSoc = g => !!g && g.sport==='futbol';
 const sides = g => isSoc(g) ? ['home','away'] : ['away','home'];
 const vsMark = g => isSoc(g) ? 'vs' : '@';
+// ---- logos de equipo / foto de jugador (ESPN, vía /api/img: reducidas + caché). Sin imagen o si falla -> círculo con iniciales, mismo tamaño (sin saltos de layout)
+const imgSrc = (u,w) => `/api/img?w=${w||64}&u=${encodeURIComponent(u)}`;
+const initials = n => { const w=String(n||'').replace(/\(.*?\)/g,' ').split(/[\s.\-]+/).filter(Boolean); if(!w.length) return '?'; return (w.length>1 ? w[0][0]+w[w.length-1][0] : w[0].slice(0,2)).toUpperCase(); };
+const badge = (t,s) => { s=s||22; t=t||{}; const u=t.logo, ini=initials(t.name||t.short), ph=u&&/\/headshots\//.test(u);
+  return `<span class="tl${u?'':' ini'}${ph?' ph':''}" style="--s:${s}px" data-i="${esc(ini)}">${u?`<img src="${esc(imgSrc(u,s*2))}" width="${s}" height="${s}" loading="lazy" decoding="async" alt="" onerror="this.parentNode.classList.add('ini');this.remove()">`:''}</span>`; };
+const matchup = (g,short) => sides(g).map(sd=>`<span class="mu">${badge(g[sd],16)}<span>${esc(short?(g[sd].short||g[sd].name):g[sd].name)}</span></span>`).join(` <span class="vs">${vsMark(g)}</span> `);
 const tn = t => (t&&(t.abbr||t.short))||((t&&t.name)||'').split(' ').slice(-1)[0];
 const shortLbl = (l,g) => { let x=String(l||''); [g.away,g.home].forEach(t=>{ if(t&&t.name&&t.name.length>3) x=x.split(t.name).join(tn(t)); }); return x.replace(/\s*\((visitante|local)\)/g,'').trim(); };
 const MKL = {ml:'ML',spread:'SPR',total:'TOT',sspread:'HÁN',stotal:'TOT',dc:'DC',btts:'BTTS'};
@@ -181,7 +187,7 @@ function gameCard(g){
   GAMES[g.id]=g;
   const sc = g.state!=='pre', o=g.odds;
   const team=(t,side)=>{ const ml=o&&o.ml?o.ml[side]:null;
-    return `<div class="tm">${t.logo?`<img src="${esc(t.logo)}" loading="lazy" alt="">`:'<span style="width:22px;flex:none"></span>'}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(g.sport==='tenis'?(t.sets||[]).join(' '):(t.score??''))}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
+    return `<div class="tm">${badge(t,22)}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(g.sport==='tenis'?(t.sets||[]).join(' '):(t.score??''))}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
   const where=[g.note||g.league_name, g.venue].filter(Boolean).map(esc).join(' · ');
   const live=g.state==='in', chips=[injChip(g), `<span class="wxc" data-id="${esc(g.id)}"></span>`].filter(Boolean).join('');
   const tennisWd = g.wd ? `<div class="sub" style="margin-top:6px">⚠️ ${esc(g.wd)}</div>` : '';
@@ -196,7 +202,7 @@ function gameCard(g){
 
 // ------------------------------------------------------------ juego
 function heroSide(g,d,sd){ const t=g[sd];
-  return `<div>${t.logo?`<img src="${esc(t.logo)}" alt="">`:''}<div class="n">${esc(t.name)}</div><div class="sub">${esc(t.record||'')}${d.kind==='tennis'&&t.rank?` · #${t.rank} ranking · ${t.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(d.kind==='tennis'?(t.sets||[]).join(' '):(t.score??''))}</div>`:''}</div>`; }
+  return `<div>${badge(t,52)}<div class="n">${esc(t.name)}</div><div class="sub">${esc(t.record||'')}${d.kind==='tennis'&&t.rank?` · #${t.rank} ranking · ${t.points} pts`:''}</div>${g.state!=='pre'?`<div class="big mono" style="font-size:26px">${esc(d.kind==='tennis'?(t.sets||[]).join(' '):(t.score??''))}</div>`:''}</div>`; }
 async function viewGame(league, id, silent){
   if(!silent) loading('Analizando partido con datos reales…');
   const d = await api(`/api/game/${encodeURIComponent(league)}/${id}`);
@@ -380,6 +386,9 @@ function recordCard(d){
 
 // ------------------------------------------------------------ récord / historial
 let RECF = {sport:'', type:'', basis:'', days:''};
+const recMatch = r => { const H={name:r.home,logo:r.home_logo}, A={name:r.away,logo:r.away_logo}, soc=r.sport==='futbol';
+  const m=(t)=>`<span class="mu">${badge(t,16)}<span>${esc(t.name)}</span></span>`;
+  return (soc?[H,A]:[A,H]).map(m).join(` <span class="vs">${soc?'vs':'@'}</span> `); };
 async function viewRecord(){
   SPORTS = SPORTS || await api('/api/sports');
   loading('Cargando récord…');
@@ -404,7 +413,7 @@ async function viewRecord(){
    <button class="btn" onclick="gradeNow(this)">🔄 Calificar ahora</button> <span class="sub">Automático cada ${d.grading.every_min} min${d.grading.last?' · última '+tsFmt(d.grading.last):''}</span></div>`;
   if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
   else html+=`<div class="day">Últimos picks calificados</div><div class="rec-list">`+d.recent.map(r=>`<div class="rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
-     <div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div><div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
+     <div class="rl-m">${recMatch(r)}</div><div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div><div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
      <div class="rr">${r.status==='PENDIENTE'&&g.state==='in'?(provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)):gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
   $app.innerHTML=html;
 }
@@ -425,7 +434,7 @@ async function viewPicks(scope){
     const det=(sg_||nb)?`<div class="gp"><div class="tg" role="button" tabindex="0">Señales y mercados${nb?` (${nb})`:''}</div><div class="sg">${sigH}${nb?briefRows(r.brief,g,[]):''}</div></div>`:'';
     return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div class="pkt">${st[0]} ${esc(l.label)} <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span></div>
     <div class="pke mono ${l.edge>0?'pos':'mut'}">${l.edge==null?SD:sg(l.edge)+'pp'}<small>edge</small></div></div>
-    <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}<span class="sub">${esc(g.league_name)} · ${esc(sides(g).map(sd=>g[sd].name).join(' '+vsMark(g)+' '))} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
+    <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}<span class="sub">${esc(g.league_name)} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
     <div class="stat mono">Modelo ${pct(l.p_model)} · s/vig ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${det}</a>`; };
   let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por estado, edge y confianza. <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;

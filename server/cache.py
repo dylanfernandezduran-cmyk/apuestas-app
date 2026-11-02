@@ -23,15 +23,49 @@ def fetched_at(url, params=None):
     ent = _store.get(_key(url, params))
     return ent[0] if ent else None
 
-def _curl_run(full_url, headers):
+def _curl_raw(full_url, headers, accept="application/json"):
     exe = shutil.which("curl") or shutil.which("curl.exe")
     if not exe: return None
-    args = [exe, "-sS", "-L", "--compressed", "--max-time", "20", "-H", "Accept: application/json", "-w", "\n%{http_code}"]
+    args = [exe, "-sS", "-L", "--compressed", "--max-time", "20", "-H", f"Accept: {accept}", "-w", "\n%{http_code}"]
     for k, v in (headers or {}).items(): args += ["-H", f"{k}: {v}"]
     r = subprocess.run(args + [full_url], capture_output=True, timeout=30)
     body, _, code = r.stdout.rpartition(b"\n")
     if code.strip() != b"200": return None
-    return json.loads(body)
+    return body
+
+def _curl_run(full_url, headers):
+    body = _curl_raw(full_url, headers)
+    return None if body is None else json.loads(body)
+
+async def fetch_bytes(url: str, headers: dict | None = None):
+    """GET binario (imágenes). Devuelve (bytes, content_type) o None. Mismo respaldo con curl si ESPN/Akamai da 403 a httpx."""
+    blocked = time.time() < _curl_until
+    if not blocked:
+        try:
+            async with _sem:
+                r = await client().get(url, headers=headers)
+            if r.status_code == 200 and r.content:
+                return r.content, r.headers.get("content-type", "").split(";")[0].strip()
+            if r.status_code != 403:
+                return None
+            blocked = True
+        except Exception:
+            return None
+    try:
+        async with _sem:
+            body = await asyncio.to_thread(_curl_raw, url, headers, "image/*")
+    except Exception:
+        return None
+    if not body: return None
+    STATS["curl"] += 1
+    return body, _sniff(body)
+
+def _sniff(b: bytes):
+    if b[:8] == b"\x89PNG\r\n\x1a\n": return "image/png"
+    if b[:3] == b"\xff\xd8\xff": return "image/jpeg"
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP": return "image/webp"
+    if b[:6] in (b"GIF87a", b"GIF89a"): return "image/gif"
+    return ""
 
 async def _curl_get(url, params=None, headers=None):
     """Respaldo cuando httpx recibe 403 (bloqueo por huella TLS de Python): mismo GET público con curl del sistema. None si falla."""

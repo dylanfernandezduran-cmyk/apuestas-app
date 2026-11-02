@@ -32,6 +32,7 @@ def _c():
             UNIQUE(league, eid, market, selection))""")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_status ON picks(status, start_ts)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_game ON picks(league, eid)")
+        c.execute("CREATE TABLE IF NOT EXISTS team_logos(league TEXT, team_id TEXT, logo TEXT, PRIMARY KEY(league, team_id))")
         # fútbol: el marcador guardado como "visitante X @ local Y" pasa a "local Y - X visitante" (local primero)
         c.execute("""UPDATE picks SET score_text = home || ' ' || CAST(final_home AS INTEGER) || ' - ' || CAST(final_away AS INTEGER) || ' ' || away
                      WHERE sport='futbol' AND score_text LIKE '% @ %' AND final_home IS NOT NULL AND final_away IS NOT NULL""")
@@ -169,7 +170,30 @@ def query(sport=None, typ=None, days=None, limit=60, league=None, basis=None):
     if typ in ("main", "suggestion"): w.append("type=?"); a.append(typ)
     if basis in ("modelo", "mercado"): w.append("basis=?"); a.append(basis)
     if days: w.append("start_ts>=?"); a.append(int(time.time() - days * 86400))
-    return _rows(f"SELECT * FROM picks WHERE {' AND '.join(w)} ORDER BY start_ts DESC, id DESC LIMIT ?", (*a, limit))
+    return _rows(f"SELECT p.*, (SELECT logo FROM team_logos t WHERE t.league=p.league AND t.team_id=p.home_id) AS home_logo, "
+                 f"(SELECT logo FROM team_logos t WHERE t.league=p.league AND t.team_id=p.away_id) AS away_logo "
+                 f"FROM picks p WHERE {' AND '.join(w)} ORDER BY start_ts DESC, id DESC LIMIT ?", (*a, limit))
+
+# ------------------------------------------------------------------ logos de equipos (para el récord: los picks sólo guardan ids)
+_LOGO_SEEN = {}
+
+def remember_logos(league, games):
+    """Guarda (liga, id de equipo) -> logo/foto vistos en los marcadores, para mostrarlos en el historial. Sólo escribe si cambió."""
+    new = []
+    for g in games or []:
+        for sd in ("home", "away"):
+            t = g.get(sd) or {}
+            tid, lg = str(t.get("id") or ""), t.get("logo")
+            if tid and lg and _LOGO_SEEN.get((league, tid)) != lg:
+                _LOGO_SEEN[(league, tid)] = lg; new.append((league, tid, lg))
+    if not new: return 0
+    with history._lock:
+        c = _c()
+        if c is None: return 0
+        c.execute("CREATE TABLE IF NOT EXISTS team_logos(league TEXT, team_id TEXT, logo TEXT, PRIMARY KEY(league, team_id))")
+        c.executemany("INSERT OR REPLACE INTO team_logos(league, team_id, logo) VALUES (?,?,?)", new)
+        c.commit()
+    return len(new)
 
 def summary(sport=None, typ=None, days=None, basis=None):
     """Récord agregado. Medio ganado = 0.5 G + 0.5 E; medio perdido = 0.5 P + 0.5 E (se muestran como decimales sólo si existen)."""
