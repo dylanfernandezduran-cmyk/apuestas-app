@@ -1,0 +1,14 @@
+.venv/
+venv/
+bin/
+screens/
+__pycache__/
+*.pyc
+*.log
+*.pid
+.watchdog.sh
+publish.sh
+shots.py
+.env
+*.zip
+.DS_Store
