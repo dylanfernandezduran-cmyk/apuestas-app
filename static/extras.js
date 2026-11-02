@@ -52,20 +52,20 @@ function lineTable(d){
   const cell=(a,i)=>`<td class="mono">${a[i]==null?'':esc(a[i])}</td>`;
   const row=(t,a,tot)=>`<tr><td>${esc(t.abbr||t.short||t.name)}</td>${Array.from({length:n},(_,i)=>cell(a,i)).join('')}${tot==null?'':`<td class="mono tot">${esc(tot)}</td>`}</tr>`;
   const T=d.kind==='tennis'?false:true;
-  return `<div class="tbl"><table class="ls"><thead><tr><th></th>${lab.map(x=>`<th>${x}</th>`).join('')}${T?'<th>T</th>':''}</tr></thead><tbody>${row(g.away,A,T?g.away.score:null)}${row(g.home,H,T?g.home.score:null)}</tbody></table></div>`;
+  return `<div class="tbl"><table class="ls"><thead><tr><th></th>${lab.map(x=>`<th>${x}</th>`).join('')}${T?'<th>T</th>':''}</tr></thead><tbody>${sides(g).map(sd=>sd==='away'?row(g.away,A,T?g.away.score:null):row(g.home,H,T?g.home.score:null)).join('')}</tbody></table></div>`;
 }
 function statRows(d){
-  const g=d.game, S=(d.live&&d.live.stats)||[]; if(!S.length) return '';
+  const g=d.game, S=(d.live&&d.live.stats)||[]; if(!S.length) return ''; const [f1,f2]=sides(g);
   const nv=x=>{ const v=parseFloat(String(x).replace(/[^0-9.\-]/g,'')); return isNaN(v)?null:v; };
-  return `<div class="cmpst"><div class="cmph"><span>${esc(g.away.abbr||g.away.short)}</span><span></span><span>${esc(g.home.abbr||g.home.short)}</span></div>${S.map(r=>{
-    const a=nv(r.away), h=nv(r.home), tot=(a!=null&&h!=null&&a+h>0)?a+h:null, pa=tot?Math.round(a/tot*100):50;
-    return `<div class="cmpr"><span class="v mono ${tot&&a>h?'lead':''}">${esc(r.away??SD)}</span><span class="l">${esc(r.label)}</span><span class="v mono ${tot&&h>a?'lead':''}">${esc(r.home??SD)}</span>${tot?`<div class="cb"><i style="width:${pa}%"></i></div>`:''}</div>`; }).join('')}</div>`;
+  return `<div class="cmpst"><div class="cmph"><span>${esc(g[f1].abbr||g[f1].short)}</span><span></span><span>${esc(g[f2].abbr||g[f2].short)}</span></div>${S.map(r=>{
+    const a=nv(r[f1]), h=nv(r[f2]), tot=(a!=null&&h!=null&&a+h>0)?a+h:null, pa=tot?Math.round(a/tot*100):50;
+    return `<div class="cmpr"><span class="v mono ${tot&&a>h?'lead':''}">${esc(r[f1]??SD)}</span><span class="l">${esc(r.label)}</span><span class="v mono ${tot&&h>a?'lead':''}">${esc(r[f2]??SD)}</span>${tot?`<div class="cb"><i style="width:${pa}%"></i></div>`:''}</div>`; }).join('')}</div>`;
 }
 function topRows(d){
   const T=d.live&&d.live.top; if(!T) return '';
   const g=d.game, one=(t)=>{ const rows=T[t.id]||[]; if(!rows.length) return '';
     return `<div><div class="sub"><b>${esc(t.name)}</b> · mejores del juego</div>${rows.map(r=>`<div class="row"><span>${esc(r.name)}</span><span class="mono">${r.pts} pts${r.reb!=null?` · ${esc(r.reb)} reb`:''}${r.ast!=null?` · ${esc(r.ast)} ast`:''}</span></div>`).join('')}</div>`; };
-  const x=one(g.away)+one(g.home); return x?`<div class="two" style="margin-top:12px">${x}</div>`:'';
+  const x=sides(g).map(sd=>one(g[sd])).join(''); return x?`<div class="two" style="margin-top:12px">${x}</div>`:'';
 }
 function liveSection(d){
   const L=d.live, g=d.game; if(!L) return '';
@@ -102,7 +102,7 @@ function injSection(d){
   const any=['home','away'].some(s=>f.sides[s]&&(f.sides[s].entries||[]).length);
   if(!f.supported&&!any) return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones y suspensiones</h2><div class="mut">ESPN no publica lesiones ni suspensiones para esta liga (${SD}). Revisa las noticias del equipo antes del partido.</div></div>`;
   const since = f.tracking_since ? `Seguimiento propio desde ${fmtDMH(f.tracking_since)} CDMX: «Regresa» = el jugador salió del reporte de ESPN o mejoró de estado en los últimos 10 días (puede ser alta médica, o que fue cortado/traspasado; no es una confirmación de que jugará).` : '';
-  return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones ${f.fetched?`<span class="badge b-fin">ESPN · ${fmtHMS(f.fetched)}</span>`:''}</h2><div class="two">${injSide(d.game.away,'away',f)}${injSide(d.game.home,'home',f)}</div>
+  return `<div class="card" style="margin-top:10px"><h2>🩹 Lesiones ${f.fetched?`<span class="badge b-fin">ESPN · ${fmtHMS(f.fetched)}</span>`:''}</h2><div class="two">${sides(d.game).map(sd=>injSide(d.game[sd],sd,f)).join('')}</div>
     <div class="sub" style="margin-top:8px">Baja = Out / reserva de lesionados / suspendido · Dudoso · Duda leve = cuestionable / día a día. ⭐ clave = líder estadístico del equipo.</div>${since?`<div class="sub" style="margin-top:4px">${since}</div>`:''}</div>`;
 }
 
@@ -148,7 +148,7 @@ function lineupSide(T, S, d, side){
 function lineupsSection(d){
   const L=d.lineups; if(!L||!L.sides) return '';
   const g=d.game, ttl = g.sport==='nhl'?'Porteros':g.sport==='mlb'?'Alineaciones y abridores':g.sport==='nfl'?'Profundidad de plantilla':'Alineaciones';
-  return `<div class="card" style="margin-top:10px"><h2>🧑‍🤝‍🧑 ${ttl}</h2><div class="two">${lineupSide(g.away,L.sides.away,d,'away')}${lineupSide(g.home,L.sides.home,d,'home')}</div>${L.note?`<div class="sub" style="margin-top:8px">${esc(L.note)}</div>`:''}
+  return `<div class="card" style="margin-top:10px"><h2>🧑‍🤝‍🧑 ${ttl}</h2><div class="two">${sides(g).map(sd=>lineupSide(g[sd],L.sides[sd],d,sd)).join('')}</div>${L.note?`<div class="sub" style="margin-top:8px">${esc(L.note)}</div>`:''}
     <div class="sub" style="margin-top:6px">✅ confirmada = publicada por ESPN · ❓ proyectada = deducida del último juego real, puede cambiar. Los cambios se comparan contra la foto anterior guardada por el servidor.</div></div>`;
 }
 
@@ -165,7 +165,7 @@ const liveRowHtml = g => {
   const pv = Object.values(g.prov||{}); const main=(g.rec||[]).find(r=>r.type==='main');
   const mp = main && provBadge(g.prov, main.market, main.selection);
   const t=(x)=>`<div class="lr-t"><span class="nm">${esc(x.short||x.name)}</span><span class="sc mono">${x.score!=null&&x.score!==''?esc(x.score):(x.sets&&x.sets.length?esc(x.sets.join(' ')):'')}</span></div>`;
-  return `<a class="card lrow" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="lr-h"><span class="badge b-live">● ${esc((g.live&&g.live.text)||g.status||'EN VIVO')}</span><span class="sub">${esc(g.league_name)}</span></div>${t(g.away)}${t(g.home)}${g.live&&g.live.situation?`<div class="sub">${esc(g.live.situation.text)}</div>`:''}${mp?`<div style="margin-top:6px"><span class="sub">${esc(shortLbl(main.label,g))}</span> ${mp}</div>`:''}</a>`; };
+  return `<a class="card lrow" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="lr-h"><span class="badge b-live">● ${esc((g.live&&g.live.text)||g.status||'EN VIVO')}</span><span class="sub">${esc(g.league_name)}</span></div>${sides(g).map(sd=>t(g[sd])).join('')}${g.live&&g.live.situation?`<div class="sub">${esc(g.live.situation.text)}</div>`:''}${mp?`<div style="margin-top:6px"><span class="sub">${esc(shortLbl(main.label,g))}</span> ${mp}</div>`:''}</a>`; };
 
 async function viewHome(){
   SPORTS = SPORTS || await api('/api/sports');
@@ -201,7 +201,7 @@ async function viewHome(){
       const it = (p.items||[]).filter(x=>x.status==='PICK'||x.status==='LEAN').slice(0,3);
       const el=document.getElementById('hm-picks'); if(!el) return;
       el.innerHTML = `<h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3>` + (it.length ? it.map(x=>{ const g=x.game, l=x.lean;
-        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${esc(g.away.short||g.away.name)} @ ${esc(g.home.short||g.home.name)} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks con ventaja suficiente hoy (o los juegos de hoy ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
+        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${sides(g).map(sd=>esc(g[sd].short||g[sd].name)).join(' '+vsMark(g)+' ')} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks con ventaja suficiente hoy (o los juegos de hoy ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
     }catch(e){ const el=document.getElementById('hm-picks'); if(el) el.innerHTML=`<h3>Mejores picks de hoy</h3><div class="card mut">${SD}</div>`; }
   };
   fillHome(true);

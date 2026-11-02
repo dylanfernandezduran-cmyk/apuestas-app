@@ -32,6 +32,9 @@ def _c():
             UNIQUE(league, eid, market, selection))""")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_status ON picks(status, start_ts)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_game ON picks(league, eid)")
+        # fútbol: el marcador guardado como "visitante X @ local Y" pasa a "local Y - X visitante" (local primero)
+        c.execute("""UPDATE picks SET score_text = home || ' ' || CAST(final_home AS INTEGER) || ' - ' || CAST(final_away AS INTEGER) || ' ' || away
+                     WHERE sport='futbol' AND score_text LIKE '% @ %' AND final_home IS NOT NULL AND final_away IS NOT NULL""")
         c.commit(); _ready = True
     return c
 

@@ -188,10 +188,16 @@ def grade_row(row, res, now=None):
     # marcador mostrado: local-visitante como en el título "visitante @ local"
     if row["sport"] == "tenis":
         txt = f"{res['score_text']} ({row['home']} vs {row['away']})"
+    elif row["sport"] == "futbol":
+        txt = score_line_futbol(row["home"], res["home"], res["away"], row["away"])    # fútbol: local primero
     else:
         txt = f"{row['away']} {res['away']} @ {row['home']} {res['home']}"
     note = res.get("note")
     return (st, R.profit(st, row["odds"]), txt, res["home"], res["away"], note)
+
+def score_line_futbol(home, hs, as_, away):
+    """Fútbol: el primer equipo es el local -> 'Local 2 - 1 Visitante' (el marcador sigue el orden de los equipos)."""
+    return f"{home} {hs} - {as_} {away}"
 
 async def grade_pending(now=None, limit=500):
     """Califica todo lo pendiente cuyo juego ya empezó. Agrupa por juego (una consulta por juego). Devuelve resumen."""
