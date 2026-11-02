@@ -1,3 +1,13 @@
+---
+title: Apuestas App
+emoji: 🎯
+colorFrom: green
+colorTo: gray
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🎯 Picks Terminal — app de picks deportivos (MVP)
 
 Eliges deporte → juego → ves estadísticas, tendencias, cuotas (con probabilidad sin vig) y **Mejores picks**.

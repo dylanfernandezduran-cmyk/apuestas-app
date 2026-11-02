@@ -1,0 +1,11 @@
+.venv
+bin
+screens
+*.log
+*.pid
+.git
+__pycache__
+shots.py
+publish.sh
+.watchdog.sh
+*.zip
