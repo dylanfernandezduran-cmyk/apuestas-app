@@ -9,31 +9,33 @@ a = sys.argv[1:]
 def opt(n, d): return a[a.index(n) + 1] if n in a else d
 sheet = opt("--sheet", os.path.join(S, "logos_ojo_options.png")); prefix = opt("--prefix", "logo_ojo_")
 names = [x for i, x in enumerate(a) if not x.startswith("--") and (i == 0 or not a[i - 1].startswith("--"))]
+title = opt("--title", f"Ojo que todo lo ve · {len(names)} opciones"); phones = opt("--phones", ",".join(names)).split(",")
 cfg = json.load(open(os.path.join(B, "brand.json"), encoding="utf-8")); bg = cfg["theme"]["bg"]
 def glyph(k): return open(os.path.join(B, k, "glyph.svg"), encoding="utf-8").read()
 def b64(k, f): return "data:image/png;base64," + base64.b64encode(open(os.path.join(B, k, "icons", f), "rb").read()).decode()
 cards = ""
 for k in names:
     o = cfg["options"][k]; g = glyph(k)
-    cards += f'''<section class="opt"><div class="big">{g}</div><div class="nm">{o["name"]}</div><div class="tg">{html.escape(o["tagline"])}</div>
+    cards += f'''<section class="opt"><div class="lb">{html.escape(o.get("label", ""))}</div><div class="big">{g}</div><div class="nm">{o["name"]}</div><div class="sh">{o.get("short", "")}</div><div class="tg">{html.escape(o["tagline"])}</div>
 <div class="row"><div class="ic"><img src="{b64(k, "apple-touch-icon.png")}"><small>icono 180</small></div><div class="ic"><img class="s32" src="{b64(k, "favicon-32.png")}"><small>32 px</small></div>
-<div class="ic"><span class="s16">{g}</span><small>16 px</small></div></div><p>{html.escape(o["desc"])}</p></section>'''
+<div class="ic"><span class="s16">{g}</span><small>16 px</small></div></div>
+<div class="lock"><span class="lm">{g}</span><span><b>{o.get("short", o["name"])}</b><i>{o["name"]}</i></span></div><p>{html.escape(o["desc"])}</p></section>'''
 css = f'''*{{box-sizing:border-box}}body{{margin:0;background:{bg};color:#e6ebf2;font:15px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;padding:32px 28px}}
 h1{{font-size:22px;margin:0 0 4px}}.sub{{color:#8b95a7;margin:0 0 22px;font-size:13px}}
-.grid{{display:grid;grid-template-columns:repeat({min(len(names),4)},1fr);gap:16px}}.opt{{background:#121722;border:1px solid #1f2735;border-radius:16px;padding:22px 18px}}
+.grid{{display:grid;grid-template-columns:repeat({len(names)},1fr);gap:16px}}.opt{{background:#121722;border:1px solid #1f2735;border-radius:16px;padding:22px 18px}}
 .big{{width:150px;height:150px;margin:0 auto 14px;background:{bg};border-radius:32px;padding:20px;border:1px solid #1f2735}}.big svg,.s16 svg{{width:100%;height:100%;display:block}}
-.nm{{font-size:24px;font-weight:700;text-align:center}}.tg{{color:#34d399;text-align:center;margin-bottom:16px;font-size:13px}}
+.nm{{font-size:19px;font-weight:700;text-align:center}}.sh{{text-align:center;letter-spacing:.28em;font-weight:800;font-size:13px;color:#8b95a7;margin:2px 0}}.lb{{font-size:11px;color:#8b95a7;text-align:center;margin-bottom:8px}}.lock{{display:flex;align-items:center;gap:10px;justify-content:center;margin:0 0 12px;padding:10px;border-radius:12px;background:{bg}}}.lock .lm{{width:34px;height:34px}}.lock .lm svg{{width:100%;height:100%}}.lock b{{display:block;font-size:17px;letter-spacing:.08em}}.lock i{{display:block;font-style:normal;font-size:9.5px;color:#8b95a7;letter-spacing:.06em}}.tg{{color:#34d399;text-align:center;margin-bottom:16px;font-size:13px}}
 .row{{display:flex;align-items:flex-end;gap:14px;justify-content:center;margin:6px 0 14px}}.ic{{display:flex;flex-direction:column;align-items:center;gap:6px}}.ic small{{color:#6b7587;font-size:10.5px}}
 .ic img:not(.s32){{width:60px;height:60px;border-radius:13.4px}}.s32{{width:32px;height:32px}}.s16{{display:inline-block;width:16px;height:16px;margin-bottom:8px}}
 p{{color:#aab3c2;font-size:12.5px;margin:0}}'''
-doc = f'<!doctype html><meta charset="utf-8"><style>{css}</style><h1>Ojo que todo lo ve · {len(names)} opciones</h1><p class="sub">Minimalista, fondo oscuro, un solo acento verde. Se ven igual de claras a 180 px, 32 px y 16 px.</p><div class="grid">{cards}</div>'
+doc = f'<!doctype html><meta charset="utf-8"><style>{css}</style><h1>{html.escape(title)}</h1><p class="sub">Minimalista, fondo oscuro, un solo acento de color. Probado a 180 px, 32 px y 16 px.</p><div class="grid">{cards}</div>'
 def phone(k):
     o = cfg["options"][k]; ph = ["Mapas", "Notas", "Clima", "Fotos", "Reloj", "Cámara", "Correo", "Agenda", "Música", "Archivos", "Ajustes", "Salud", "Billetera", "Libros", "Brújula", "Tienda", "Teléfono", "Mensajes", "Contactos", "Podcasts", "Calculadora", "Voz", "Safari", "Atajos", "Wallet", "Casa"]
     hues = [212, 28, 190, 330, 250, 160, 12, 280, 350, 45, 220, 140, 200, 20, 100, 205, 120, 300, 40, 260, 170, 10, 230, 60, 320, 150, 80]
     cells = []
     for i in range(20):
         if i == 6:
-            cells.append(f'<div class="app"><img class="mine" src="{b64(k, "apple-touch-icon.png")}"><span>{o["name"]}</span></div>')
+            cells.append(f'<div class="app"><img class="mine" src="{b64(k, "apple-touch-icon.png")}"><span>{o.get("short", o["name"])}</span></div>')
         else:
             j = i - (1 if i > 6 else 0)
             cells.append(f'<div class="app"><div class="ph" style="background:hsl({hues[j]} 28% 30%)"></div><span>{ph[j]}</span></div>')
@@ -51,9 +53,9 @@ background:radial-gradient(120% 70% at 30% 0%,#1d3b3a 0%,#0e1a24 45%,#070b10 100
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     br = p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--no-sandbox"])
-    pg = br.new_page(viewport={"width": 280 * len(names) + 64 if len(names) < 4 else 1240, "height": 560}, device_scale_factor=2)
+    pg = br.new_page(viewport={"width": 1500 if len(names) > 4 else (280 * len(names) + 64 if len(names) < 4 else 1240), "height": 640}, device_scale_factor=2)
     pg.set_content(doc); pg.wait_for_timeout(300); pg.screenshot(path=sheet, full_page=True); pg.close()
-    for k in names:
+    for k in phones:
         pg = br.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2)
         pg.set_content(phone(k)); pg.wait_for_timeout(200); pg.screenshot(path=os.path.join(S, f"{prefix}{k}.png")); pg.close()
     br.close()

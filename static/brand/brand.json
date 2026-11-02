@@ -39,6 +39,48 @@
    "name": "Lince",
    "tagline": "Vista de lince en cada juego",
    "desc": "«Vista de lince» = ver hasta el último detalle. La pupila es una diana con retícula: precisión sobre el partido."
+  },
+  "nrnm": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "label": "Recomendada · A",
+   "desc": "Pirámide con el ojo que todo lo ve; la pupila es una pelota verde y la base es una línea de cancha. Es la variante A (tri_bola)."
+  },
+  "nrnm_oro": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "label": "Recomendada en dorado",
+   "desc": "Misma variante A con acento dorado (#e2b44f) en lugar de verde, más cerca del negro/dorado de la referencia. El resto de la app usa verde."
+  },
+  "tri_bola": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "label": "A · Ojo con pelota",
+   "desc": "Triángulo + ojo; pupila = pelota con costuras; la base se alarga como línea de cancha."
+  },
+  "tri_rayos": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "label": "B · Rayos y momios",
+   "desc": "Triángulo + ojo, pocos rayos finos y un + / − (momios) a los lados. Los rayos desaparecen a 16 px, el resto se lee."
+  },
+  "tri_avizor": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "label": "C · Ojo Avizor-base",
+   "desc": "El ojo Avizor (iris = pelota) es la base de la pirámide: sus esquinas son las esquinas del triángulo."
+  },
+  "tri_badge": {
+   "name": "No Risk No Money",
+   "short": "NRNM",
+   "tagline": "Riesgo medido, picks con datos",
+   "label": "D · Insignia monolínea",
+   "desc": "Aro + triángulo + ojo mínimo, un solo grosor; base (línea de cancha) y pupila en verde."
   }
  }
 }

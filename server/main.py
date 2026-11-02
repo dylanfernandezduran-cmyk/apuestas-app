@@ -291,7 +291,7 @@ def brand():
     act = os.environ.get("BRAND") or d["active"]
     if act not in d["options"]: act = d["active"]
     o = d["options"][act]
-    return dict(id=act, name=o["name"], tagline=o["tagline"], theme=d["theme"], options={k: dict(v) for k, v in d["options"].items()})
+    return dict(id=act, name=o["name"], short=o.get("short", o["name"]), tagline=o["tagline"], theme=d["theme"], options={k: dict(v) for k, v in d["options"].items()})
 
 @app.get("/api/brand")
 async def brand_api():
@@ -300,7 +300,7 @@ async def brand_api():
 @app.get("/manifest.webmanifest")
 async def manifest():
     b = brand(); i = "/static/brand/icons/"
-    return JSONResponse(dict(name=f"{b['name']} · picks deportivos", short_name=b["name"], description=b["tagline"], start_url="/", scope="/", display="standalone",
+    return JSONResponse(dict(name=f"{b['name']} · picks deportivos", short_name=b["short"], description=b["tagline"], start_url="/", scope="/", display="standalone",
                              orientation="portrait", background_color=b["theme"]["bg"], theme_color=b["theme"]["bg"], lang="es-MX",
                              icons=[dict(src=i + "icon-192.png", sizes="192x192", type="image/png", purpose="any"), dict(src=i + "icon-512.png", sizes="512x512", type="image/png", purpose="any"),
                                     dict(src=i + "maskable-512.png", sizes="512x512", type="image/png", purpose="maskable"), dict(src=i + "apple-touch-icon.png", sizes="180x180", type="image/png")]),
@@ -316,6 +316,6 @@ async def index():
     b = brand()
     html = open(os.path.join(STATIC, "index.html"), encoding="utf-8").read()
     glyph = open(os.path.join(STATIC, "brand", b["id"], "glyph.svg"), encoding="utf-8").read()
-    for k, v in (("__NAME__", b["name"]), ("__TAGLINE__", b["tagline"]), ("__BRAND_ID__", b["id"]), ("__GLYPH__", glyph), ("__BG__", b["theme"]["bg"])):
+    for k, v in (("__NAME__", b["name"]), ("__SHORT__", b["short"]), ("__TAGLINE__", b["tagline"]), ("__BRAND_ID__", b["id"]), ("__GLYPH__", glyph), ("__BG__", b["theme"]["bg"])):
         html = html.replace(k, v)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
