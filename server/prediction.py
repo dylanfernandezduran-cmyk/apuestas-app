@@ -1,10 +1,13 @@
 """Predicción NRNM: marcador proyectado + ganador + total + hándicap, DERIVADOS de las proyecciones del modelo (nada inventado).
- · Fútbol: matriz de Poisson de goles -> marcador más probable DENTRO del resultado 1X2 pronosticado.
- · NBA/NFL/NHL/MLB: margen y total proyectados por el modelo -> puntos/carreras por equipo redondeados (marcador exacto de mayor probabilidad cerca de la proyección).
- · Tenis: modelo de sets/juegos (ranking -> prob. de partido -> prob. de set -> prob. de juego) -> marcador por sets más probable.
-Total y hándicap sólo se muestran si existe línea de mercado. Se guarda ANTES de que empiece el juego (se actualiza mientras no haya empezado) y se bloquea al inicio.
+Marcador exacto (pt84u): el escenario CONDICIONADO más probable que cumple, a la vez, ganador + total + hándicap del propio juego (los picks PICK/LEAN fijan lado y línea;
+sin pick, la línea de mercado o la del modelo). Si no cabe todo, se sueltan primero las líneas derivadas del modelo y nunca un pick; la salida jamás se contradice
+(si una línea choca con el marcador se corrige y queda en `adjusted`, con `aligned` = pick|marcador).
+ · Fútbol: matriz de Poisson de goles -> marcador de mayor probabilidad dentro de la región factible (ej.: Más de 3.5 => ≥4 goles, Menos de 2.5 => ≤2).
+ · NBA/NFL/NHL/MLB: margen y total del modelo -> marcador de mayor probabilidad (normal bivariada) dentro de la región factible.
+ · Tenis: modelo de sets/juegos -> sets más probables y, dentro de ellos, el set por set más cercano a la media condicionada (juegos totales y hándicap coherentes), no la moda 6-4 6-4.
+Se guarda ANTES de que empiece el juego (se actualiza mientras no haya empezado) y se bloquea al inicio.
 Se califica con el marcador final real (mismas reglas de grading.py) en una tabla aparte `predictions` y su propio récord de aciertos."""
-import json, math, time
+import itertools, json, math, time
 from . import history, record as REC
 from .odds import norm_cdf
 from .model import pois_pmf, cover_normal, cover_matrix
@@ -12,16 +15,38 @@ from .model import pois_pmf, cover_normal, cover_matrix
 PT = ("ml", "total", "spread", "score")     # tipos de acierto: ganador, total, hándicap, marcador exacto
 
 # ------------------------------------------------------------------ construcción
+# El marcador exacto se elige DENTRO de la región que cumple las líneas del propio juego (ganador, total, hándicap; y los picks del modelo si los hay),
+# con la probabilidad real de cada marcador (Poisson / normal / sets-juegos). Si las líneas se contradicen entre sí, se descarta la de menor prioridad
+# y esa línea se corrige para que SIEMPRE concuerde con el marcador mostrado (nunca hay salidas contradictorias).
+def _ok(c, h, a):
+    k, s, L = c
+    if k == "w": return h == a if s == "draw" else ((h > a) if s == "home" else (a > h))
+    if k == "t": return (h + a > L) if s == "over" else (h + a < L)
+    d = h - a + L                                   # hándicap: L = línea del LOCAL
+    return d > 0 if s == "home" else d < 0
+
+def _cascade(cons):
+    """Subconjuntos de restricciones por prioridad lexicográfica: primero los que conservan la 1ª (picks del modelo, luego ganador, total, hándicap), etc."""
+    cs = list(cons)
+    for inc in itertools.product((True, False), repeat=len(cs)):
+        yield [c for c, k in zip(cs, inc) if k]
+
 def _soccer(mdl, odds, g):
     lh, la = mdl["lam_home"], mdl["lam_away"]
     ph, pa = pois_pmf(lh), pois_pmf(la)
     mat = [[a * b for b in pa] for a in ph]; tot = sum(map(sum, mat)); mat = [[x / tot for x in r] for r in mat]
     p = dict(home=mdl["p_home"], draw=mdl["p_draw"], away=mdl["p_away"])
     w = max(p, key=p.get)
-    cond = {"home": lambda i, j: i > j, "draw": lambda i, j: i == j, "away": lambda i, j: i < j}[w]
-    h, a = max(((i, j) for i in range(len(mat)) for j in range(len(mat)) if cond(i, j)), key=lambda x: mat[x[0]][x[1]])
-    out = dict(kind="poisson", winner=dict(side=w, p=p[w], probs=p), score=dict(home=h, away=a, p=mat[h][a]), proj=dict(home=lh, away=la, total=lh + la, margin=lh - la))
-    return out, mdl["total"], mdl["cover"]
+    N = len(mat)
+    def choose(cons):
+        for cs in _cascade(cons):
+            cells = [(i, j) for i in range(N) for j in range(N) if all(_ok(c, i, j) for c in cs)]
+            if cells:
+                h, a = max(cells, key=lambda x: mat[x[0]][x[1]])
+                return dict(home=h, away=a, p=mat[h][a], p_cond=mat[h][a] / sum(mat[i][j] for i, j in cells)), cs
+        return None, []
+    out = dict(kind="poisson", winner=dict(side=w, p=p[w], probs=p), proj=dict(home=lh, away=la, total=lh + la, margin=lh - la))
+    return out, mdl["total"], mdl["cover"], choose
 
 def _pmass(x, mu, sg): return norm_cdf((x + .5 - mu) / sg) - norm_cdf((x - .5 - mu) / sg)
 
@@ -30,16 +55,19 @@ def _margin(mdl, odds, g):
     hp, ap = (T + mu) / 2, (T - mu) / 2
     h0, a0 = max(0, int(round(hp))), max(0, int(round(ap)))
     w = "home" if mu >= 0 else "away"
-    best = None
-    for h in range(max(0, h0 - 8), h0 + 9):
-        for a in range(max(0, a0 - 8), a0 + 9):
-            if h == a or (h > a) != (w == "home"): continue
-            p = 2 * _pmass(h - a, mu, sg) * _pmass(h + a, T, ts)
-            if best is None or p > best[0]: best = (p, h, a)
-    if best is None: return None, None, None
+    def choose(cons):
+        for cs in _cascade(cons):
+            best = None; R = 14
+            for h in range(max(0, h0 - R), h0 + R + 1):
+                for a in range(max(0, a0 - R), a0 + R + 1):
+                    if h == a or not all(_ok(c, h, a) for c in cs): continue
+                    pr = 2 * _pmass(h - a, mu, sg) * _pmass(h + a, T, ts)
+                    if best is None or pr > best[0]: best = (pr, h, a)
+            if best: return dict(home=best[1], away=best[2], p=best[0]), cs
+        return None, []
     p = dict(home=mdl["p_home"], away=mdl["p_away"])
-    out = dict(kind="margen", winner=dict(side=w, p=p[w], probs=p), score=dict(home=best[1], away=best[2], p=best[0]), proj=dict(home=hp, away=ap, total=T, margin=mu))
-    return out, mdl["total"], mdl["cover"]
+    out = dict(kind="margen", winner=dict(side=w, p=p[w], probs=p), proj=dict(home=hp, away=ap, total=T, margin=mu))
+    return out, mdl["total"], mdl["cover"], choose
 
 # --- tenis: set/juego
 def _set_dist(pg):
@@ -90,23 +118,43 @@ def _tennis(mdl, odds, g):
     pg = _solve(lambda x: _match_win(x, bo), pm)
     dist = _match_dist(pg, bo); sd = _set_dist(pg)
     w = "home" if pm >= .5 else "away"
-    # resultado por sets más probable del ganador pronosticado
-    byres = {}
-    for (sa, sb, _, _), v in dist.items():
-        if (sa > sb) == (w == "home"): byres[(sa, sb)] = byres.get((sa, sb), 0) + v
-    sets_res = max(byres, key=byres.get)
-    nw, nl = (sets_res if w == "home" else sets_res[::-1])      # sets del ganador / del perdedor
-    win_sc = max(((a, b) for (a, b) in sd if (a > b) == (w == "home")), key=lambda k: sd[k])
-    los_sc = max(((a, b) for (a, b) in sd if (a > b) != (w == "home")), key=lambda k: sd[k])
-    # los sets son i.i.d. en el modelo: cualquier orden tiene la misma probabilidad; se muestra el perdedor ganando el 1º (patrón habitual) cuando hay 2-1
-    order = ["w"] * nw if nl == 0 else (["w", "l"] * 5)[:nw + nl - 1] + ["w"]
-    sets = [win_sc if o == "w" else los_sc for o in order]            # (juegos local, juegos visita) por set
-    p_seq = math.comb(nw + nl, nl) and 1.0
-    for sc in sets: p_seq *= sd[sc]
-    gh = sum(a for a, b in sets); ga = sum(b for a, b in sets)
     eg = sum((k[2] + k[3]) * v for k, v in dist.items()); em = sum((k[2] - k[3]) * v for k, v in dist.items())
+    def seqs(win, nw, nl):
+        """Secuencias set a set (juegos local, juegos visita) para un resultado de sets; p = producto real de P(marcador de set) (sets i.i.d.)."""
+        wsc = [k for k in sd if (k[0] > k[1]) == (win == "home")]; lsc = [k for k in sd if (k[0] > k[1]) != (win == "home")]
+        order = ["w"] * nw if nl == 0 else (["w", "l"] * 6)[:nw + nl - 1] + ["w"]      # con perdedor ganando sets intermedios (patrón habitual)
+        pools = [wsc if o == "w" else lsc for o in order]
+        for combo in itertools.product(*pools):
+            pr = 1.0
+            for c in combo: pr *= sd[c]
+            yield combo, pr
+    def choose(cons, win):
+        """Resultado de sets con más masa DENTRO de las líneas (total/hándicap de juegos) y, dentro de él, la secuencia set a set más probable que las cumple."""
+        gc = [c for c in cons if c[0] != "w"]
+        for cs in _cascade(gc):
+            mass = {}
+            for (sa, sb, ga, gb), v in dist.items():
+                if (sa > sb) == (win == "home") and all(_ok(c, ga, gb) for c in cs): mass[(sa, sb)] = mass.get((sa, sb), 0) + v
+            if not mass: continue
+            tot_w = sum(v for (sa, sb, _, _), v in dist.items() if (sa > sb) == (win == "home"))
+            res = max(mass, key=mass.get)
+            nw, nl = (res if win == "home" else res[::-1])
+            # media condicional (juegos del ganador / del perdedor) del resultado elegido dentro de las líneas: se muestra la secuencia set a set factible MÁS CERCANA
+            # a esa media (marcador representativo, no el pico artificial 6-4 6-4); empate -> la más probable
+            sel = [(k, v) for k, v in dist.items() if (k[0], k[1]) == res and all(_ok(c, k[2], k[3]) for c in cs)]
+            zt = sum(v for _, v in sel)
+            mh = sum(k[2] * v for k, v in sel) / zt; ma = sum(k[3] * v for k, v in sel) / zt
+            best = None
+            for combo, pr in seqs(win, nw, nl):
+                gh = sum(x[0] for x in combo); ga = sum(x[1] for x in combo)
+                if not all(_ok(c, gh, ga) for c in cs): continue
+                key = ((gh - mh) ** 2 + (ga - ma) ** 2, -pr)
+                if best is None or key < best[0]: best = (key, combo, gh, ga, pr)
+            if not best: continue
+            _, combo, gh, ga, pr = best
+            return dict(home=res[0], away=res[1], p=mass[res], p_cond=mass[res] / (sum(mass.values()) or 1), sets=[list(c) for c in combo], p_seq=pr, games=[gh, ga]), cs
+        return None, []
     out = dict(kind="tenis", winner=dict(side=w, p=max(pm, 1 - pm), probs=dict(home=pm, away=1 - pm)),
-               score=dict(home=nw if w == "home" else nl, away=nl if w == "home" else nw, p=byres[sets_res], sets=[list(s) for s in sets], p_seq=p_seq, games=[gh, ga]),
                proj=dict(total=eg, margin=em, pg=pg, best_of=bo))
     def total(t):
         win = sum(v for k, v in dist.items() if k[2] + k[3] > t); loss = sum(v for k, v in dist.items() if k[2] + k[3] < t)
@@ -114,32 +162,60 @@ def _tennis(mdl, odds, g):
     def cover(t):
         win = sum(v for k, v in dist.items() if (k[2] - k[3]) > t); loss = sum(v for k, v in dist.items() if (k[2] - k[3]) < t)
         z = win + loss; return (win / z, loss / z, 1 - z) if z else (.5, .5, 0)
-    return out, total, cover
+    return out, total, cover, (lambda cons: choose(cons, next((c[1] for c in cons if c[0] == "w"), w)))
 
-def build(game, mdl, odds, fam, corners=None):
-    """Predicción para un juego PRE o None si no hay modelo suficiente. corners: salida de corners_info() (sólo fútbol, datos reales de ESPN)."""
+def _pick_cons(picks):
+    """Picks accionables del propio juego (PICK o el lean si es LEAN/PICK) -> {mercado: (lado, línea propia)}; el mejor edge de cada mercado."""
+    if not picks: return {}
+    cands = list(picks.get("candidates") or [])
+    ok = [c for c in cands if c.get("status") == "PICK"]
+    lean = picks.get("lean")
+    if lean and picks.get("status") in ("PICK", "LEAN") and lean not in ok: ok.append(lean)
+    out = {}
+    for c in ok:
+        mk = c.get("market")
+        if mk in out or mk not in ("ML", "Spread", "Total"): continue
+        if c.get("side") in ("home", "away", "draw", "over", "under"): out[mk] = (c["side"], c.get("line"))
+    return out
+
+def build(game, mdl, odds, fam, corners=None, picks=None):
+    """Predicción para un juego PRE o None si no hay modelo suficiente. corners: salida de corners_info() (sólo fútbol, datos reales de ESPN).
+    picks: dict(lean, status, candidates) del propio juego: ganador/total/hándicap y el marcador exacto se alinean con ellos (sin contradicciones)."""
     if not mdl: return None
     try:
-        if fam == "tennis": out, total, cover = _tennis(mdl, odds, game)
-        elif fam == "soccer": out, total, cover = _soccer(mdl, odds, game)
-        else: out, total, cover = _margin(mdl, odds, game)
+        if fam == "tennis": out, total, cover, choose = _tennis(mdl, odds, game)
+        elif fam == "soccer": out, total, cover, choose = _soccer(mdl, odds, game)
+        else: out, total, cover, choose = _margin(mdl, odds, game)
     except Exception:
         return None
     if not out: return None
+    pk = _pick_cons(picks)
+    fixed = set()                              # líneas que siguen a un pick del modelo (prioridad alta para el marcador)
+    # ganador: sigue al pick ML si lo hay
+    if "ML" in pk and pk["ML"][0] in out["winner"]["probs"]:
+        sd_ = pk["ML"][0]
+        if sd_ != out["winner"]["side"]: out["winner"]["side"] = sd_; out["winner"]["p"] = out["winner"]["probs"][sd_]; out["winner"]["aligned"] = "pick"
+        fixed.add("w")
     tt = (odds or {}).get("total") or {}
     T, src = None, None
-    if "over" in tt and tt["over"].get("line") is not None and (tt["over"]["line"] * 4) % 2 == 0: T, src = tt["over"]["line"], "mercado"
+    if "Total" in pk and pk["Total"][1] is not None: T, src = pk["Total"][1], "mercado"
+    elif "over" in tt and tt["over"].get("line") is not None and (tt["over"]["line"] * 4) % 2 == 0: T, src = tt["over"]["line"], "mercado"
     elif fam == "soccer": T, src = 2.5, "modelo"          # sin línea de mercado: la línea estándar de fútbol (2.5), marcada como del modelo
+    elif fam == "tennis": T, src = math.floor(out["proj"]["total"]) + .5, "modelo"   # sin línea de mercado: mediana del modelo de juegos totales
     if T is not None:
         w, l, _ = total(T)
-        side = "over" if w >= l else "under"
-        out["total"] = dict(line=T, line_src=src, side=side, p=max(w, l), p_over=w, proj=out["proj"].get("total"), label=f"{'Más' if side == 'over' else 'Menos'} de {T:g}")
+        side = ("over" if w >= l else "under") if "Total" not in pk else pk["Total"][0]
+        out["total"] = dict(line=T, line_src=src, side=side, p=(w if side == "over" else l), p_over=w, proj=out["proj"].get("total"), label=f"{'Más' if side == 'over' else 'Menos'} de {T:g}")
+        if "Total" in pk: out["total"]["aligned"] = "pick"; fixed.add("t")
     sp = (odds or {}).get("spread") or {}
-    if "home" in sp and sp["home"].get("line") is not None and (sp["home"]["line"] * 4) % 2 == 0:
-        L = sp["home"]["line"]
-        ph, pa = cover(-L)[0], cover(-L)[1]
-        side = "home" if ph >= pa else "away"
-        out["spread"] = dict(line=L, line_src="mercado", side=side, p=max(ph, pa), p_home=ph, p_away=pa, proj=out["proj"].get("margin"))
+    SL = None
+    if "Spread" in pk and pk["Spread"][1] is not None: SL = pk["Spread"][1] if pk["Spread"][0] == "home" else -pk["Spread"][1]; ssrc = "mercado"
+    elif "home" in sp and sp["home"].get("line") is not None and (sp["home"]["line"] * 4) % 2 == 0: SL = sp["home"]["line"]; ssrc = "mercado"
+    if SL is not None and (SL * 4) % 2 == 0:
+        ph, pa = cover(-SL)[0], cover(-SL)[1]
+        side = ("home" if ph >= pa else "away") if "Spread" not in pk else pk["Spread"][0]
+        out["spread"] = dict(line=SL, line_src=ssrc, side=side, p=(ph if side == "home" else pa), p_home=ph, p_away=pa, proj=out["proj"].get("margin"))
+        if "Spread" in pk: out["spread"]["aligned"] = "pick"; fixed.add("s")
     elif fam == "soccer":
         # sin hándicap de mercado: el hándicap más exigente (−1.5 / −0.5) que el ganador pronosticado cubre con ≥50% según el modelo (línea del modelo)
         w = out["winner"]["side"]
@@ -149,6 +225,31 @@ def build(game, mdl, odds, fam, corners=None):
                 pc = cover(-L)[0] if w == "home" else cover(-L)[1]
                 if pc >= 0.5:
                     out["spread"] = dict(line=L, line_src="modelo", side=w, p=pc, p_home=cover(-L)[0], p_away=cover(-L)[1], proj=out["proj"].get("margin")); break
+    # --- marcador exacto: el más probable que cumple TODAS las líneas (picks primero, luego las del modelo)
+    cons = []
+    if "w" in fixed: cons.append(("w", out["winner"]["side"], None))
+    if "t" in fixed: cons.append(("t", out["total"]["side"], out["total"]["line"]))
+    if "s" in fixed: cons.append(("s", out["spread"]["side"], out["spread"]["line"]))
+    if "w" not in fixed: cons.append(("w", out["winner"]["side"], None))
+    if "t" not in fixed and out.get("total"): cons.append(("t", out["total"]["side"], out["total"]["line"]))
+    if "s" not in fixed and out.get("spread"): cons.append(("s", out["spread"]["side"], out["spread"]["line"]))
+    sc, kept = choose(cons)
+    if not sc: return None
+    out["score"] = sc
+    # --- coherencia final: toda línea descartada se corrige para concordar con el marcador mostrado
+    h, a = (sc["games"] if fam == "tennis" else (sc["home"], sc["away"]))
+    res_side = ("home" if sc["home"] > sc["away"] else "away" if sc["away"] > sc["home"] else "draw")
+    notes = []
+    if res_side != out["winner"]["side"]:
+        out["winner"]["side"] = res_side; out["winner"]["p"] = out["winner"]["probs"].get(res_side, 0); out["winner"]["aligned"] = "marcador"; notes.append("winner")
+    t = out.get("total")
+    if t and not _ok(("t", t["side"], t["line"]), h, a) and h + a != t["line"]:
+        t["side"] = "over" if h + a > t["line"] else "under"; t["p"] = t["p_over"] if t["side"] == "over" else 1 - t["p_over"]; t["aligned"] = "marcador"
+        t["label"] = f"{'Más' if t['side'] == 'over' else 'Menos'} de {t['line']:g}"; notes.append("total")
+    s_ = out.get("spread")
+    if s_ and not _ok(("s", s_["side"], s_["line"]), h, a) and h - a + s_["line"] != 0:
+        s_["side"] = "home" if h - a + s_["line"] > 0 else "away"; s_["p"] = s_["p_home"] if s_["side"] == "home" else s_["p_away"]; s_["aligned"] = "marcador"; notes.append("spread")
+    if notes: out["adjusted"] = notes
     if corners and fam == "soccer":
         c = corners; line = c["line"]; mu, sd = c["total"], c["sd"]
         w, l, _ = cover_normal(mu, sd, line)

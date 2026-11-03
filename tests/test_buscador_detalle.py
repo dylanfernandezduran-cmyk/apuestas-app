@@ -56,9 +56,9 @@ def test_fuente_ui_buscador_y_detalle_limpio():
         assert fn in dj
     assert "acc('🧠" not in js and "#app > .acc" not in css.split("Detalle premium (pt75u)")[-1]                  # sin acordeones en el detalle nuevo
     ds_ = dj[dj.index("function detailSections"):]
-    assert ds_.index("dPred") < ds_.index("dRec") < ds_.index("dPicks") and "p.corners" in dj
+    assert ds_.index("dPred") < ds_.index("dRec") < ds_.index("dPicks") < ds_.index("dProps") < ds_.index("dProb") and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
-    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js")] == ["17", "4", "14", "12"] and "shell-v18" in SRC["sw.js"]
+    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js")] == ["18", "5", "15", "12", "1"] and "shell-v19" in SRC["sw.js"]
     assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
 
 def _py_playwright():

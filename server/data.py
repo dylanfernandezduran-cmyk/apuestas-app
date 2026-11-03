@@ -209,9 +209,9 @@ async def tennis_detail(league, mid):
         M.apply_confidence(cands, conf)
         dec = M.decide(cands, mdl, A["name"], B["name"])
         if mk: MK.attach_signals(dec["candidates"], mk)
-        res["pred"] = PRED.build(g, mdl, odds, "tennis")
         res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label="Heurística por puntos de ranking (logística sobre ln de puntos)")
         res["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
+        res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=res["picks"])
     else:
         res["model"] = None
         res["picks"] = None
@@ -422,7 +422,7 @@ async def _analyze(league, eid):
         if fam == "soccer":
             try: cor = await PRED.corners_info(league, cfg["path"], tsum[H["id"]], tsum[A["id"]], H["id"], A["id"])
             except Exception: cor = None
-        out["pred"] = PRED.build(game, mdl, odds, fam, cor)
+        out["_cor"] = cor
     if game["state"] == "pre":
         cands = M.build_candidates(mdl, odds, H["name"], A["name"])
         dec = M.decide(cands, mdl, H["name"], A["name"])
@@ -431,6 +431,7 @@ async def _analyze(league, eid):
         dec = M.decide(cands, mdl, H["name"], A["name"])
         if mk: MK.attach_signals(dec["candidates"], mk)
         out["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
+        out["pred"] = PRED.build(game, mdl, odds, fam, out.pop("_cor", None), picks=out["picks"])
         out["probs"] = PR.build(game, mdl, odds, mk)
     else:
         out["picks"] = None

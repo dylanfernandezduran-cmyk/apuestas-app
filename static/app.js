@@ -64,6 +64,7 @@ async function route(){
     if(h[0]==='deportes'){ setNav('sports'); return await viewSports(); }
     if(h[0]==='deporte'){ setNav('sports'); return await viewSport(h[1], h[2]); }
     if(h[0]==='juego'){ setNav('sports'); return await viewGame(h[1], h[2]); }
+    if(h[0]==='prop'){ setNav('sports'); return await viewProp(h[1], h[2], h[3], h[4]); }
     if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'24h'); }
     if(h[0]==='record'){ setNav('record'); return await viewRecord(); }
     if(h[0]==='info'){ setNav('info'); return await viewInfo(); }
@@ -265,7 +266,7 @@ async function viewGame(league, id, silent){
   const st = silent ? {y:window.scrollY, open:[...document.querySelectorAll('#app > .fold')].map(c=>[keyOf(c), !c.classList.contains('closed')])} : null;
   $app.classList.add('gd');
   $app.innerHTML = html;
-  mvDraw(); foldCards();
+  mvDraw(); foldCards(); if(typeof propsInit==='function') propsInit();
   if(st){ const m=new Map(st.open); document.querySelectorAll('#app > .fold').forEach(c=>{ const k=keyOf(c); if(m.has(k)) c.classList.toggle('closed',!m.get(k)); }); window.scrollTo(0,st.y); }
   Live.start(async()=>{ if(!location.hash.startsWith('#/juego/')) return; try{ await viewGame(league,id,true); }catch(e){} }, 25000);
   if(!live) Live.stop();

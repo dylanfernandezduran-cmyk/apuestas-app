@@ -317,7 +317,7 @@ function dFoot(d){
 
 function detailSections(d){
   const tn_=d.kind==='tennis';
-  return [dPred(d), dRec(d), dPicks(d), dProb(d), dSplits(d), dRlm(d),
+  return [dPred(d), dRec(d), dPicks(d), dProps(d), dProb(d), dSplits(d), dRlm(d),
     movementSection(d), (marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')),
     dPlayers(d), dCmp(d), dPitch(d), dTrends(d), dRecent(d),
     tn_?'':lineupsSection(d), dInj(d), dWx(d), dH2h(d), dKey(d), dModel(d), dFoot(d)].join('');
@@ -412,16 +412,17 @@ function dPred(d){
   const mains=[];
   const row=(ttl,main,sub,prob,mark)=>(mains.push(main),`<div class="pdr"><div class="pdl"><small>${ttl}</small><b>${main}</b>${sub?`<em>${sub}</em>`:''}</div><div class="pdp"><b class="mono">${pct(prob,prob<.1?1:0)}</b><span class="pbar"><i style="width:${Math.round((prob||0)*100)}%;background:linear-gradient(90deg,#3C85F7,#FF1179)"></i></span></div>${mark}</div>`);
   const rows=[], sc=p.score;
-  rows.push(row('Ganador',`${w.side==='draw'?'Empate':'Gana '+wl}`,'',w.p,prMark(R&&R.ml)));
+  const al=o=>o&&o.aligned==='pick'?' · alineado con el pick del modelo':o&&o.aligned==='marcador'?' · ajustado al marcador exacto':'';
+  rows.push(row('Ganador',`${w.side==='draw'?'Empate':'Gana '+wl}`,al(w).slice(3),w.p,prMark(R&&R.ml)));
   if(tennis) rows.push(row('Marcador exacto',(sc.sets||[]).map(x=>x.join('-')).join(' '),`sets ${sc.home}-${sc.away} ${pct(sc.p,0)} · set por set ${pct(sc.p_seq,1)}`,sc.p_seq,prMark(R&&R.score)));
-  else rows.push(row('Marcador exacto',`${sc[s0]}–${sc[s1]}`,`el marcador único más probable`,sc.p,prMark(R&&R.score)));
-  if(p.total){ const t=p.total; rows.push(row('Total'+(g.sport==='futbol'?' de goles':''),esc(t.label)+(g.sport==='futbol'?' goles':''),`proyectado ${t.proj!=null?t.proj.toFixed(1):SD} ${unit} · ${t.line_src==='modelo'?'línea estándar (sin línea de mercado)':'línea de mercado'+(p.book?' '+esc(p.book):'')}`,t.p,prMark(R&&R.total))); }
+  else rows.push(row('Marcador exacto',`${sc[s0]}–${sc[s1]}`,`el más probable que cumple ganador, total y hándicap · ${pct(sc.p,1)}`,sc.p,prMark(R&&R.score)));
+  if(p.total){ const t=p.total; rows.push(row('Total'+(g.sport==='futbol'?' de goles':tennis?' de juegos':''),esc(t.label)+(g.sport==='futbol'?' goles':tennis?' juegos':''),`proyectado ${t.proj!=null?t.proj.toFixed(1):SD} ${unit} · ${t.line_src==='modelo'?(tennis?'línea del modelo (mediana de juegos)':'línea estándar (sin línea de mercado)'):'línea de mercado'+(p.book?' '+esc(p.book):'')}${al(t)}`,t.p,prMark(R&&R.total))); }
   if(p.corners){ const c=p.corners; rows.push(row('Córners',esc(c.label),`proyectado ${c.proj.toFixed(1)} (${nm(s0)} ${(s0==='home'?c.home:c.away).toFixed(1)} · ${nm(s1)} ${(s1==='home'?c.home:c.away).toFixed(1)}) · línea = promedio de sus últimos partidos`,c.p,prMark(R&&R.corners))); }
   if(p.spread){ const sp=p.spread, L=sp.line, lbl=sp.side==='home'?`${nm('home')} ${sg(L)}`:`${nm('away')} ${sg(-L)}`;
-    rows.push(row('Hándicap',lbl,`margen proyectado ${nm('home')} ${sp.proj!=null?sg(sp.proj):SD} ${unit} · ${sp.line_src==='modelo'?'línea del modelo (sin hándicap de mercado)':'línea de mercado'}`,sp.p,prMark(R&&R.spread))); }
+    rows.push(row('Hándicap',lbl,`margen proyectado ${nm('home')} ${sp.proj!=null?sg(sp.proj):SD} ${unit} · ${sp.line_src==='modelo'?'línea del modelo (sin hándicap de mercado)':'línea de mercado'}${al(sp)}`,sp.p,prMark(R&&R.spread))); }
   const fin = R&&R.score_text?`<div class="pdf">Resultado final <b class="mono">${esc(R.score_text)}</b></div>`:'';
   const lockTag = p.locked?tag2('🔒 Bloqueada al inicio','k-a'):tag2('Se bloquea al inicio','k-t');
-  const info=`Se deriva de las proyecciones del modelo, sin datos inventados: ${tennis?'ranking → prob. de partido → prob. de set → prob. de juego; el marcador es el set-a-set más probable del ganador pronosticado':g.sport==='futbol'?'goles esperados (Poisson) → marcador más probable dentro del resultado 1X2 pronosticado':'margen y total proyectados → puntos/carreras por equipo (marcador exacto de mayor probabilidad cerca de la proyección)'}. Total y hándicap usan la línea de mercado; en fútbol, si no hay, se usa la línea estándar del modelo (2.5 goles / −1.5 o −0.5) y se indica. Los córners sólo aparecen si ESPN tiene datos reales de córners de los últimos partidos de ambos equipos. Se guarda antes de que empiece el juego, se bloquea al inicio y se califica con el marcador final en Récord → Predicción NRNM. Es una estimación, no una garantía.`;
+  const info=`Se deriva de las proyecciones del modelo, sin datos inventados: ${tennis?'ranking → prob. de partido → prob. de set → prob. de juego; el marcador es el set-a-set factible más cercano a los juegos esperados del resultado de sets más probable que cumple total y hándicap':g.sport==='futbol'?'goles esperados (Poisson) → el marcador más probable de la matriz que cumple a la vez ganador, total y hándicap (y los picks del modelo; si dos líneas se contradicen, se corrige la más débil para que nada se contradiga)':'margen y total proyectados → puntos/carreras por equipo (marcador exacto de mayor probabilidad cerca de la proyección)'}. Total y hándicap usan la línea de mercado; en fútbol, si no hay, se usa la línea estándar del modelo (2.5 goles / −1.5 o −0.5) y se indica. Los córners sólo aparecen si ESPN tiene datos reales de córners de los últimos partidos de ambos equipos. Se guarda antes de que empiece el juego, se bloquea al inicio y se califica con el marcador final en Récord → Predicción NRNM. Es una estimación, no una garantía.`;
   return ds('pred','Predicción NRNM',`<div class="pdh">${big}</div>${stack}<div class="pdsm">${mains.map(m=>`<span>${m}</span>`).join('')}</div><div class="pdrs">${rows.join('')}</div>${fin}`,{right:lockTag,info,cls:'pred'});
 }
 function predRecord(P){

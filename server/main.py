@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV
+from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -266,6 +266,22 @@ async def game(league: str, eid: str):
     if not r: raise HTTPException(404, "Juego no encontrado o la fuente (ESPN) no respondió. Reintenta en unos segundos.")
     try: await enrich.detail(r, league, eid)
     except Exception: pass
+    return r
+
+@app.get("/api/props/{league}/{eid}")
+async def game_props(league: str, eid: str):
+    """Props de jugadores del juego (DraftKings vía ESPN; si aún no hay, líderes con referencia calculada y rotulada). Datos reales, nada inventado."""
+    if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")
+    try: return await PROPS.game_props(league, eid)
+    except Exception as e: raise HTTPException(502, f"No se pudieron cargar los props: {type(e).__name__}")
+
+@app.get("/api/prop/{league}/{eid}/{aid}/{key}")
+async def player_prop(league: str, eid: str, aid: str, key: str, hist: int = 10):
+    if league not in LEAGUES: raise HTTPException(404, "Liga no soportada")
+    if not aid.isdigit(): raise HTTPException(400, "Jugador inválido")
+    try: r = await PROPS.player_prop(league, eid, aid, key, hist=min(max(hist, 0), 20))
+    except Exception as e: raise HTTPException(502, f"No se pudo cargar el prop: {type(e).__name__}")
+    if not r: raise HTTPException(404, "Prop no disponible para este jugador")
     return r
 
 @app.get("/api/record")

@@ -52,8 +52,15 @@ async def main():
                 lg, gid = rl.split("/")
                 await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_timeout(100)
                 await pg.goto(f"http://localhost:{PORT}/#/juego/{lg}/{gid}"); await pg.wait_for_selector(".ds", timeout=90000); await pg.wait_for_timeout(1500)
+                try: await pg.wait_for_function("!document.querySelector('.pp-host') || !document.querySelector('.pp-host').innerText.includes('Cargando')", timeout=60000)   # props de jugadores (carga asíncrona)
+                except Exception: pass
                 await pg.evaluate("document.querySelectorAll('.ds .ib').forEach(b=>{if(!b.classList.contains('on'))b.click()})"); await pg.wait_for_timeout(200)
                 for x in await pg.evaluate(AUDIT): probs.append(f"[real:{rl}] {x}")
+                if await pg.query_selector(".pp-row"):                      # pantalla de un prop (barras, filtros, lista de juegos) en 5/10/20 juegos, más/menos y línea por juego
+                    await pg.click(".pp-row"); await pg.wait_for_selector(".pp-bar", timeout=60000); await pg.wait_for_timeout(500)
+                    for sel in (None, '[data-sd=under]', '[data-n="20"]', '[data-md=hist]', '[data-n="5"]'):
+                        if sel and await pg.query_selector(".pp-fil " + sel): await pg.click(".pp-fil " + sel); await pg.wait_for_timeout(2500 if sel == '[data-n="20"]' else 300)
+                        for x in await pg.evaluate(AUDIT): probs.append(f"[prop:{rl}:{sel}] {x}")
             out[w] = probs + (["JS " + e for e in errs])
         await b.close()
     print(json.dumps(out))
