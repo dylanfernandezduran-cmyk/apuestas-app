@@ -14,7 +14,9 @@ def analysis(start=NOW + 3600, state="pre", lean_odds=-110, spread_line=-3.5, sp
         dict(key="ml", title="Ganador", unit=None, outcomes=[dict(key="ml.home", side="home", p_model=.6, p_final=.58, p_nv=.55, p_pin=None, edge=.03, best=dict(price=lean_odds, book="Pinnacle"), clipped=False, label="Utah ML", line=None)]),
         dict(key="spread", title="Spread", unit=None, outcomes=[dict(key="spread.home", side="home", p_model=.52, p_final=.52, p_nv=.5, p_pin=None, edge=.01, best=dict(price=spread_price, book="Pinnacle"), clipped=False, label=f"Utah {spread_line}", line=spread_line)]),
     ])
-    return dict(game=g, odds=dict(book="ESPN BET"), picks=dict(lean=lean, candidates=[lean]), probs=probs)
+    sp = dict(market="Spread", side="home", line=spread_line, label=f"Utah {spread_line}", price=spread_price, p_model=.6, p_final=.58, p_nv=.55, edge=3.0, status="PICK")
+    # modo estricto: sólo se registran los oficiales (aquí 2: ML principal + spread 2.º)
+    return dict(game=g, odds=dict(book="ESPN BET"), picks=dict(lean=lean, candidates=[lean, sp], official=[lean, sp]), probs=probs)
 
 def test_records_main_and_suggestions(db):
     n = R.record_analysis(analysis(), now=NOW)
@@ -23,7 +25,7 @@ def test_records_main_and_suggestions(db):
     main = [r for r in rows if r["type"] == "main"]
     assert len(main) == 1 and main[0]["market"] == "ml" and main[0]["selection"] == "home" and main[0]["odds"] == -110 and main[0]["status"] == "PENDIENTE"
     sp = next(r for r in rows if r["market"] == "spread")
-    assert sp["type"] == "suggestion" and sp["line"] == -3.5 and sp["odds"] == -105 and sp["book"] == "Pinnacle"
+    assert sp["type"] == "suggestion" and sp["line"] == -3.5 and sp["odds"] == -105 and sp["book"] == "ESPN BET"
     assert all(r["start_ts"] == NOW + 3600 and r["home"] == "Utah" and r["away"] == "Portland" and r["source"] == "live" for r in rows)
 
 def test_line_move_updates_pick_and_keeps_opening(db):
@@ -66,7 +68,7 @@ def test_nfl_total_example_over_48_5_flips_to_under_at_40_5(db):
     def an(side, line):
         g = dict(sport="nfl", league="nfl", id="9", state="pre", date=iso(NOW + 7200), home=dict(id="1", name="KC"), away=dict(id="2", name="LV"))
         lean = dict(market="Total", side=side, line=line, label=f"{'Over' if side == 'over' else 'Under'} {line}", price=-110, p_model=.6, p_final=.57, p_nv=.5, edge=7, status="PICK")
-        return dict(game=g, odds=dict(book="DK"), picks=dict(lean=lean, candidates=[lean]), probs=dict(markets=[]))
+        return dict(game=g, odds=dict(book="DK"), picks=dict(lean=lean, candidates=[lean], official=[lean]), probs=dict(markets=[]))
     R.record_analysis(an("over", 48.5), now=NOW)
     R.record_analysis(an("over", 44.5), now=NOW + 600)
     r = R.game_rows("nfl", "9")[0]
@@ -78,7 +80,7 @@ def test_nfl_total_example_over_48_5_flips_to_under_at_40_5(db):
 
 def test_market_without_value_is_cancelled(db):
     R.record_analysis(analysis(), now=NOW)
-    a = analysis(); a["probs"]["markets"] = a["probs"]["markets"][:1]   # el hándicap ya no sale (sin valor/lado del modelo)
+    a = analysis(); a["picks"]["official"] = a["picks"]["official"][:1]   # el hándicap ya no pasa el filtro de pick oficial
     R.record_analysis(a, now=NOW + 60)
     sp = next(r for r in R.game_rows("nba", "1") if r["market"] == "spread")
     assert (sp["status"], sp["state"]) == ("ANULADO", "CANCELADO")
@@ -140,3 +142,9 @@ def test_summary_and_filters(db):
     assert R.summary(typ="main")["graded"] == 2 and R.summary(typ="main")["units"] == 0.5
     assert R.summary(sport="tenis")["graded"] == 1 and R.summary(sport="tenis")["win_pct"] == 100.0
     assert len(R.query(limit=50)) == 5 and len(R.query(sport="nba", typ="suggestion")) == 2
+
+def test_no_official_pick_cancels_pending(db):
+    R.record_analysis(analysis(), now=NOW)
+    a = analysis(); a["picks"]["official"] = []                          # el juego ya no tiene pick oficial (criterio estricto)
+    assert R.record_analysis(a, now=NOW + 60) == 0
+    assert all((r["status"], r["state"]) == ("ANULADO", "CANCELADO") for r in R.game_rows("nba", "1"))

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS, chat as CHAT
+from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS, chat as CHAT, tickets as TK
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -60,6 +60,8 @@ async def grade_once():
     r = await grading.grade_pending()
     try: r["pred"] = await PRED.grade_pending()
     except Exception as ex: r["pred"] = dict(err=str(ex)[:80])
+    try: r["tickets"] = await TK.grade_pending()
+    except Exception as ex: r["tickets"] = dict(err=str(ex)[:80])
     GRADE_STATE.update(last=time.time(), runs=GRADE_STATE["runs"] + 1, graded=GRADE_STATE["graded"] + r["graded"] + r["void"], last_result=r, err=None)
     return r
 
@@ -313,6 +315,34 @@ async def record_day(date: str | None = None):
     date = date or today
     if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date): raise HTTPException(400, "Fecha inválida (AAAA-MM-DD)")
     return dict(date=date, today=today, days=REC.days(), **REC.day(date), grading=dict(GRADE_STATE, every_min=GRADE_MIN), now=time.time())
+
+# ---------------- tickets / parlays de papel
+@app.get("/api/tickets")
+async def tickets_list(date: str | None = None):
+    import re as _re
+    today = REC.cdmx_date(); date = date or today
+    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date): raise HTTPException(400, "Fecha inválida (AAAA-MM-DD)")
+    return dict(today=today, **TK.by_day(date))
+
+@app.post("/api/tickets")
+async def tickets_create(body: dict):
+    r = TK.create((body or {}).get("legs"), (body or {}).get("name"), (body or {}).get("source") or "app")
+    if not r["ok"]: raise HTTPException(400, " · ".join(r["errors"]))
+    return r
+
+@app.post("/api/tickets/check")
+async def tickets_check(body: dict):
+    legs = (body or {}).get("legs") or []
+    return dict(**TK.check(legs), **(TK.combine(legs) if legs and all(l.get("odds") is not None for l in legs) else {}))
+
+@app.delete("/api/tickets/{tid}")
+async def tickets_delete(tid: int):
+    if not TK.delete(tid): raise HTTPException(404, "No existe o ya se calificó")
+    return dict(ok=True)
+
+@app.get("/api/parlay/suggest")
+async def parlay_suggest(n: int = 3, scope: str = "hoy", sport: str | None = None):
+    return await TK.suggest(n, scope, sport)
 
 @app.get("/api/record/game/{league}/{eid}")
 async def record_game(league: str, eid: str):

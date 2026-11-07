@@ -198,7 +198,7 @@ async function viewHome(){
    <section class="hm" id="hm-live"><h3>En vivo ahora</h3><div class="skel">Buscando juegos en vivo…</div></section>
    <section class="hm" id="hm-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>
    <div class="hm snav" id="hm-sp" role="navigation" aria-label="Deportes">${SNAV_ORDER.map(k=>SPORTS.find(x=>x.key===k)).filter(Boolean).concat(SPORTS.filter(x=>!SNAV_ORDER.includes(x.key))).map(sportNavItem).join('')}</div>
-   <section class="hm" id="hm-picks"><h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3><div class="skel">Calculando con el modelo…</div></section>
+   <section class="hm" id="hm-picks"><h3>Picks oficiales de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3><div class="skel">Calculando con el modelo…</div></section>
    <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo. Si algo no está disponible se muestra <b>${SD}</b>. Las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
   srchInit(document.getElementById('hm-search'));
   let timer=null;
@@ -220,10 +220,10 @@ async function viewHome(){
   const loadHomePicks = async ()=>{
     try{
       const p = await api('/api/picks?scope=hoy');
-      const it = (p.items||[]).filter(x=>x.status==='PICK'||x.status==='LEAN').slice(0,3);
+      const it = (p.items||[]).filter(x=>x.status==='PICK').slice(0,3);
       const el=document.getElementById('hm-picks'); if(!el) return;
-      el.innerHTML = `<h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3>` + (it.length ? it.map(x=>{ const g=x.game, l=x.lean;
-        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${matchup(g,true)} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks con ventaja suficiente hoy (o los juegos de hoy ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
+      el.innerHTML = `<h3>Picks oficiales de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3>` + (it.length ? it.map(x=>{ const g=x.game, l=x.lean;
+        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${matchup(g,true)} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks oficiales hoy: ningún juego pasa el filtro estricto (o ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
     }catch(e){ const el=document.getElementById('hm-picks'); if(el) el.innerHTML=`<h3>Mejores picks de hoy</h3><div class="card mut">${SD}</div>`; }
   };
   fillHome(true);

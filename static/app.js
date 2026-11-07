@@ -19,7 +19,7 @@ const API_TIMEOUT_MS = 45000;
 // Modo GitHub Pages (pt90u): sin servidor; las respuestas de /api vienen de JSON estáticos que un GitHub Action regenera cada ~10-15 min
 const STATIC = typeof window!=='undefined' && !!window.NRNM_STATIC;
 const LOCAL_URL = 'http://192.168.100.11:8765';
-const NOSTATIC = [/^\/api\/prop\//, /^\/api\/search/, /^\/api\/grade/, /^\/api\/history\//];
+const NOSTATIC = [/^\/api\/tickets/, /^\/api\/prop\//, /^\/api\/search/, /^\/api\/grade/, /^\/api\/history\//];
 function staticUrl(path){
   if(/^\/api\/record(\?|$)/.test(path)) path='/api/record?limit=80';            // filtros del récord: se aplican sobre el último récord publicado
   let [p,q]=path.split('?'); p=p.replace(/^\/api\//,'');
@@ -82,6 +82,7 @@ async function route(){
       if(h[1]==='total') return await viewRecord();
       if(h[1]==='cal') return await viewRecordCal(h[2]);
       return await viewRecordDay(h[1]==='dia'?h[2]:null); }
+    if(h[0]==='tickets'){ setNav('record'); return await viewTickets(h[1]||null); }
     if(h[0]==='info'){ setNav('info'); return await viewInfo(); }
     await viewHome();
   }catch(e){ if(seq!==ROUTE_SEQ) return; $app.innerHTML = errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); }
@@ -357,9 +358,10 @@ async function viewPicks(scope){
   SPORTS = SPORTS || await api('/api/sports');
   loading('Calculando picks de todos los deportes (primera vez puede tardar ~20 s)…');
   const d = await api('/api/picks?scope='+scope);
+  d.items.forEach(r=>{ if(!r.lean) r.lean={label:'Sin pick oficial',edge:null,p_model:null,p_nv:null}; });
   const tabs=[['24h','Próx. 24 h'],['hoy','Hoy'],['manana','Mañana'],['72h','72 h']];
   const t=`<div class="pills">${tabs.map(([k,l])=>`<a class="pill ${k===scope?'on':''}" href="#/picks/${k}">${l}</a>`).join('')}</div>`;
-  const withOdds=d.items.filter(r=>r.has_odds&&r.status!=='PASS'), pass=d.items.filter(r=>r.has_odds&&r.status==='PASS'), noodds=d.items.filter(r=>!r.has_odds);
+  const withOdds=d.items.filter(r=>r.has_odds&&r.status==='PICK'), pass=d.items.filter(r=>r.has_odds&&r.status==='PASS'), noodds=d.items.filter(r=>!r.has_odds);
   const card=r=>{ const l=r.lean, g=r.game, st=STATUS[r.status];
     const sg_=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato';
     const sigH=sg_?`<div class="sub" style="margin:8px 0 4px">${(VERD[l.signals.verdict]||[])[0]||''} ${(VERD[l.signals.verdict]||[])[1]||''}${l.signals.tickets!=null?` · ${l.signals.tickets}% tickets / ${l.signals.money!=null?l.signals.money+'% dinero':'dinero '+SD}`:''}${l.signals.best?` · mejor ${esc(l.signals.best.price_txt)} en ${esc(l.signals.best.book)}`:''}</div>${tagChips(l.signals)}`:'';
@@ -368,16 +370,21 @@ async function viewPicks(scope){
     return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div class="pkt">${st[0]} ${esc(l.label)} <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span></div>
     <div class="pke mono ${l.edge>0?'pos':'mut'}">${l.edge==null?SD:sg(l.edge)+'pp'}<small>edge</small></div></div>
     <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}<span class="sub">${esc(g.league_name)} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
-    <div class="stat mono">Modelo ${pct(l.p_model)} · s/vig ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${det}</a>`; };
-  let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por estado, edge y confianza. <b>Estimaciones del modelo</b>, no garantías.</div>`;
+    <div class="stat mono">${r.status==='PICK'?`Puntaje <b>${l.score}/100</b> · `:''}Modelo ${pct(l.p_model)} · s/vig ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>
+    ${r.status!=='PICK'&&l.why_not&&l.why_not.length?`<div class="sub">No es pick oficial: ${esc(l.why_not.join(' · '))}</div>`:''}
+    ${(r.official||[]).length>1?`<div class="sub">2.º pick oficial: <b>${esc(r.official[1].label)}</b> ${esc(r.official[1].price_txt||'')}</div>`:''}
+    ${r.status==='PICK'?`<div class="tkrow">${(r.official||[]).map(c=>tkBtn(tkLegFromCand(g,Object.assign({official:true},c)),'+ Ticket · '+shortLbl(c.label,g))).join('')}</div>`:''}${det}</a>`; };
+  let html=`<h1>🔥 Picks oficiales · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos analizados · <b>${d.items.filter(r=>r.status==='PICK').length} picks oficiales</b> (filtro estricto: edge ≥ 2 pp, prob. ≥ 55 %, señales no en contra, sin lesión clave en duda, puntaje ≥ 60, coherente con la Predicción NRNM; máx. 1 por juego) · ordenados por puntaje. <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
   // agrupado por deporte (orden: MLB, NFL, Fútbol, NBA, NHL, Tenis; grupos vacíos ocultos). Dentro de cada grupo: con ventaja, PASS y sin línea (orden del servidor)
-  const rank=r=>r.has_odds?(r.status==='PASS'?1:0):2;
-  PICK_GROUPS.forEach(k=>{
+  const rank=r=>r.has_odds?(r.status==='PICK'?0:1):2;
+  PICK_GROUPS.slice().sort((a,b)=>(d.items.some(r=>r.game.sport===b&&r.status==='PICK'))-(d.items.some(r=>r.game.sport===a&&r.status==='PICK'))).forEach(k=>{
     const its=d.items.filter(r=>r.game.sport===k).map((r,i)=>[r,i]).sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(x=>x[0]);
     if(!its.length) return;
-    const sp=(SPORTS||[]).find(x=>x.key===k)||{name:k,emoji:''}, nPick=its.filter(r=>r.has_odds&&r.status!=='PASS').length;
-    html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${sp.emoji}</span> ${esc(sp.name)} <span class="n mono">${its.length}${nPick?` · ${nPick} con ventaja`:''}</span></h2>`+its.slice(0,30).map(card).join('');
+    const sp=(SPORTS||[]).find(x=>x.key===k)||{name:k,emoji:''}, nPick=its.filter(r=>r.status==='PICK').length;
+    const offs=its.filter(r=>r.status==='PICK'), rest=its.filter(r=>r.status!=='PICK').slice(0,30);
+    html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${sp.emoji}</span> ${esc(sp.name)} <span class="n mono">${its.length} juegos${nPick?` · ${nPick} pick${nPick>1?'s':''} oficial${nPick>1?'es':''}`:' · sin pick oficial'}</span></h2>`+offs.map(card).join('')
+      +(rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">${rest.length} juego${rest.length>1?'s':''} sin pick oficial (no recomendado)</div><div class="sg">${rest.map(card).join('')}</div></div>`:'');
   });
   $app.innerHTML=html;
 }
@@ -510,7 +517,7 @@ function viewInfo(){
   <div class="card kv" style="margin-top:10px"><h2>Modelo (transparente y simple)</h2><ul class="t">
   <li><b>NFL / NBA / NHL / MLB:</b> rating SRS (margen promedio ajustado por rival y localía) calculado con todos los resultados reales de la liga, suavizado hacia 0 según juegos jugados, + ajuste por forma (últimos 5). Probabilidad = normal(margen esperado, σ). En MLB se añade un ajuste pequeño por ERA de abridores probables.</li>
   <li><b>Fútbol:</b> Poisson con fuerza de ataque/defensa suavizada y ventaja de local de la liga → 1X2, hándicap y totales.</li>
-  <li><b>Tenis:</b> logística sobre ln(puntos de ranking) sólo para el ganador. Hándicap y total son de <b>JUEGOS</b> (p. ej. Sinner -3.5 juegos, Over 22.5 juegos) y además hay hándicap/total de <b>SETS</b>, todos sólo mercado (Pinnacle). No hay empate ni 1X2 en tenis.</li><li><b>Récord (¿se ganó?):</b> cada pick principal y sugerencia se guarda al generarse (antes del juego) con la primera línea y cuota; se califica con el marcador final real de ESPN (tenis: juegos y sets del marcador por sets). Ganado / Perdido / Push / medio ganado-perdido (líneas de cuarto) / Anulado; pendiente hasta que haya final confirmado. Unidades a 1u plano con la cuota registrada. El historial empieza cuando el servidor empezó a registrar.</li>
+  <li><b>Tenis:</b> logística sobre ln(puntos de ranking) sólo para el ganador. Hándicap y total son de <b>JUEGOS</b> (p. ej. Sinner -3.5 juegos, Over 22.5 juegos) y además hay hándicap/total de <b>SETS</b>, todos sólo mercado (Pinnacle). No hay empate ni 1X2 en tenis.</li><li><b>Pick oficial (filtro estricto):</b> máx. 1 por juego (2 sólo si son de otro mercado y ambos ≥ 75/100). Debe tener edge ≥ 2 pp, prob. final ≥ 55 %, señales de mercado (RLM / dinero vs tickets) que no vayan en contra, ningún jugador clave en duda, abridores MLB confirmados, puntaje ≥ 60, y coincidir con la Predicción NRNM. Puntaje 0-100 = edge 35 + prob. 25 + señales 15 + confianza 15 + contexto 10 (clima/datos críticos). Umbrales elegidos con el récord real calificado (backtest: 694 picks 369-317, −51.6u → 33 picks 26-7, +9.3u; muestra chica, no es garantía). Lo demás sólo aparece como «También considerado».</li><li><b>Tickets / parlays (papel):</b> agrega piernas con «+ Ticket»; momio combinado = producto de momios decimales, prob. combinada = producto de probabilidades del modelo (asume independencia; se avisa si hay piernas del mismo juego). Se califican solos pierna por pierna; push/anulada se quita del momio.</li><li><b>Récord (¿se ganó?):</b> cada pick principal y sugerencia se guarda al generarse (antes del juego) con la primera línea y cuota; se califica con el marcador final real de ESPN (tenis: juegos y sets del marcador por sets). Ganado / Perdido / Push / medio ganado-perdido (líneas de cuarto) / Anulado; pendiente hasta que haya final confirmado. Unidades a 1u plano con la cuota registrada. El historial empieza cuando el servidor empezó a registrar.</li>
   <li><b>Prob. final</b> = mezcla del modelo y el mercado sin vig; el peso del modelo (máx. 50%) crece con la muestra. El modelo se recorta a ±20 pp del mercado.</li>
   <li><b>Edge</b> = prob. final − prob. implícita sin vig (pp). <b>EV</b> = prob. final × momio decimal − 1. <b>Línea justa</b> = momio de la prob. final. <b>Precio máx.</b> = momio con EV = +2%.</li>
   <li><b>Estados:</b> 🔥 PICK (edge ≥ 3 pp, EV ≥ 0 y confianza Media/Alta) · 🟡 LEAN (edge ≥ 1 pp) · ⛔ PASS (sin edge; igual se muestra el lean) · 🔍 SIN LÍNEA (no hay precio).</li>

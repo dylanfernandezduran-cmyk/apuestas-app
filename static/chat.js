@@ -6,7 +6,8 @@ const chNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u030
 const chPct = p => p==null ? '—' : Math.round(p*100)+'%';
 const chEdge = e => e==null ? '' : ` · edge ${e>0?'+':''}${e.toFixed(1)} pp`;
 const chWhen = iso => { try{ return new Intl.DateTimeFormat('es-MX',{timeZone:TZ,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(iso)); }catch(e){ return ''; } };
-const chGame = it => `${it.game.away.name} @ ${it.game.home.name}`;
+const chVs = g => (g.sport==='futbol'||g.sport==='tenis') ? `${g.home.name} vs ${g.away.name}` : `${g.away.name} @ ${g.home.name}`;   // fútbol/tenis: local primero
+const chGame = it => chVs(it.game);
 const chLink = g => `#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id)}`;
 
 async function chPicks(){
@@ -34,7 +35,7 @@ function chPickLine(it){
 }
 async function chGameAnswer(league, eid, qn){
   const d = await api(`/api/game/${encodeURIComponent(league)}/${encodeURIComponent(eid)}`, 60000);
-  const g=d.game, out=[`<b>${esc(g.away.name)} @ ${esc(g.home.name)}</b> · ${esc(g.league_name||'')} · ${esc(chWhen(g.date))}`];
+  const g=d.game, out=[`<b>${esc(chVs(g))}</b> · ${esc(g.league_name||'')} · ${esc(chWhen(g.date))}`];
   if(/lesion|baja|injur|lastim/.test(qn)){
     const inj=d.injuries||{}; const rows=[];
     for(const t of [g.away,g.home]){ const L=(inj[t.id]||[]); rows.push(`<b>${esc(t.name)}</b>: ${L.length?L.slice(0,8).map(i=>`${esc(i.name)} (${esc(i.status||'?')})`).join(', '):'sin bajas reportadas por ESPN'}`); }
@@ -65,8 +66,29 @@ async function chGameAnswer(league, eid, qn){
   out.push(`<a href="${chLink(g)}">Abrir el juego →</a>`);
   return out.join('<br>');
 }
+const CH_NUM={dos:2,tres:3,cuatro:4,cinco:5,seis:6};
+async function chParlay(qn){
+  const n=Math.min(6,Math.max(2,+((qn.match(/\b([2-6])\b/)||[])[1]||CH_NUM[(qn.match(/\b(dos|tres|cuatro|cinco|seis)\b/)||[])[1]]||3)));
+  const sp={nba:/nba|basket/,nfl:/nfl|americano/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier/,tenis:/tenis|atp|wta/,mlb:/mlb|beis/};
+  const spk=Object.keys(sp).find(k=>sp[k].test(qn));
+  let scope=/manana/.test(qn)?'manana':'hoy', d=await api('/api/picks?scope='+scope);
+  const off=x=>(x.official||[]).filter(c=>c.price!=null&&['ML','Spread','Total','BTTS'].includes(c.market));
+  let pool=d.items.filter(it=>off(it).length&&(!spk||it.game.sport===spk));
+  if(scope==='hoy'&&pool.length<n){ const d2=await api('/api/picks?scope=24h'); const have=new Set(pool.map(it=>it.game.league+it.game.id)); pool=pool.concat(d2.items.filter(it=>off(it).length&&(!spk||it.game.sport===spk)&&!have.has(it.game.league+it.game.id))); scope='24h'; }
+  pool.sort((a,b)=>(off(b)[0].score||0)-(off(a)[0].score||0));
+  const pick=pool.slice(0,n);
+  if(!pick.length) return `No hay picks oficiales${spk?' de '+spk.toUpperCase():''} ${scope==='manana'?'mañana':'en las próximas 24 h'}: hoy ningún juego pasa el filtro estricto, así que no armo un parlay con relleno.`;
+  const legs=pick.map(it=>tkLegFromCand(it.game,Object.assign({official:true},off(it)[0])));
+  const dd=legs.reduce((a,l)=>a*tkDec(l.odds),1), pm=legs.every(l=>l.p!=null)?legs.reduce((a,l)=>a*l.p,1):null;
+  CH.parlay=legs;
+  const lines=pick.map((it,i)=>{ const c=off(it)[0], v=(c.signals||{}).verdict; return `${i+1}. <b>${esc(c.label)}</b> ${esc(c.price_txt||'')} — ${esc(chGame(it))} (${esc(chWhen(it.game.date))})<br>&nbsp;&nbsp;puntaje ${c.score}/100 · prob. ${chPct(c.p_final)}${chEdge(c.edge)}${v&&v!=='sin_dato'?' · señales '+esc(v.replace('_',' ')):''}`; });
+  return `Parlay de ${legs.length}${legs.length<n?` (sólo hay ${legs.length} picks oficiales; no relleno con picks débiles)`:''} con los picks oficiales de mayor puntaje, 1 por juego (sin correlación):<br>${lines.join('<br>')}
+    <br>Momio combinado <b>${tkAm(dd)}</b> · prob. del modelo <b>${pm==null?'—':(pm*100).toFixed(1)+'%'}</b> (asume independencia) · implícita ${(100/dd).toFixed(1)}%.
+    <br><button type="button" class="btn pri ch-mk" onclick="tkLoad(CH.parlay)">🎟️ Crear ticket con estas piernas</button><br><span class="ch-mut">Paper trading. Más piernas = mucho menos probable; ningún parlay es «seguro».</span>`;
+}
 async function chLocal(q){
   const qn=chNorm(q);
+  if(/parlay|parley|combinad|ticket|arma/.test(qn)) return chParlay(qn);
   if(/^(hola|buenas|hey|que tal|ayuda|help)\b/.test(qn)) return 'Hola 👋 Pregúntame por <b>los mejores picks de hoy</b>, un equipo (ej. «Chiefs»), sus <b>lesiones</b>, <b>props</b> de jugadores o el <b>récord</b>. Respondo sólo con los datos de la app.';
   if(/record|historial|cuanto (llevamos|vamos)|acierto/.test(qn)){
     const rel={antier:-2,anteayer:-2,ayer:-1,hoy:0,manana:1}, k=Object.keys(rel).find(w=>new RegExp('\\b'+w+'\\b').test(qn));
@@ -80,21 +102,22 @@ async function chLocal(q){
   const named=chFindGame(items,qn);
   if(named) return chGameAnswer(named.game.league, named.game.id, qn);
   if(cur && (/(este|esta|del|el) (juego|partido)|aqui/.test(qn) || (/lesion|baja|prop|jugador|marcador|prediccion/.test(qn) && !/mejores|hoy|manana|todos/.test(qn)))) return chGameAnswer(cur.league, cur.eid, qn);
-  let pool=items.filter(it=>it.lean&&it.lean.edge!=null);
+  let pool=items.filter(it=>it.lean&&it.lean.edge!=null&&it.status==='PICK');
   const sp={nba:/nba|basket/,nfl:/nfl|americano/,mlb:/mlb|beis/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier|champions/,tenis:/tenis|atp|wta/};
   for(const [k,re] of Object.entries(sp)) if(re.test(qn)) pool=pool.filter(it=>it.game.sport===k);
   if(/ambos anotan|btts/.test(qn)) pool=pool.filter(it=>(it.lean.market||'')==='BTTS'||(it.top||[]).some(t=>t.market==='BTTS'));
   if(/hoy/.test(qn)){ const today=new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date()); pool=pool.filter(it=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date(it.game.date))===today); }
   if(/pick|recomien|apost|mejor|valor|hoy|manana|parlay|btts|ambos/.test(qn) || pool.length!==items.length){
     pool.sort((a,b)=>(b.status==='PICK')-(a.status==='PICK')||(b.lean.edge||0)-(a.lean.edge||0));
-    if(!pool.length) return 'No encuentro picks con ventaja para eso en las próximas 72 h.';
-    return `Mejores picks (por edge, próximas 72 h${/hoy/.test(qn)?', hoy':''}):<br>`+pool.slice(0,5).map(chPickLine).join('<br>')+'<br><span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading.</span>';
+    if(!pool.length) return 'No hay picks oficiales para eso en las próximas 72 h (ningún juego pasa el filtro estricto).';
+    pool.sort((a,b)=>(b.lean.score||0)-(a.lean.score||0));
+    return `Picks oficiales (por puntaje, próximas 72 h${/hoy/.test(qn)?', hoy':''}):<br>`+pool.slice(0,5).map(chPickLine).join('<br>')+'<br><span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading.</span>';
   }
   return 'No encontré ese equipo/juego en los próximos 3 días. Prueba con el nombre del equipo (ej. «Real Madrid», «Lakers»), «mejores picks hoy», «props» o «lesiones» desde un juego abierto.';
 }
 async function chAsk(q){
   if(CH.llm==null && !STATIC){ try{ CH.llm=(await api('/api/chat/status',8000)).llm; }catch(e){ CH.llm=false; } }
-  if(CH.llm && !STATIC){
+  if(CH.llm && !STATIC && !/parlay|parley|combinad|ticket|arma/.test(chNorm(q))){
     try{
       const c=chCurGame();
       const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q, league:c&&c.league, eid:c&&c.eid})});
@@ -109,7 +132,7 @@ function chRender(){
   if(!p){ p=document.createElement('div'); p.id='chp'; p.setAttribute('role','dialog'); p.setAttribute('aria-label','Chat IA'); document.body.appendChild(p); }
   p.hidden=!CH.open; document.getElementById('chb').classList.toggle('on',CH.open);
   if(!CH.open) return;
-  const sug=['Mejores picks de hoy','Picks NBA','Ambos anotan','¿Cómo vamos en el récord?'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
+  const sug=['Arma un parlay de 3 con lo más seguro de hoy','Mejores picks de hoy','Picks NBA','Ambos anotan','¿Cómo vamos en el récord?'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
   p.innerHTML=`<div class="ch-h"><b>Chat NRNM</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
     <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):'<div class="ch-a">Hola, pregúntame por picks, un equipo, lesiones, props o el récord. Uso sólo los datos de la app.</div>'}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
     <div class="ch-s">${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>

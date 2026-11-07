@@ -168,10 +168,12 @@ def _tennis(mdl, odds, g):
 def _pick_cons(picks):
     """Picks accionables del propio juego (PICK o el lean si es LEAN/PICK) -> {mercado: (lado, línea propia)}; el mejor edge de cada mercado."""
     if not picks: return {}
-    cands = list(picks.get("candidates") or [])
-    ok = [c for c in cands if c.get("status") == "PICK"]
-    lean = picks.get("lean")
-    if lean and picks.get("status") in ("PICK", "LEAN") and lean not in ok: ok.append(lean)
+    if "official" in picks: ok = list(picks["official"])          # modo estricto: la predicción se alinea sólo con los picks oficiales
+    else:
+        cands = list(picks.get("candidates") or [])
+        ok = [c for c in cands if c.get("status") == "PICK"]
+        lean = picks.get("lean")
+        if lean and picks.get("status") in ("PICK", "LEAN") and lean not in ok: ok.append(lean)
     out = {}
     for c in ok:
         mk = c.get("market")

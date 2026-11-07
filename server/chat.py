@@ -19,11 +19,11 @@ def status():
 
 SYSTEM = ("Eres el asistente de NRNM, una app de análisis deportivo (paper trading, sin dinero real). Responde en español de México, breve y claro. "
           "Usa EXCLUSIVAMENTE los datos JSON del contexto (picks, probabilidades, líneas, predicciones, lesiones, props). Si algo no está en el contexto, di que no lo tienes; "
-          "nunca inventes cuotas, líneas, porcentajes ni lesiones. Cita la línea y la cuota tal como vienen. Recuerda que son estimaciones, no garantías. Sin emojis excesivos.")
+          "nunca inventes cuotas, líneas, porcentajes ni lesiones. Recomienda SÓLO picks con pick_oficial=true (filtro estricto); los demás no son recomendación. Cita la línea y la cuota tal como vienen. Recuerda que son estimaciones, no garantías. Sin emojis excesivos.")
 
 def _pick_short(it):
     g = it.get("game") or {}; l = it.get("lean") or {}
-    return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", liga=g.get("league"), id=g.get("id"), fecha=g.get("date"),
+    return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", liga=g.get("league"), id=g.get("id"), fecha=g.get("date"), pick_oficial=it.get("status") == "PICK",
                 pick=l.get("label"), mercado=l.get("market"), linea=l.get("line"), cuota=l.get("price_txt"), prob_final=round(l["p_final"], 3) if l.get("p_final") is not None else None,
                 edge_pp=round(l["edge"], 1) if l.get("edge") is not None else None, estado=it.get("status"), confianza=(it.get("confidence") or {}).get("level"))
 

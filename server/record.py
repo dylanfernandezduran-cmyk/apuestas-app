@@ -71,30 +71,24 @@ def extract(a, now=None):
     out = []
     def mk(**kw):
         r = dict(base); r.update(kw); return r
-    lean = a["picks"]["lean"]
-    if lean and MKT.get(lean.get("market")) and lean.get("side"):
-        out.append(mk(market=MKT[lean["market"]], selection=lean["side"], line=lean.get("line"), label=lean["label"], odds=lean.get("price"),
-                      book=(book if lean.get("price") is not None else None), p_model=lean.get("p_model"), p_final=lean.get("p_final"), p_nv=lean.get("p_nv"),
-                      edge=lean.get("edge"), basis="modelo", type="main"))
-    # sugerencias 1: candidatos del modelo con ventaja (PICK / LEAN) distintos del principal
-    for c in a["picks"].get("candidates") or []:
-        if c is lean or not MKT.get(c.get("market")) or c.get("status") not in ("PICK", "LEAN"): continue
-        out.append(mk(market=MKT[c["market"]], selection=c["side"], line=c.get("line"), label=c["label"], odds=c.get("price"), book=(book if c.get("price") is not None else None),
-                      p_model=c.get("p_model"), p_final=c.get("p_final"), p_nv=c.get("p_nv"), edge=c.get("edge"), basis="modelo", type="suggestion"))
-    # sugerencias 2: mejor resultado por mercado de la sección Probabilidades (lo que muestran las tarjetas de lista / Top picks)
-    from . import probs as PR
-    for b in PR.brief(a.get("probs")):
-        if not b.get("side") or not b.get("market"): continue
-        best = b.get("best") or {}
-        out.append(mk(market=b["market"], selection=b["side"], line=b.get("line"), label=b["label"], odds=best.get("price"), book=best.get("book"),
-                      p_model=b.get("p_model"), p_final=b.get("p_final"), p_nv=b.get("p_nv"), edge=b.get("edge"),
-                      basis=("modelo" if b.get("p_model") is not None else "mercado"), type="suggestion"))
+    # pt9x (estricto): sólo se registran los picks OFICIALES (máx. 2 por juego); ya no se registran sugerencias/alternativas
+    for i, c in enumerate(a["picks"].get("official") or []):
+        if not MKT.get(c.get("market")) or not c.get("side"): continue
+        out.append(mk(market=MKT[c["market"]], selection=c["side"], line=c.get("line"), label=c["label"], odds=c.get("price"),
+                      book=(book if c.get("price") is not None else None), p_model=c.get("p_model"), p_final=c.get("p_final"), p_nv=c.get("p_nv"),
+                      edge=c.get("edge"), basis="modelo", type="main" if i == 0 else "suggestion"))
     return out
 
 def record_analysis(a, now=None):
     """Persiste los picks de un análisis. Devuelve cuántas filas nuevas se insertaron."""
     rows = extract(a, now)
-    if not rows: return 0
+    if not rows:
+        # sin pick oficial: los picks pendientes ya registrados de este juego (aún sin empezar) se cancelan (criterio estricto)
+        g = (a or {}).get("game") or {}
+        if a and a.get("picks") is not None and g.get("state") == "pre":
+            try: reconcile([], now, key=(g["league"], str(g["id"])))
+            except Exception: pass
+        return 0
     try: reconcile(rows, now)
     except Exception: pass
     return record_rows(rows)
@@ -105,12 +99,12 @@ def _fresh_by_market(rows):
         out.setdefault(r["market"], r)
     return out
 
-def reconcile(rows, now=None):
+def reconcile(rows, now=None, key=None):
     """Re-evalúa los picks YA registrados de este juego contra el análisis actual (sólo antes del inicio). Devuelve dict de conteos."""
     import json
     now = int(now or time.time())
-    if not rows: return {}
-    lg, eid = rows[0]["league"], rows[0]["eid"]
+    if not rows and not key: return {}
+    lg, eid = (rows[0]["league"], rows[0]["eid"]) if rows else key
     fresh = _fresh_by_market(rows)
     cnt = dict(updated=0, flipped=0, cancelled=0, reactivated=0)
     with history._lock:
@@ -138,7 +132,7 @@ def reconcile(rows, now=None):
                               (now, f"Invertido antes del inicio: a la línea actual el modelo prefiere {f['label']}", pid)); cnt["flipped"] += 1
                 else:
                     c.execute("UPDATE picks SET status='ANULADO', state='CANCELADO', updated_at=?, note=? WHERE id=?",
-                              (now, "Cancelado antes del inicio: a la línea actual el modelo ya no encuentra valor en este mercado", pid)); cnt["cancelled"] += 1
+                              (now, "Cancelado antes del inicio: a la línea actual ya no pasa el filtro de pick oficial (edge/probabilidad/señales/coherencia)", pid)); cnt["cancelled"] += 1
         c.commit()
     return cnt
 

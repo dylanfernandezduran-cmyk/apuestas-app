@@ -18,7 +18,7 @@ function rdAgg(rows){ let W=0,L=0,P=0,u=0,np=0,pend=0,vd=0;
 const rdN = n => Number.isInteger(n)?n:n.toFixed(1);
 const rdWL = a => a.W+a.L+a.P ? `${rdN(a.W)}-${rdN(a.L)}${a.P?'-'+rdN(a.P):''}` : (a.pending?`${a.pending}⏳`:'—');
 const rdCls = a => a.W>a.L?'up':a.L>a.W?'dn':(a.W+a.L?'eq':'nn');
-function rdTabs(on){ return `<div class="pills rtabs">${[['dia','📅 Por día','#/record'],['cal','🗓️ Calendario','#/record/cal'],['total','Σ Total','#/record/total']].map(([k,l,h])=>`<a class="pill ${k===on?'on':''}" href="${h}">${l}</a>`).join('')}</div>`; }
+function rdTabs(on){ return `<div class="pills rtabs">${[['dia','📅 Día','#/record'],['cal','🗓️ Mes','#/record/cal'],['tk','🎟️ Tickets','#/tickets'],['total','Σ Total','#/record/total']].map(([k,l,h])=>`<a class="pill ${k===on?'on':''}" href="${h}">${l}</a>`).join('')}</div>`; }
 
 async function viewRecordDay(date){
   SPORTS = SPORTS || await api('/api/sports');

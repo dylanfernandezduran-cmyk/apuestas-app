@@ -33,3 +33,38 @@ def test_drop_bad_total_line():
     books = [bk("a", 226.5), bk("b", 226.5), bk("c", 17.5), bk("d", 225.5)]
     market._drop_bad_lines(books, None)
     assert "total" not in books[2] and all("total" in b for i, b in enumerate(books) if i != 2)
+
+# ---------------- picks estrictos y coherentes
+from server import strict as ST
+
+def _c(market, side, edge, p, verdict="neutral"):
+    return dict(market=market, side=side, edge=edge, p_final=p, label=f"{market} {side}", signals=dict(verdict=verdict), status="PICK")
+
+def test_strict_one_official_and_gates():
+    cands = [_c("ML", "home", 6.0, .66), _c("Spread", "home", 3.0, .58), _c("Total", "over", 1.0, .52), _c("ML", "away", 2.5, .56, "en_contra")]
+    pk = ST.apply(dict(candidates=cands, confidence=dict(level="Media")), {})
+    assert [c["label"] for c in pk["official"]] == ["ML home"] and pk["status"] == "PICK"
+    assert "señales de mercado en contra" in cands[3]["why_not"] and any("edge" in w for w in cands[2]["why_not"])
+    assert cands[0]["score"] > cands[1]["score"] and 0 <= cands[0]["score"] <= 100
+
+def test_strict_second_pick_only_other_market_and_strong():
+    cands = [_c("ML", "home", 8.0, .70, "a_favor"), _c("Total", "under", 7.0, .68, "a_favor")]
+    pk = ST.apply(dict(candidates=cands, confidence=dict(level="Alta")), {})
+    assert len(pk["official"]) == 2
+    pk = ST.apply(dict(candidates=[_c("ML", "home", 8.0, .70, "a_favor"), _c("Spread", "home", 7.0, .68, "a_favor")], confidence=dict(level="Alta")), {})
+    assert len(pk["official"]) == 1                                     # ML + hándicap del mismo lado: correlacionado, sólo uno
+
+def test_strict_never_contradicts_prediction():
+    cands = [_c("ML", "away", 4.0, .60), _c("Total", "over", 1.0, .51)]
+    pk = ST.apply(dict(candidates=cands, confidence=dict(level="Media")), {})
+    ST.finalize(pk, dict(winner=dict(side="home"), total=dict(side="over")))
+    assert pk["official"] == [] and pk["status"] == "PASS"
+    assert all(c["side"] != "away" for c in pk["considered"]) and (pk["lean"] is None or pk["lean"]["side"] != "away")
+
+def test_strict_key_injury_blocks():
+    pk = ST.apply(dict(candidates=[_c("ML", "home", 6.0, .65)], confidence=dict(level="Alta")), dict(key_injury=True))
+    assert pk["official"] == [] and "jugador clave en duda" in pk["candidates"][0]["why_not"]
+
+def test_strict_score_floor():
+    pk = ST.apply(dict(candidates=[_c("ML", "home", 2.1, .555)], confidence=dict(level="Baja")), {})
+    assert pk["official"] == [] and any("puntaje" in w for w in pk["candidates"][0]["why_not"])

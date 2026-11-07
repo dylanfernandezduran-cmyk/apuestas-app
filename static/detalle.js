@@ -41,28 +41,30 @@ function dRec(d){
   return ds('rec','Picks registrados',body,{right, info:'Cada pick guarda su línea/cuota de APERTURA y, hasta que empieza el juego, se re-evalúa con el modelo a la línea ACTUAL: si la línea se mueve se actualiza («Abrió 48.5 · Actual 40.5»); si el modelo ahora prefiere el otro lado queda INVERTIDO (y se registra el lado nuevo); si ya no hay valor queda CANCELADO. Al inicio se bloquea la línea de cierre y se califica contra ella. Se califican solos con el marcador final de ESPN cada ~10 min; mientras no haya final confirmado quedan pendientes. Unidades a 1u plano.'});
 }
 
-// ---- 2. Mejores picks
+// ---- 2. Mejores picks (estricto: máx. 1 pick oficial por juego, coherente con la Predicción NRNM; lo demás sólo «También considerado»)
+const SCP = {edge:'Edge',prob:'Prob.',señales:'Señales',confianza:'Confianza',contexto:'Contexto'};
 function dPicks(d){
   const p=d.picks, g=d.game; if(!p) return '';
-  const l=p.lean, c=p.confidence, st=STATUS[p.status]||STATUS.PASS;
-  const rr=recFor(mktKey(l),l.side,l.line);
-  const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
+  const c=p.confidence, off=p.official||[], cons=p.considered||[];
   const cell=(k,v,cls='')=>`<div class="pc"><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;
-  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell('Edge',sg(l.edge)+' pp',l.edge>0?'k-t':'k-p'),cell('Confianza',c?esc(c.level):SD)]
-    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('Confianza',c?esc(c.level):SD)];
-  const sig=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[l.signals.verdict]||'mut'}">●</span> ${esc((VERD[l.signals.verdict]||[])[1]||'')}${l.signals.best?` · mejor precio <b class="mono">${esc(l.signals.best.price_txt)}</b> en ${esc(l.signals.best.book)}`:''}</div>` : '';
-  const main = `<div class="mp2 ${p.status==='PICK'?'hot':''}"><div class="mph"><span class="mpk ${p.status==='PICK'?'k-p':p.status==='LEAN'?'k-a':'mut'}">${esc(st[1])}</span>${gb}</div>
-    <div class="mpl">${esc(l.label)}</div><div class="pcs">${cells.join('')}</div>${sig}</div>`;
-  const cs=(p.candidates||[]).filter(x=>x.p_model!=null||x.p_nv!=null).slice().sort((a,b)=>(b.edge??-99)-(a.edge??-99));
-  const crow=x=>{ const e=x.edge, pv=x.p_model!=null?x.p_model:x.p_nv, r2=recFor(mktKey(x),x.side,x.line);
-    return `<div class="cr2"><div class="cl"><b>${esc(shortLbl(x.label,g))}</b><span class="mt">${esc(x.price_txt||SD)}${r2?' · '+gradeBadge(r2,false):''}</span></div><div class="cb"><span class="pbar"><i style="width:${Math.round((pv||0)*100)}%;background:${e>=3?DC.tl:DC.bl}"></i></span></div><div class="cp mono">${pct(pv,0)}</div><div class="ce mono ${e>0?'k-t':e<0?'k-p':'mut'}">${e==null?'':sg(e)}</div></div>`; };
-  const top=cs.slice(0,4), rest=cs.slice(4);
-  const list = cs.length ? `<div class="cl2">${top.map(crow).join('')}${rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">Ver ${rest.length} más</div><div class="sg">${rest.map(crow).join('')}</div></div>`:''}</div>` : '';
-  const why=[ 'Prob. final = mezcla modelo/mercado'+(d.model&&d.model.w_model!=null?` (${Math.round(d.model.w_model*100)}% modelo, ${100-Math.round(d.model.w_model*100)}% mercado s/vig)`:'')+'. Edge = prob. final − prob. s/vig del mercado, en puntos porcentuales. Precio máx. = el que deja EV ≥ +2%.',
-    c&&c.reasons&&c.reasons.length?'Confianza: '+esc(c.reasons.join(' · '))+'.':'', l.downgraded?'Era PICK pero se degradó a LEAN por confianza baja.':'', p.status==='PASS'?'Sin ventaja suficiente en ningún mercado: es el lean menos malo, no una recomendación fuerte.':'', l.price_txt?'':'Sin precio de mercado: sólo valdría la pena a ese momio o mejor.'].filter(Boolean).join(' ');
-  return ds('picks','Mejores picks',main+list,{right:tag2('ESTIMACIÓN','mod'), info:why});
+  const parts=x=>x.score_parts?`<div class="scp">${Object.entries(x.score_parts).map(([k,v])=>`<span>${SCP[k]||k} <b class="mono">${Math.round(v)}</b></span>`).join('')}</div>`:'';
+  const sigL=x=>x.signals&&x.signals.verdict&&x.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[x.signals.verdict]||'mut'}">●</span> ${esc((VERD[x.signals.verdict]||[])[1]||'')}${x.signals.best?` · mejor precio <b class="mono">${esc(x.signals.best.price_txt)}</b> en ${esc(x.signals.best.book)}`:''}</div>` : '';
+  const card=(x,i)=>{ const rr=recFor(mktKey(x),x.side,x.line);
+    const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
+    return `<div class="mp2 hot"><div class="mph"><span class="mpk k-p">${i?'2.º PICK OFICIAL':'PICK OFICIAL'}</span><span class="scb mono">${x.score}/100</span>${gb}</div>
+    <div class="mpl">${esc(x.label)}</div><div class="pcs">${[cell('Cuota',esc(x.price_txt||SD)),cell('Prob. final',pct(x.p_final,0)),cell('Edge',sg(x.edge)+' pp',x.edge>0?'k-t':'k-p'),cell('Confianza',c?esc(c.level):SD)].join('')}</div>
+    ${parts(x)}${sigL(x)}${g.state==='pre'?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:true},x)))}</div>`:''}</div>`; };
+  const l=p.lean;
+  const none = `<div class="mp2"><div class="mph"><span class="mpk mut">SIN PICK OFICIAL</span></div><div class="mpl">Ningún mercado pasa el filtro estricto</div>
+    <div class="sub">${l&&l.why_not&&l.why_not.length?'Mejor opción: <b>'+esc(l.label)+'</b> — no pasa por: '+esc(l.why_not.join(' · '))+'.':'Sin ventaja suficiente o sin línea.'}</div></div>`;
+  const crow=x=>`<div class="cr2"><div class="cl"><b>${esc(shortLbl(x.label,g))}</b><span class="mt">${esc(x.price_txt||SD)} · ${x.score??'—'}/100${x.why_not&&x.why_not.length?' · '+esc(x.why_not[0]):''}</span></div><div class="cp mono">${pct(x.p_final,0)}</div><div class="ce mono ${x.edge>0?'k-t':'mut'}">${x.edge==null?'':sg(x.edge)}</div>${g.state==='pre'?tkBtn(tkLegFromCand(g,Object.assign({official:false},x)),'+'):''}</div>`;
+  const alt = cons.length ? `<div class="gp"><div class="tg" role="button" tabindex="0">También considerado (${cons.length}) · no recomendado</div><div class="sg"><div class="cl2">${cons.map(crow).join('')}</div></div></div>` : '';
+  const S=p.strict||{};
+  const why=[`Pick oficial = pasa TODOS los filtros: edge ≥ ${S.edge_min??2} pp, prob. final ≥ ${Math.round((S.p_min??.55)*100)}%, señales de mercado no en contra, sin jugador clave en duda, puntaje ≥ ${S.score_min??60}/100, y coincide con la Predicción NRNM. Máximo 1 por juego (2 sólo si son de otro mercado y ambos ≥ ${S.second_min??75}/100).`,
+    'Puntaje 0-100: edge 35 · prob. 25 · señales (RLM / dinero vs tickets) 15 · confianza (muestra, modelo vs mercado, lesiones, abridores) 15 · contexto (clima/datos críticos) 10. Forma, H2H, descanso y localía entran vía las calificaciones del modelo.',
+    c&&c.reasons&&c.reasons.length?'Confianza: '+esc(c.reasons.join(' · '))+'.':''].filter(Boolean).join(' ');
+  return ds('picks','Pick oficial',(off.length?off.map(card).join(''):none)+alt,{right:tag2('ESTRICTO','mod'), info:why});
 }
-
 // ---- 3. Probabilidades
 function dProb(d){
   const P=d.probs, g=d.game; if(!P||!P.markets||!P.markets.length) return '';
@@ -211,7 +213,7 @@ function dInj(d){
   const ab=T=>(T.abbr||T.short||T.name||'').toUpperCase();
   const row=(e,T)=>{ const c=cls(e); const det=[ab(T),e.pos||'',e.detail||e.status_es||''].filter(Boolean).map(x=>esc(x)).join(' • ');
     return `<div class="ij"><span class="ph">${badge({logo:e.headshot,name:e.name},36)}</span><div class="ijt"><b>${esc(e.name)}${e.key?' <i class="star" title="Líder del equipo">★</i>':''}</b><small>${det}</small></div><div class="ijs ${c[1]}">${c[0]}${e.ret?`<small>${esc(fmtDM(e.ret))}</small>`:''}</div></div>`; };
-  const ret=(r,T)=>`<div class="ij"><span class="ph">${badge({name:r.name},36)}</span><div class="ijt"><b>${esc(r.name)}</b><small>${esc(ab(T))} • ${esc(r.pos||'')} • ${r.kind==='salio'?'salió del reporte':'mejoró: '+esc(r.old||'—')+' → '+esc(r.new||'—')}</small></div><div class="ijs ret">Regresa<small>${esc(fmtDM(r.ts))}</small></div></div>`;
+  const ret=(r,T)=>`<div class="ij"><span class="ph">${badge({name:r.name},36)}</span><div class="ijt"><b>${esc(r.name)}</b><small class="wr">${esc(ab(T))} • ${esc(r.pos||'')} • ${r.kind==='salio'?'salió del reporte':'mejoró: '+esc(r.old||'—')+' → '+esc(r.new||'—')}</small></div><div class="ijs ret">Regresa<small>${esc(fmtDM(r.ts))}</small></div></div>`;
   const body=sides(g).map(sd=>{ const T=g[sd], S=f.sides[sd]; if(!S) return '';
     const es=S.entries||[], rt=S.returning||[]; if(!es.length&&!rt.length) return '';
     const c=S.counts||{}; const first=es.slice(0,4), rest=es.slice(4);
