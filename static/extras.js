@@ -167,6 +167,7 @@ function srchInit(root){
   const run = async q=>{
     const me=++seq; if(ac) ac.abort(); ac=new AbortController();
     box.hidden=false; box.innerHTML='<div class="sr-none">Buscando…</div>';
+    if(window.NRNM_STATIC){ box.innerHTML='<div class="sr-none">La búsqueda necesita el servidor: en la versión en línea entra por Deportes o usa el link local.</div>'; return; }
     try{
       const r = await fetch('/api/search?q='+encodeURIComponent(q),{signal:ac.signal}); if(!r.ok) throw new Error(r.statusText);
       const d = await r.json(); if(me!==seq) return;

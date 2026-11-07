@@ -26,23 +26,62 @@ def test_records_main_and_suggestions(db):
     assert sp["type"] == "suggestion" and sp["line"] == -3.5 and sp["odds"] == -105 and sp["book"] == "Pinnacle"
     assert all(r["start_ts"] == NOW + 3600 and r["home"] == "Utah" and r["away"] == "Portland" and r["source"] == "live" for r in rows)
 
-def test_dedupe_and_first_line_odds_are_kept(db):
+def test_line_move_updates_pick_and_keeps_opening(db):
     R.record_analysis(analysis(), now=NOW)
     n0 = len(R.game_rows("nba", "1"))
-    # se vuelve a analizar con otra línea/cuota: no se duplica y NO se sobrescribe lo primero registrado
+    # se vuelve a analizar con otra línea/cuota antes del inicio: no se duplica, se ACTUALIZA a la línea actual y se conserva la apertura
     assert R.record_analysis(analysis(lean_odds=-130, spread_line=-5.5, spread_price=-120), now=NOW + 600) == 0
     rows = R.game_rows("nba", "1")
     assert len(rows) == n0
-    assert next(r for r in rows if r["market"] == "ml")["odds"] == -110
+    ml = next(r for r in rows if r["market"] == "ml")
+    assert (ml["odds"], ml["open_odds"], ml["state"]) == (-130, -110, "ACTUALIZADO")
     sp = next(r for r in rows if r["market"] == "spread")
-    assert (sp["line"], sp["odds"]) == (-3.5, -105)
+    assert (sp["line"], sp["odds"], sp["open_line"], sp["open_odds"], sp["state"]) == (-5.5, -120, -3.5, -105, "ACTUALIZADO")
+    import json
+    assert json.loads(sp["moves"])[-1]["line"] == -5.5
 
-def test_one_main_and_one_side_per_market(db):
+def test_line_locked_at_kickoff_and_graded_on_closing(db):
+    R.record_analysis(analysis(start=NOW + 3600), now=NOW)
+    R.record_analysis(analysis(start=NOW + 3600, spread_line=-4.5), now=NOW + 1800)              # se mueve antes del inicio
+    R.record_analysis(analysis(start=NOW + 3600, spread_line=-9.5), now=NOW + 3700)              # ya empezó: bloqueado (cierre = -4.5)
+    sp = next(r for r in R.game_rows("nba", "1") if r["market"] == "spread")
+    assert (sp["line"], sp["open_line"]) == (-4.5, -3.5)
+    assert G.settle("spread", "home", sp["line"], dict(home=104, away=100)) == "PERDIDO"          # se califica contra la línea bloqueada (-4.5), no la de apertura (-3.5)
+
+def test_side_flip_marks_old_pick_inverted_and_records_new_side(db):
     R.record_analysis(analysis(), now=NOW)
-    R.record_analysis(analysis(lean_side="away"), now=NOW + 60)        # el modelo cambia de lado en ML: no se registra el lado contrario
+    R.record_analysis(analysis(lean_side="away"), now=NOW + 60)        # el modelo cambia de lado en ML antes del inicio
     rows = R.game_rows("nba", "1")
-    assert len([r for r in rows if r["type"] == "main"]) == 1
-    assert [r["selection"] for r in rows if r["market"] == "ml"] == ["home"]
+    old = next(r for r in rows if r["market"] == "ml" and r["selection"] == "home")
+    new = next(r for r in rows if r["market"] == "ml" and r["selection"] == "away")
+    assert (old["status"], old["state"]) == ("ANULADO", "INVERTIDO") and "Portland ML" in old["note"]
+    assert new["status"] == "PENDIENTE" and new["type"] == "main"
+    assert len([r for r in rows if r["type"] == "main" and r["status"] != "ANULADO"]) == 1
+    R.record_analysis(analysis(), now=NOW + 120)                       # vuelve al lado original: se reactiva y el otro se invierte
+    rows = {(r["selection"]): r for r in R.game_rows("nba", "1") if r["market"] == "ml"}
+    assert rows["home"]["status"] == "PENDIENTE" and rows["away"]["state"] == "INVERTIDO"
+
+def test_nfl_total_example_over_48_5_flips_to_under_at_40_5(db):
+    """Caso de Dylan: abrió Over 48.5; antes del juego la línea es 40.5 y el modelo prefiere Under -> el Over queda INVERTIDO, se registra Under 40.5."""
+    def an(side, line):
+        g = dict(sport="nfl", league="nfl", id="9", state="pre", date=iso(NOW + 7200), home=dict(id="1", name="KC"), away=dict(id="2", name="LV"))
+        lean = dict(market="Total", side=side, line=line, label=f"{'Over' if side == 'over' else 'Under'} {line}", price=-110, p_model=.6, p_final=.57, p_nv=.5, edge=7, status="PICK")
+        return dict(game=g, odds=dict(book="DK"), picks=dict(lean=lean, candidates=[lean]), probs=dict(markets=[]))
+    R.record_analysis(an("over", 48.5), now=NOW)
+    R.record_analysis(an("over", 44.5), now=NOW + 600)
+    r = R.game_rows("nfl", "9")[0]
+    assert (r["line"], r["open_line"], r["state"]) == (44.5, 48.5, "ACTUALIZADO")
+    R.record_analysis(an("under", 40.5), now=NOW + 1200)
+    rows = {r["selection"]: r for r in R.game_rows("nfl", "9")}
+    assert rows["over"]["state"] == "INVERTIDO" and rows["over"]["status"] == "ANULADO" and rows["over"]["line"] == 44.5
+    assert rows["under"]["line"] == 40.5 and rows["under"]["status"] == "PENDIENTE"
+
+def test_market_without_value_is_cancelled(db):
+    R.record_analysis(analysis(), now=NOW)
+    a = analysis(); a["probs"]["markets"] = a["probs"]["markets"][:1]   # el hándicap ya no sale (sin valor/lado del modelo)
+    R.record_analysis(a, now=NOW + 60)
+    sp = next(r for r in R.game_rows("nba", "1") if r["market"] == "spread")
+    assert (sp["status"], sp["state"]) == ("ANULADO", "CANCELADO")
 
 def test_nothing_recorded_after_start_or_for_live_games(db):
     assert R.record_analysis(analysis(start=NOW - 10), now=NOW) == 0                  # ya empezó (hora)

@@ -15,15 +15,30 @@ const nd = t => `<div class="nd">${t}</div>`;
 const tag2 = (t,c='') => `<span class="tg2 ${c}">${t}</span>`;
 
 // ---- 1. Picks registrados
+// línea movida (pt90u): «Abrió 48.5 · Actual 40.5» + estado (actualizado / invertido / cancelado / cierre bloqueado)
+const LMS = {ACTUALIZADO:['lm-up','Actualizado'], INVERTIDO:['lm-fl','Invertido'], CANCELADO:['lm-cx','Cancelado']};
+function lineMove(r,g){
+  const fl=v=>v==null?'':(/spread$/.test(r.market)?sg(v):String(v));
+  const lineMoved = r.open_line!=null && r.line!=null && r.open_line!==r.line, oddsMoved = r.open_odds!=null && r.odds!=null && r.open_odds!==r.odds;
+  const started = g && g.state!=='pre';
+  const cur = started ? 'Cierre' : 'Actual';
+  const bits=[];
+  if(lineMoved) bits.push(`Abrió <b class="mono">${esc(fl(r.open_line))}</b> · ${cur} <b class="mono">${esc(fl(r.line))}</b>`);
+  if(oddsMoved) bits.push(`Cuota ${esc(am(r.open_odds))} → <b class="mono">${esc(am(r.odds))}</b>`);
+  const st = r.status==='ANULADO' && LMS[r.state] ? LMS[r.state] : (lineMoved||oddsMoved) && r.state==='ACTUALIZADO' ? LMS.ACTUALIZADO : null;
+  if(!bits.length && !st) return '';
+  const lock = started && r.status!=='ANULADO' ? `<span class="lm-tg lm-lk">🔒 Cierre</span>` : '';
+  return `<span class="lm">${st?`<span class="lm-tg ${st[0]}">${st[1]}</span>`:''}${lock}${bits.join(' · ')}${r.status==='ANULADO'&&r.note?`<em>${esc(r.note)}</em>`:''}</span>`;
+}
 function dRec(d){
   const rows=d.record||[], g=d.game; if(!rows.length) return '';
   const fin=rows.find(r=>r.score_text);
   const right = fin ? tag2('FINAL · '+esc(fin.score_text),'fin') : g.state==='in' ? tag2('● EN VIVO','live') : tag2('PRE-JUEGO');
   const body = rows.map(r=>{
     const st = r.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)) : gradeBadge(r,false);
-    return `<div class="rr2"><div class="rlx"><b>${esc(r.label)}</b><span class="mt">${r.type==='main'?'Principal':'Sugerencia'} · ${oddsTxt(r)}${r.line!=null?' · línea '+(/spread$/.test(r.market)?sg(r.line):r.line):''}${r.p_model!=null?' · modelo '+pct(r.p_model,0):''}</span></div>
+    return `<div class="rr2${r.status==='ANULADO'&&r.state?' lmx':''}"><div class="rlx"><b>${esc(r.label)}</b><span class="mt">${r.type==='main'?'Principal':'Sugerencia'} · ${oddsTxt(r)}${r.line!=null?' · línea '+(/spread$/.test(r.market)?sg(r.line):r.line):''}${r.p_model!=null?' · modelo '+pct(r.p_model,0):''}</span>${lineMove(r,g)}</div>
       <div class="rg">${st}${r.units!=null?`<b class="mono ${r.units>0?'k-t':r.units<0?'k-p':'mut'}">${units(r.units)}</b>`:''}</div></div>`; }).join('');
-  return ds('rec','Picks registrados',body,{right, info:'Línea y cuota = las primeras registradas antes del juego (no se actualizan ni se reconstruyen después). Se califican solos con el marcador final de ESPN cada ~10 min; mientras no haya final confirmado quedan pendientes. Unidades a 1u plano.'});
+  return ds('rec','Picks registrados',body,{right, info:'Cada pick guarda su línea/cuota de APERTURA y, hasta que empieza el juego, se re-evalúa con el modelo a la línea ACTUAL: si la línea se mueve se actualiza («Abrió 48.5 · Actual 40.5»); si el modelo ahora prefiere el otro lado queda INVERTIDO (y se registra el lado nuevo); si ya no hay valor queda CANCELADO. Al inicio se bloquea la línea de cierre y se califica contra ella. Se califican solos con el marcador final de ESPN cada ~10 min; mientras no haya final confirmado quedan pendientes. Unidades a 1u plano.'});
 }
 
 // ---- 2. Mejores picks
@@ -415,9 +430,10 @@ function dPred(d){
   const al=o=>o&&o.aligned==='pick'?' · alineado con el pick del modelo':o&&o.aligned==='marcador'?' · ajustado al marcador exacto':'';
   rows.push(row('Ganador',`${w.side==='draw'?'Empate':'Gana '+wl}`,al(w).slice(3),w.p,prMark(R&&R.ml)));
   if(tennis) rows.push(row('Marcador exacto',(sc.sets||[]).map(x=>x.join('-')).join(' '),`sets ${sc.home}-${sc.away} ${pct(sc.p,0)} · set por set ${pct(sc.p_seq,1)}`,sc.p_seq,prMark(R&&R.score)));
-  else rows.push(row('Marcador exacto',`${sc[s0]}–${sc[s1]}`,`el más probable que cumple ganador, total y hándicap · ${pct(sc.p,1)}`,sc.p,prMark(R&&R.score)));
+  else rows.push(row('Marcador exacto',`${sc[s0]}–${sc[s1]}`,`el más probable que cumple ganador, total, hándicap${p.btts?' y ambos anotan':''} · ${pct(sc.p,1)}`,sc.p,prMark(R&&R.score)));
   if(p.total){ const t=p.total; rows.push(row('Total'+(g.sport==='futbol'?' de goles':tennis?' de juegos':''),esc(t.label)+(g.sport==='futbol'?' goles':tennis?' juegos':''),`proyectado ${t.proj!=null?t.proj.toFixed(1):SD} ${unit} · ${t.line_src==='modelo'?(tennis?'línea del modelo (mediana de juegos)':'línea estándar (sin línea de mercado)'):'línea de mercado'+(p.book?' '+esc(p.book):'')}${al(t)}`,t.p,prMark(R&&R.total))); }
   if(p.corners){ const c=p.corners; rows.push(row('Córners',esc(c.label),`proyectado ${c.proj.toFixed(1)} (${nm(s0)} ${(s0==='home'?c.home:c.away).toFixed(1)} · ${nm(s1)} ${(s1==='home'?c.home:c.away).toFixed(1)}) · línea = promedio de sus últimos partidos`,c.p,prMark(R&&R.corners))); }
+  if(p.btts){ const b=p.btts; rows.push(row('Ambos anotan',esc(b.label),`modelo (Poisson) Sí ${pct(b.p_yes,0)} · No ${pct(1-b.p_yes,0)}${b.price!=null?` · ${esc(b.book||'')} ${am(b.price)}`:' · sin cuota de mercado'}${al(b)}`,b.p,prMark(R&&R.btts))); }
   if(p.spread){ const sp=p.spread, L=sp.line, lbl=sp.side==='home'?`${nm('home')} ${sg(L)}`:`${nm('away')} ${sg(-L)}`;
     rows.push(row('Hándicap',lbl,`margen proyectado ${nm('home')} ${sp.proj!=null?sg(sp.proj):SD} ${unit} · ${sp.line_src==='modelo'?'línea del modelo (sin hándicap de mercado)':'línea de mercado'}${al(sp)}`,sp.p,prMark(R&&R.spread))); }
   const fin = R&&R.score_text?`<div class="pdf">Resultado final <b class="mono">${esc(R.score_text)}</b></div>`:'';
@@ -429,5 +445,5 @@ function predRecord(P){
   if(!P) return '';
   const cell=(l,a)=>`<div class="pkc"><small>${l}</small><b class="mono">${a&&a.n?a.pct.toFixed(0)+'%':SD}</b><em class="mono">${a&&a.n?`${a.hit}-${a.miss}${a.push?'-'+a.push:''}`:'—'}</em><span class="pbar"><i style="width:${a&&a.n?Math.round(a.pct):0}%;background:linear-gradient(90deg,#3C85F7,#FF1179)"></i></span></div>`;
   const rec=(P.recent||[]).slice(0,6).map(r=>`<div class="pkr"><span class="sub mono">${esc(r.league.toUpperCase())}</span><span class="pkm">${esc(r.home)} <i>vs</i> ${esc(r.away)}</span><span class="mono pkn">${esc(r.score_text||'')}</span>${prMark(r.ml)}${prMark(r.total)}${prMark(r.spread)}${prMark(r.corners)}${prMark(r.score)}</div>`).join('');
-  return `<div class="card pkw"><h2>🎯 Predicción NRNM <span class="tg2" style="margin-left:6px">${P.graded} calificadas · ${P.pending} pendientes</span></h2><div>${P.graded?`<div class="pkg">${cell('Ganador',P.ml)}${cell('Total',P.total)}${cell('Hándicap',P.spread)}${P.corners&&P.corners.n?cell('Córners',P.corners):''}${cell('Marcador exacto',P.score)}${P.sets&&P.sets.n?cell('Sets (tenis)',P.sets):''}</div>${rec?`<div class="pkl">${rec}</div>`:''}`:`<div class="mut">Aún no hay predicciones calificadas. Se guardan antes de cada juego, se bloquean al inicio y se califican con el marcador final.</div>`}<div class="fine" style="margin-top:8px">% de acierto = aciertos / (aciertos + fallos), sin devoluciones. Marcador exacto es muy difícil: lo normal es un porcentaje bajo.</div></div></div>`;
+  return `<div class="card pkw"><h2>🎯 Predicción NRNM <span class="tg2" style="margin-left:6px">${P.graded} calificadas · ${P.pending} pendientes</span></h2><div>${P.graded?`<div class="pkg">${cell('Ganador',P.ml)}${cell('Total',P.total)}${cell('Hándicap',P.spread)}${P.corners&&P.corners.n?cell('Córners',P.corners):''}${P.btts&&P.btts.n?cell('Ambos anotan',P.btts):''}${cell('Marcador exacto',P.score)}${P.sets&&P.sets.n?cell('Sets (tenis)',P.sets):''}</div>${rec?`<div class="pkl">${rec}</div>`:''}`:`<div class="mut">Aún no hay predicciones calificadas. Se guardan antes de cada juego, se bloquean al inicio y se califican con el marcador final.</div>`}<div class="fine" style="margin-top:8px">% de acierto = aciertos / (aciertos + fallos), sin devoluciones. Marcador exacto es muy difícil: lo normal es un porcentaje bajo.</div></div></div>`;
 }

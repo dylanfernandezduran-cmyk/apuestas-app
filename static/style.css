@@ -609,3 +609,37 @@ ul.tl2{list-style:none;margin:10px 0 0;padding:0}.tl2 li{position:relative;paddi
 #app.gd .pp-bd{font-size:10px;font-weight:800;text-align:center;border-radius:99px;padding:4px 0;letter-spacing:.02em}
 #app.gd .pp-ok{background:rgba(52,209,123,.14);color:#34D17B}#app.gd .pp-no{background:rgba(255,17,121,.14);color:var(--pk)}
 #app.gd .pp-pu{background:#1d1d1d;color:#9aa3b0}#app.gd .pp-nl{background:#1d1d1d;color:#6b7280}
+
+/* ===== Línea movida (pt90u) ===== */
+.lm{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:10.5px;color:#9aa3b0;margin-top:4px;line-height:1.4;min-width:0}
+.lm b{color:#e5e7eb;font-weight:700}
+.lm em{flex-basis:100%;font-style:normal;color:#7d8591;font-size:10px}
+.lm-tg{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:99px;padding:2px 7px;white-space:nowrap}
+.lm-up{background:rgba(245,185,66,.14);color:#F5B942}.lm-fl{background:rgba(255,17,121,.14);color:#FF1179}.lm-cx{background:#1d1d1d;color:#9aa3b0}.lm-lk{background:rgba(6,170,196,.14);color:#06AAC4}
+.rr2.lmx .rlx>b{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.35);color:#9aa3b0}
+/* barra de la versión en línea (GitHub Pages) */
+.stbar{font-size:11px;line-height:1.4;color:#9aa3b0;background:#0b0b0b;padding:6px 14px;text-align:center}
+.stbar a{color:#06AAC4}
+/* ===== Chat IA (pt90u) · ids/clases ch-* únicos ===== */
+#chb{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:60;width:52px;height:52px;border-radius:50%;border:0;cursor:pointer;
+  background:linear-gradient(135deg,#FF1179,#3C85F7);color:#fff;font:800 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:.04em;box-shadow:0 6px 22px rgba(255,17,121,.35),0 0 0 1px rgba(255,255,255,.08) inset}
+#chb.on{background:#141414;box-shadow:0 0 0 1.5px #FF1179 inset}
+#chp{position:fixed;left:0;right:0;bottom:0;z-index:59;height:min(78vh,640px);background:#000;border-top:1px solid #1f1f1f;border-radius:20px 20px 0 0;display:flex;flex-direction:column;
+  box-shadow:0 -14px 40px rgba(0,0,0,.7);padding-bottom:env(safe-area-inset-bottom);max-width:640px;margin:0 auto}
+#chp[hidden]{display:none}
+#chp .ch-h{display:flex;align-items:baseline;gap:8px;padding:14px 16px 10px;border-bottom:1px solid #141414}
+#chp .ch-h b{font-size:15px;color:#fff}#chp .ch-h span{font-size:10.5px;color:#06AAC4;letter-spacing:.08em;text-transform:uppercase;font-weight:700;flex:1}
+#chp .ch-x{border:0;background:#141414;color:#9aa3b0;width:30px;height:30px;border-radius:50%;cursor:pointer}
+#chp .ch-m{flex:1;overflow-y:auto;padding:12px 14px 4px 14px;display:flex;flex-direction:column;gap:8px;padding-right:72px}
+#chp .ch-u,#chp .ch-a{max-width:100%;font-size:13px;line-height:1.5;border-radius:14px;padding:9px 12px;overflow-wrap:anywhere}
+#chp .ch-u{align-self:flex-end;background:#3C85F7;color:#fff;border-bottom-right-radius:4px;max-width:85%}
+#chp .ch-a{align-self:flex-start;background:#0d0d0d;color:#e5e7eb;border-bottom-left-radius:4px;box-shadow:inset 0 0 0 1px #1a1a1a}
+#chp .ch-a a{color:#06AAC4}#chp .ch-a small{display:block;margin-top:6px;font-size:10px;color:#6b7280}#chp .ch-mut{color:#6b7280;font-size:11px}
+#chp .ch-s{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px;padding-right:72px}
+#chp .ch-sg{border:0;background:#141414;color:#c9ced6;font:inherit;font-size:11px;font-weight:600;border-radius:99px;padding:6px 10px;cursor:pointer;max-width:100%}
+#chp .ch-f{display:flex;gap:8px;padding:8px 14px 12px;padding-right:76px}
+#chp .ch-f input{flex:1;min-width:0;background:#0d0d0d;border:1px solid #1f1f1f;border-radius:12px;color:#fff;font:inherit;font-size:16px;padding:10px 12px}
+#chp .ch-f input:focus{outline:none;border-color:#FF1179}
+#chp .ch-f button{border:0;border-radius:12px;background:#FF1179;color:#fff;width:44px;cursor:pointer;font-size:16px}
+#chp .ch-dots{display:flex;gap:4px}#chp .ch-dots i{width:6px;height:6px;border-radius:50%;background:#06AAC4;animation:chd 1s infinite alternate}#chp .ch-dots i:nth-child(2){animation-delay:.2s}#chp .ch-dots i:nth-child(3){animation-delay:.4s}
+@keyframes chd{from{opacity:.25}to{opacity:1}}

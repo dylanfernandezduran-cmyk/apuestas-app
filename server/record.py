@@ -2,8 +2,11 @@
 
 Reglas:
   · Sólo se registra un pick cuando se genera ANTES de que empiece el juego (estado 'pre' y hora de inicio futura).
-  · Unicidad por juego + mercado + selección: se conserva la PRIMERA línea/cuota registrada (INSERT OR IGNORE; nunca se sobrescribe).
-  · Además, una sola selección por juego+mercado (la primera): el lado contrario del mismo mercado no se registra después.
+  · Unicidad por juego + mercado + selección. Se guarda la línea/cuota de APERTURA (open_line/open_odds) y, mientras el juego no empiece,
+    cada análisis re-evalúa el pick a la línea ACTUAL (pt90u): línea/cuota/probabilidades se actualizan (historial en `moves`, state=ACTUALIZADO);
+    si el modelo ahora prefiere el lado contrario -> el pick viejo queda ANULADO con state=INVERTIDO y se registra el nuevo lado;
+    si el mercado ya no tiene valor/lado del modelo -> ANULADO con state=CANCELADO (se reactiva si vuelve antes del inicio).
+  · Al empezar el juego ya no se toca (línea de CIERRE bloqueada) y se califica contra esa línea.
   · Un juego tiene a lo sumo un pick 'main' (el primero registrado); un lean posterior distinto se guarda como 'suggestion'.
   · La calificación (ver grading.py) sólo escribe columnas de resultado; jamás toca línea/cuota/probabilidades.
   · Las filas con source != 'live' serían de relleno retroactivo (no se genera ninguna: no hay cuotas pre-juego de juegos pasados)."""
@@ -11,7 +14,7 @@ import time
 from . import history
 from .odds import am_to_dec
 
-MKT = {"ML": "ml", "Spread": "spread", "Total": "total"}
+MKT = {"ML": "ml", "Spread": "spread", "Total": "total", "BTTS": "btts"}
 DONE = ("GANADO", "PERDIDO", "PUSH", "MEDIO_GANADO", "MEDIO_PERDIDO")
 STATUSES = DONE + ("ANULADO", "PENDIENTE")
 _ready = False
@@ -30,6 +33,10 @@ def _c():
             type TEXT, created_at INTEGER, source TEXT DEFAULT 'live',
             status TEXT DEFAULT 'PENDIENTE', units REAL, graded_at INTEGER, score_text TEXT, final_home REAL, final_away REAL, note TEXT,
             UNIQUE(league, eid, market, selection))""")
+        for col, typ in (("open_line", "REAL"), ("open_odds", "INTEGER"), ("state", "TEXT"), ("moves", "TEXT"), ("updated_at", "INTEGER")):
+            try: c.execute(f"ALTER TABLE picks ADD COLUMN {col} {typ}")
+            except Exception: pass
+        c.execute("UPDATE picks SET open_line=line, open_odds=odds WHERE open_line IS NULL AND open_odds IS NULL")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_status ON picks(status, start_ts)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_game ON picks(league, eid)")
         c.execute("CREATE TABLE IF NOT EXISTS team_logos(league TEXT, team_id TEXT, logo TEXT, PRIMARY KEY(league, team_id))")
@@ -88,7 +95,52 @@ def record_analysis(a, now=None):
     """Persiste los picks de un análisis. Devuelve cuántas filas nuevas se insertaron."""
     rows = extract(a, now)
     if not rows: return 0
+    try: reconcile(rows, now)
+    except Exception: pass
     return record_rows(rows)
+
+def _fresh_by_market(rows):
+    out = {}
+    for r in rows:                      # el 1º de cada mercado (el principal va primero)
+        out.setdefault(r["market"], r)
+    return out
+
+def reconcile(rows, now=None):
+    """Re-evalúa los picks YA registrados de este juego contra el análisis actual (sólo antes del inicio). Devuelve dict de conteos."""
+    import json
+    now = int(now or time.time())
+    if not rows: return {}
+    lg, eid = rows[0]["league"], rows[0]["eid"]
+    fresh = _fresh_by_market(rows)
+    cnt = dict(updated=0, flipped=0, cancelled=0, reactivated=0)
+    with history._lock:
+        c = _c()
+        if c is None: return cnt
+        cur = c.execute("SELECT id, market, selection, line, odds, open_line, open_odds, status, state, moves, label FROM picks WHERE league=? AND eid=? AND start_ts>? "
+                        "AND (status='PENDIENTE' OR (status='ANULADO' AND state IN ('CANCELADO','INVERTIDO')))", (lg, eid, now))
+        for pid, mk, sel, line, odds, oline, oodds, status, state, moves, label in cur.fetchall():
+            mv = json.loads(moves) if moves else []
+            f = fresh.get(mk)
+            if f and f["selection"] == sel:
+                changed = (f.get("line") != line) or (f.get("odds") != odds)
+                if changed: mv.append(dict(t=now, line=f.get("line"), odds=f.get("odds")))
+                moved = (f.get("line") != oline) or (f.get("odds") != oodds)
+                new_state = "ACTUALIZADO" if moved else "ACTIVO"
+                if status == "ANULADO": cnt["reactivated"] += 1
+                elif changed: cnt["updated"] += 1
+                c.execute("UPDATE picks SET line=?, odds=?, label=?, book=COALESCE(?, book), p_model=?, p_final=?, p_nv=?, edge=?, status='PENDIENTE', state=?, moves=?, updated_at=?, "
+                          "note=CASE WHEN ?='ANULADO' THEN NULL ELSE note END WHERE id=?",
+                          (f.get("line"), f.get("odds"), f["label"], f.get("book"), f.get("p_model"), f.get("p_final"), f.get("p_nv"), f.get("edge"), new_state,
+                           json.dumps(mv), now, status, pid))
+            elif status == "PENDIENTE":
+                if f:
+                    c.execute("UPDATE picks SET status='ANULADO', state='INVERTIDO', updated_at=?, note=? WHERE id=?",
+                              (now, f"Invertido antes del inicio: a la línea actual el modelo prefiere {f['label']}", pid)); cnt["flipped"] += 1
+                else:
+                    c.execute("UPDATE picks SET status='ANULADO', state='CANCELADO', updated_at=?, note=? WHERE id=?",
+                              (now, "Cancelado antes del inicio: a la línea actual el modelo ya no encuentra valor en este mercado", pid)); cnt["cancelled"] += 1
+        c.commit()
+    return cnt
 
 def record_rows(rows):
     n = 0
@@ -98,14 +150,16 @@ def record_rows(rows):
         for r in rows:
             # una sola selección por juego+mercado (la primera registrada): si luego el modelo prefiere el lado contrario (la línea se movió),
             # NO se registra para no contar ambos lados de un mismo mercado como dos picks
-            if c.execute("SELECT 1 FROM picks WHERE league=? AND eid=? AND market=? AND selection<>?", (r["league"], r["eid"], r["market"], r["selection"])).fetchone():
+            if c.execute("SELECT 1 FROM picks WHERE league=? AND eid=? AND market=? AND selection<>? AND status<>'ANULADO'", (r["league"], r["eid"], r["market"], r["selection"])).fetchone():
                 continue
-            has_main = c.execute("SELECT 1 FROM picks WHERE league=? AND eid=? AND type='main'", (r["league"], r["eid"])).fetchone()
+            has_main = c.execute("SELECT 1 FROM picks WHERE league=? AND eid=? AND type='main' AND status<>'ANULADO'", (r["league"], r["eid"])).fetchone()
             typ = r["type"] if not (r["type"] == "main" and has_main) else "suggestion"
             vals = (r["sport"], r["league"], r["eid"], r["start_ts"], r["home"], r["away"], r["home_id"], r["away_id"], r["market"], r["selection"], r["line"], r["label"],
                     r["odds"], r["book"], r["p_model"], r["p_final"], r["p_nv"], r["edge"], r["basis"], typ, r["created_at"], r["source"])
             cur = c.execute(f"INSERT OR IGNORE INTO picks({COLS}) VALUES ({','.join('?' * 22)})", vals)
-            if cur.rowcount: n += 1
+            if cur.rowcount:
+                n += 1
+                c.execute("UPDATE picks SET open_line=line, open_odds=odds, state='ACTIVO' WHERE id=?", (cur.lastrowid,))
             elif typ == "main" and not has_main:
                 # el pick ya existía como sugerencia y el juego aún no tenía principal: se asciende (línea/cuota registradas NO cambian)
                 c.execute("UPDATE picks SET type='main' WHERE league=? AND eid=? AND market=? AND selection=? AND type='suggestion' AND status='PENDIENTE'",

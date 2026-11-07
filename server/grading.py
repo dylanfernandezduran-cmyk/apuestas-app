@@ -6,6 +6,7 @@ Estados: GANADO · PERDIDO · PUSH (devolución) · MEDIO_GANADO / MEDIO_PERDIDO
 Reglas por mercado (selection = home|away|draw|over|under|1X|X2|12; line = línea del lado elegido):
   ml      ganador del partido. Fútbol: 1X2 a 90 min (+descuento). Tenis: ganador del partido. Empate en deportes de 2 vías (NFL) = PUSH.
   dc      doble oportunidad (fútbol): 1X, X2, 12.
+  btts    ambos anotan (fútbol, 90 min): yes|no.
   spread  hándicap/spread/run line/puck line: margen del lado + línea vs 0. Tenis: JUEGOS totales ganados por cada jugador (suma de los sets).
   total   over/under del total de puntos/carreras/goles. Tenis: total de JUEGOS.
   sspread / stotal (sólo tenis, sets): hándicap y total de SETS.
@@ -46,6 +47,10 @@ def settle(market, selection, line, res, three_way=False):
         if selection == "away": return "GANADO" if a > h else "PERDIDO" if a < h else tie
         if selection == "draw": return ("GANADO" if h == a else "PERDIDO") if three_way else None   # sólo fútbol: en otros deportes un 3-way a 60' no se puede calificar con el marcador final
         return None
+    if market == "btts":                              # ambos anotan (fútbol, 90 min)
+        h, a = res["home"], res["away"]
+        if h is None or a is None or selection not in ("yes", "no"): return None
+        return "GANADO" if ((h > 0 and a > 0) == (selection == "yes")) else "PERDIDO"
     if market == "dc":
         h, a = res["home"], res["away"]
         if selection == "1X": return "GANADO" if h >= a else "PERDIDO"

@@ -423,6 +423,14 @@ async def _analyze(league, eid):
             try: cor = await PRED.corners_info(league, cfg["path"], tsum[H["id"]], tsum[A["id"]], H["id"], A["id"])
             except Exception: cor = None
         out["_cor"] = cor
+    if game["state"] == "pre" and fam == "soccer" and odds:
+        from . import props as PROPS
+        from .odds import am_to_prob, devig
+        bt = await PROPS.btts_odds(league, game["id"])
+        if bt:
+            odds["btts"] = dict(yes=bt["yes"], no=bt["no"]); odds["btts_open"] = dict(yes=bt.get("open_yes"), no=bt.get("open_no"))
+            nvb, _ = devig([am_to_prob(bt["yes"]), am_to_prob(bt["no"])])
+            odds.setdefault("nv", {})["btts"] = dict(yes=nvb[0], no=nvb[1])
     if game["state"] == "pre":
         cands = M.build_candidates(mdl, odds, H["name"], A["name"])
         dec = M.decide(cands, mdl, H["name"], A["name"])

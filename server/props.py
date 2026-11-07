@@ -170,6 +170,21 @@ def parse_items(items, family):
         if score(p) < score(cur): out[(aid, key)] = p
     return out
 
+def parse_btts(items):
+    """«Both Teams To Score» (DraftKings vía ESPN, sin atleta): par de filas, la 1ª = Sí y la 2ª = No (mismo orden que Más/Menos). -> dict(yes,no,open_yes,open_no,updated) o None."""
+    rows = [it for it in items if not it.get("athlete") and norm_type((it.get("type") or {}).get("name")) == "both teams to score"]
+    if len(rows) != 2: return None
+    pr = lambda it, k: _price(((it.get(k) or {}).get("over") or {}).get("american"))
+    y, n = rows
+    if pr(y, "current") is None or pr(n, "current") is None: return None
+    return dict(yes=pr(y, "current"), no=pr(n, "current"), open_yes=pr(y, "open"), open_no=pr(n, "open"), updated=y.get("lastUpdated"), book="DraftKings")
+
+async def btts_odds(league, eid):
+    """Cuotas reales de «Ambos anotan» (DraftKings vía ESPN) o None."""
+    if LEAGUES.get(league, {}).get("family") != "soccer": return None
+    try: return (await event_props(league, eid)).get(("", "btts"))
+    except Exception: return None
+
 # ----------------------------------------------------------------- fuentes
 _EVIDX = {}          # (league, eid) -> (ts, {(aid,key): prop})   índice COMPACTO (no se guarda el JSON de 300 KB)
 _EVLOCK = {}
@@ -201,6 +216,9 @@ async def event_props(league, eid, ttl=300):
             if page >= (d.get("pageCount") or 1): break
             page += 1
         idx = parse_items(items, fam) if ok else {}
+        if ok and fam == "soccer":
+            bt = parse_btts(items)
+            if bt: idx[("", "btts")] = bt
         if len(_EVIDX) > 400:
             for k in sorted(_EVIDX, key=lambda k: _EVIDX[k][0])[:100]: _EVIDX.pop(k, None)
         _EVIDX[(league, eid)] = (time.time() if ok else time.time() - ttl + 20, idx)   # un fallo se reintenta a los 20 s
@@ -326,9 +344,10 @@ async def game_props(league, eid, maxp=16):
     idx = await event_props(league, eid)
     sem = asyncio.Semaphore(8)
     mode, jobs = "lineas", []
-    if idx:
+    if any(a for a, _ in idx):
         by = {}
-        for (aid, key), p in idx.items(): by.setdefault(aid, []).append(p)
+        for (aid, key), p in idx.items():
+            if aid: by.setdefault(aid, []).append(p)          # ("", "btts") es de equipo, no de jugador
         # jugadores con más props y línea de su estadística principal más alta primero
         main = MAIN.get(fam, [])
         def rank(aid):

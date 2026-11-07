@@ -1,0 +1,60 @@
+# NRNM en GitHub Pages (pt90u): cada ~10 min (GitHub puede retrasar los cron 5-15 min) corre el backend en el runner,
+# genera JSON estáticos con datos reales y publica el sitio. La base SQLite (picks, apertura/cierre, récord) persiste en la rama `estado`.
+# No usa llaves: las fuentes (ESPN, Action Network, Pinnacle guest, Open-Meteo) son públicas. Nada de dinero real (paper trading).
+name: NRNM Pages
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: nrnm-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    # apagado hasta activarlo: Settings > Pages > Source = GitHub Actions y variable de repo NRNM_PAGES=1 (manual siempre se puede)
+    if: ${{ vars.NRNM_PAGES == '1' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APUESTAS_DB: /tmp/state/history.db
+      TZ: America/Mexico_City
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Restaurar base (rama estado)
+        run: |
+          mkdir -p /tmp/state
+          if git fetch --depth=1 origin estado 2>/dev/null; then git show FETCH_HEAD:history.db > /tmp/state/history.db || rm -f /tmp/state/history.db; fi
+          ls -la /tmp/state
+      - name: Construir sitio estático (datos reales)
+        run: timeout 25m python scripts/build_static.py site 48
+      - name: Guardar base (rama estado, 1 solo commit)
+        if: always()
+        run: |
+          [ -f /tmp/state/history.db ] || exit 0
+          python -c "import sqlite3;c=sqlite3.connect('/tmp/state/history.db');c.execute('PRAGMA wal_checkpoint(TRUNCATE)');c.close()"
+          mkdir -p /tmp/st && cd /tmp/st && git init -q && cp /tmp/state/history.db . && git add history.db
+          git -c user.name="nrnm-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "estado $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:estado
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4

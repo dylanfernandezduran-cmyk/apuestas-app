@@ -125,3 +125,12 @@ Estimaciones de un modelo simple con fines informativos. No hay promesa de renta
 - Start: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`
 - Health check: `/api/health` (ver `render.yaml`; o "New → Blueprint" apuntando a este repo).
 - No requiere variables de entorno ni llaves. El plan gratuito se duerme tras ~15 min sin tráfico (el primer acceso tarda ~1 min en despertar y recalcular ratings).
+
+## Versión en línea (GitHub Pages, sin la PC) · pt90u
+`scripts/build_static.py` corre el backend en proceso y guarda las respuestas de /api como JSON en `site/data/`; el frontend (con `window.NRNM_STATIC`) los lee en lugar de /api.
+El workflow `deploy/github-pages.yml` (cópialo a `.github/workflows/pages.yml`; el token de esta caja no tiene permiso `workflow`) lo regenera cada ~10 min (cron de GitHub: real 10-20 min) y publica en Pages; la base SQLite persiste en la rama `estado`.
+Activación (una vez): Settings → Pages → Source = **GitHub Actions**, y Settings → Variables → `NRNM_PAGES=1`. URL: https://dylanfernandezduran-cmyk.github.io/apuestas-app/
+No disponible en la versión en línea: búsqueda, detalle de un prop (tendencias), gráfica de historial de líneas, «Calificar ahora», filtros del récord y el LLM del chat (responde el motor local).
+
+## Chat IA
+Botón «IA». Sin llave responde un motor local con los datos de la app. LLM opcional (sólo servidor, nunca en el repo): `GROQ_API_KEY` (Groq, gratis) o `NRNM_LLM_API_KEY` + `NRNM_LLM_BASE_URL` + `NRNM_LLM_MODEL` (cualquier API compatible con OpenAI).

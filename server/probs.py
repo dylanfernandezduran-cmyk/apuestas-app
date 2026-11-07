@@ -150,6 +150,25 @@ def build(game, mdl, odds, mk, w=None):
         for o in outs: o["label"] = f"{'Over' if o['side'] == 'over' else 'Under'} {tot_line:g}" + (" juegos" if tennis else "")
         unit = "juegos" if tennis else None
         markets.append(dict(key="total", title="Total de juegos" if tennis else "Total (más/menos)", outcomes=outs, unit=unit))
+    # ---------------- Ambos anotan (fútbol): modelo = matriz de Poisson; mercado = DraftKings vía ESPN (sin vig)
+    bt = (odds or {}).get("btts") or {}
+    pby = (mdl or {}).get("p_btts") if soccer else None
+    if soccer and (bt or pby is not None):
+        nvb = ((odds or {}).get("nv") or {}).get("btts") or {}
+        outs = []
+        for sd, nm in (("yes", "Sí"), ("no", "No")):
+            pmv = None if pby is None else (pby if sd == "yes" else 1 - pby)
+            price = bt.get(sd)
+            o = dict(key=f"btts.{sd}", market="btts", side=sd, name=nm, role=None, label=f"Ambos anotan: {nm}", line=None, p_model=None, p_model_raw=pmv, clipped=False,
+                     p_final=None, p_nv=nvb.get(sd), nv_src=("DraftKings (una sola casa)" if nvb else None), p_pin=None, pin_line=None, fair_txt=None,
+                     fair_nv_txt=fmt_am(prob_to_am(nvb[sd])) if nvb.get(sd) else None,
+                     best=(dict(price=price, price_txt=fmt_am(price), book="DraftKings", n_books=1) if price is not None else None), edge=None, ev=None, p_push=None,
+                     model_note=None, open_price=((odds or {}).get("btts_open") or {}).get(sd))
+            if pmv is not None:
+                c = M._cand("BTTS", sd, o["label"], price, pmv, nvb.get(sd), w)
+                o.update(p_model=c["p_model"], clipped=c["clipped"], p_final=c["p_final"], fair_txt=c["fair_txt"], edge=c["edge"], ev=c["ev"])
+            outs.append(o)
+        markets.append(dict(key="btts", title="Ambos anotan", outcomes=outs, unit=None))
     # ---------------- Tenis: hándicap y total de SETS (Pinnacle)
     if tennis:
         pb = next((b for b in books if b["kind"] == "sharp"), None) or {}

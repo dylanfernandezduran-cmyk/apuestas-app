@@ -16,10 +16,22 @@ setInterval(()=>{document.getElementById('clock').textContent = new Intl.DateTim
 
 // fetch con tope de tiempo: nunca se queda girando; el error sube a route() que muestra el mensaje + «Reintentar»
 const API_TIMEOUT_MS = 45000;
+// Modo GitHub Pages (pt90u): sin servidor; las respuestas de /api vienen de JSON estáticos que un GitHub Action regenera cada ~10-15 min
+const STATIC = typeof window!=='undefined' && !!window.NRNM_STATIC;
+const LOCAL_URL = 'http://192.168.100.11:8765';
+const NOSTATIC = [/^\/api\/prop\//, /^\/api\/search/, /^\/api\/grade/, /^\/api\/history\//];
+function staticUrl(path){
+  if(/^\/api\/record(\?|$)/.test(path)) path='/api/record?limit=80';            // filtros del récord: se aplican sobre el último récord publicado
+  let [p,q]=path.split('?'); p=p.replace(/^\/api\//,'');
+  if(q){ q=q.split('&').filter(Boolean).sort().join('&').replace(/[^A-Za-z0-9._-]/g,'_'); p+='@'+q; }
+  return 'data/'+p+'.json';
+}
 async function api(path, ms){
   const ac = new AbortController(), t = setTimeout(()=>ac.abort(), ms||API_TIMEOUT_MS);
   try{
-    const r = await fetch(path, {signal: ac.signal});
+    if(STATIC && NOSTATIC.some(r=>r.test(path))) throw new Error('Esto necesita el servidor: no está disponible en la versión en línea (GitHub). Ábrelo en el link local '+LOCAL_URL+' con la PC encendida.');
+    const r = await fetch(STATIC ? staticUrl(path) : path, {signal: ac.signal, cache: STATIC ? 'no-cache' : 'default'});
+    if(STATIC && r.status===404) throw new Error('Sin datos publicados para esto todavía en la versión en línea (se actualiza cada ~10-15 min). Para datos al momento usa el link local '+LOCAL_URL+'.');
     if(!r.ok) throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail||r.statusText);
     return await r.json();
   }catch(e){
@@ -139,7 +151,7 @@ const homeFirst = g => !!g && (g.sport==='futbol'||g.sport==='tenis');
 const sides = g => homeFirst(g) ? ['home','away'] : ['away','home'];
 const vsMark = g => homeFirst(g) ? 'vs' : '@';
 // ---- logos de equipo / foto de jugador (ESPN, vía /api/img: reducidas + caché). Sin imagen o si falla -> círculo con iniciales, mismo tamaño (sin saltos de layout)
-const imgSrc = (u,w) => `/api/img?w=${w||64}&u=${encodeURIComponent(u)}`;
+const imgSrc = (u,w) => (typeof window!=='undefined'&&window.NRNM_STATIC) ? u : `/api/img?w=${w||64}&u=${encodeURIComponent(u)}`;
 const initials = n => { const w=String(n||'').replace(/\(.*?\)/g,' ').split(/[\s.\-]+/).filter(Boolean); if(!w.length) return '?'; return (w.length>1 ? w[0][0]+w[w.length-1][0] : w[0].slice(0,2)).toUpperCase(); };
 const badge = (t,s) => { s=s||22; t=t||{}; const u=t.logo, ini=initials(t.name||t.short), ph=u&&/\/headshots\//.test(u);
   return `<span class="tl${u?'':' ini'}${ph?' ph':''}" style="--s:${s}px" data-i="${esc(ini)}">${u?`<img src="${esc(imgSrc(u,s*2))}" width="${s}" height="${s}" loading="lazy" decoding="async" alt="" onerror="this.parentNode.classList.add('ini');this.remove()">`:''}</span>`; };
@@ -325,11 +337,11 @@ async function viewRecord(){
     ${kpi('Unidades (1u plano)',S.n_priced?units(S.units):SD,S.units>0?'pos':S.units<0?'neg':'')}${kpi('ROI',S.roi==null?SD:sg(S.roi)+'%',S.roi>0?'pos':S.roi<0?'neg':'')}
     </div><div class="kpis s">${kpi('Calificados',S.graded)}${kpi('⏳ Pendientes',S.pending)}${kpi('⚪ Anulados',S.void)}</div>
    <div class="sub">G = ganado · P = perdido · E = push (devolución). % acierto = G/(G+P) sin pushes. Medio ganado/perdido (líneas de cuarto) cuenta 0.5 en G o P y 0.5 en E. Unidades = ganancia/pérdida de apostar 1u a la cuota registrada${S.n_unpriced?` (${S.n_unpriced} calificados sin cuota registrada no entran en unidades/ROI)`:''}.
-   <button class="btn" onclick="gradeNow(this)">🔄 Calificar ahora</button> <span class="sub">Automático cada ${d.grading.every_min} min${d.grading.last?' · última '+tsFmt(d.grading.last):''}</span></div>`;
+   ${STATIC?'':'<button class="btn" onclick="gradeNow(this)">🔄 Calificar ahora</button>'} <span class="sub">Automático cada ${d.grading.every_min} min${d.grading.last?' · última '+tsFmt(d.grading.last):''}</span></div>`;
   html+=predRecord(d.pred);
   if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
   else html+=`<div class="day">Últimos picks calificados</div><div class="rec-list">`+d.recent.map(r=>`<div class="rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
-     <div class="rl-m">${recMatch(r)}</div><div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div><div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
+     <div class="rl-m">${recMatch(r)}</div><div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div>${lineMove(r,{state:'post'})}<div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
      <div class="rr">${r.status==='PENDIENTE'&&g.state==='in'?(provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)):gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
   $app.innerHTML=html;
 }
@@ -521,3 +533,9 @@ document.addEventListener('click',e=>{
   const h=e.target.closest('.fold > h2'); if(h) h.parentElement.classList.toggle('closed');
 },true);
 document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('tg')){ e.preventDefault(); e.target.parentElement.classList.toggle('open'); } });
+
+// barra de la versión en línea: hora de los datos + link local
+if(STATIC){ try{ const b=document.createElement('div'); b.className='stbar';
+  const dt=new Intl.DateTimeFormat('es-MX',{timeZone:TZ,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(window.NRNM_STATIC.built));
+  b.innerHTML=`🌐 Versión en línea · datos de ${esc(dt)} (CDMX) · se actualizan cada ~10-15 min · <a href="${LOCAL_URL}">link local (en vivo)</a>`;
+  document.querySelector('header').after(b); }catch(e){} }

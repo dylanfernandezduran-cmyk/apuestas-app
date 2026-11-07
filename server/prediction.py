@@ -22,6 +22,7 @@ def _ok(c, h, a):
     k, s, L = c
     if k == "w": return h == a if s == "draw" else ((h > a) if s == "home" else (a > h))
     if k == "t": return (h + a > L) if s == "over" else (h + a < L)
+    if k == "b": return (h > 0 and a > 0) == (s == "yes")       # ambos anotan
     d = h - a + L                                   # hándicap: L = línea del LOCAL
     return d > 0 if s == "home" else d < 0
 
@@ -174,8 +175,8 @@ def _pick_cons(picks):
     out = {}
     for c in ok:
         mk = c.get("market")
-        if mk in out or mk not in ("ML", "Spread", "Total"): continue
-        if c.get("side") in ("home", "away", "draw", "over", "under"): out[mk] = (c["side"], c.get("line"))
+        if mk in out or mk not in ("ML", "Spread", "Total", "BTTS"): continue
+        if c.get("side") in ("home", "away", "draw", "over", "under", "yes", "no"): out[mk] = (c["side"], c.get("line"))
     return out
 
 def build(game, mdl, odds, fam, corners=None, picks=None):
@@ -225,14 +226,23 @@ def build(game, mdl, odds, fam, corners=None, picks=None):
                 pc = cover(-L)[0] if w == "home" else cover(-L)[1]
                 if pc >= 0.5:
                     out["spread"] = dict(line=L, line_src="modelo", side=w, p=pc, p_home=cover(-L)[0], p_away=cover(-L)[1], proj=out["proj"].get("margin")); break
+    # --- ambos anotan (fútbol): prob. del modelo = masa de la matriz de Poisson con goles de los dos; sigue al pick BTTS si lo hay
+    if fam == "soccer" and mdl.get("p_btts") is not None:
+        py = mdl["p_btts"]; bo = (odds or {}).get("btts") or {}
+        side = ("yes" if py >= .5 else "no") if "BTTS" not in pk else pk["BTTS"][0]
+        out["btts"] = dict(side=side, p=(py if side == "yes" else 1 - py), p_yes=py, price=bo.get(side), book=("DraftKings" if bo else None),
+                           label=f"Ambos anotan: {'Sí' if side == 'yes' else 'No'}")
+        if "BTTS" in pk: out["btts"]["aligned"] = "pick"; fixed.add("b")
     # --- marcador exacto: el más probable que cumple TODAS las líneas (picks primero, luego las del modelo)
     cons = []
     if "w" in fixed: cons.append(("w", out["winner"]["side"], None))
     if "t" in fixed: cons.append(("t", out["total"]["side"], out["total"]["line"]))
     if "s" in fixed: cons.append(("s", out["spread"]["side"], out["spread"]["line"]))
+    if "b" in fixed: cons.append(("b", out["btts"]["side"], None))
     if "w" not in fixed: cons.append(("w", out["winner"]["side"], None))
     if "t" not in fixed and out.get("total"): cons.append(("t", out["total"]["side"], out["total"]["line"]))
     if "s" not in fixed and out.get("spread"): cons.append(("s", out["spread"]["side"], out["spread"]["line"]))
+    if "b" not in fixed and out.get("btts"): cons.append(("b", out["btts"]["side"], None))
     sc, kept = choose(cons)
     if not sc: return None
     out["score"] = sc
@@ -249,6 +259,10 @@ def build(game, mdl, odds, fam, corners=None, picks=None):
     s_ = out.get("spread")
     if s_ and not _ok(("s", s_["side"], s_["line"]), h, a) and h - a + s_["line"] != 0:
         s_["side"] = "home" if h - a + s_["line"] > 0 else "away"; s_["p"] = s_["p_home"] if s_["side"] == "home" else s_["p_away"]; s_["aligned"] = "marcador"; notes.append("spread")
+    b_ = out.get("btts")
+    if b_ and not _ok(("b", b_["side"], None), h, a):
+        b_["side"] = "yes" if (h > 0 and a > 0) else "no"; b_["p"] = b_["p_yes"] if b_["side"] == "yes" else 1 - b_["p_yes"]; b_["aligned"] = "marcador"
+        b_["price"] = ((odds or {}).get("btts") or {}).get(b_["side"]); b_["label"] = f"Ambos anotan: {'Sí' if b_['side'] == 'yes' else 'No'}"; notes.append("btts")
     if notes: out["adjusted"] = notes
     if corners and fam == "soccer":
         c = corners; line = c["line"]; mu, sd = c["total"], c["sd"]
@@ -302,8 +316,9 @@ def _c():
         payload TEXT, created_at INTEGER, updated_at INTEGER, status TEXT DEFAULT 'PENDIENTE', graded_at INTEGER,
         r_ml TEXT, r_total TEXT, r_spread TEXT, r_score TEXT, r_sets TEXT, r_corners TEXT, score_text TEXT, final_home REAL, final_away REAL, note TEXT,
         UNIQUE(league, eid))""")
-    try: c.execute("ALTER TABLE predictions ADD COLUMN r_corners TEXT")
-    except Exception: pass
+    for col in ("r_corners", "r_btts"):
+        try: c.execute(f"ALTER TABLE predictions ADD COLUMN {col} TEXT")
+        except Exception: pass
     return c
 
 def _rows(sql, args=()):
@@ -360,7 +375,7 @@ def attach(out, now=None):
 
 def _result(row):
     if row["status"] == "PENDIENTE": return None
-    return dict(ml=row["r_ml"], total=row["r_total"], spread=row["r_spread"], corners=row.get("r_corners"), score=row["r_score"], sets=row["r_sets"], score_text=row["score_text"], note=row["note"],
+    return dict(ml=row["r_ml"], total=row["r_total"], spread=row["r_spread"], corners=row.get("r_corners"), btts=row.get("r_btts"), score=row["r_score"], sets=row["r_sets"], score_text=row["score_text"], note=row["note"],
                 final=[row["final_home"], row["final_away"]])
 
 # ------------------------------------------------------------------ calificación con el marcador final real
@@ -382,6 +397,8 @@ def grade_row(row, res, now=None):
         out["r_spread"] = settle("spread", p["spread"]["side"], (p["spread"]["line"] if p["spread"]["side"] == "home" else -p["spread"]["line"]), rr, three_way=(row["sport"] == "futbol"))
     if p.get("corners") and res.get("corners_total") is not None:
         out["r_corners"] = settle("total", p["corners"]["side"], p["corners"]["line"], dict(home=res["corners_total"], away=0))
+    if p.get("btts") and not tennis:
+        out["r_btts"] = settle("btts", p["btts"]["side"], None, rr)
     sc = p["score"]
     if tennis:
         ok = [list(x) for x in (res.get("sets") or [])] == sc.get("sets")
@@ -447,5 +464,5 @@ def stats(sport=None, days=None):
     for r in rows[:12]:
         p = json.loads(r["payload"] or "null") or {}
         recent.append(dict(league=r["league"], eid=r["eid"], sport=r["sport"], home=r["home"], away=r["away"], start_ts=r["start_ts"], score_text=r["score_text"], pred=p.get("score"),
-                           winner=(p.get("winner") or {}).get("side"), ml=r["r_ml"], total=r["r_total"], spread=r["r_spread"], corners=r["r_corners"], score=r["r_score"]))
-    return dict(graded=len(rows), pending=pend, ml=agg("r_ml"), total=agg("r_total"), spread=agg("r_spread"), corners=agg("r_corners"), score=agg("r_score"), sets=agg("r_sets"), recent=recent)
+                           winner=(p.get("winner") or {}).get("side"), ml=r["r_ml"], total=r["r_total"], spread=r["r_spread"], corners=r["r_corners"], btts=r.get("r_btts"), score=r["r_score"]))
+    return dict(graded=len(rows), pending=pend, ml=agg("r_ml"), total=agg("r_total"), spread=agg("r_spread"), corners=agg("r_corners"), btts=agg("r_btts"), score=agg("r_score"), sets=agg("r_sets"), recent=recent)

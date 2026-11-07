@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS
+from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS, chat as CHAT
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -283,6 +283,16 @@ async def player_prop(league: str, eid: str, aid: str, key: str, hist: int = 10)
     except Exception as e: raise HTTPException(502, f"No se pudo cargar el prop: {type(e).__name__}")
     if not r: raise HTTPException(404, "Prop no disponible para este jugador")
     return r
+
+@app.get("/api/chat/status")
+async def chat_status():
+    return CHAT.status()
+
+@app.post("/api/chat")
+async def chat(body: dict):
+    q = str((body or {}).get("q") or "").strip()
+    if not q: raise HTTPException(400, "Pregunta vacía")
+    return await CHAT.answer(q, (body or {}).get("league"), (body or {}).get("eid"))
 
 @app.get("/api/record")
 async def record(sport: str | None = None, type: str | None = None, days: int | None = None, limit: int = 60, basis: str | None = None):

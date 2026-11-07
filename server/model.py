@@ -67,7 +67,8 @@ def soccer_model(R, hid, aid, neutral=False):
     pl = 1 - pw - pd
     n_h, n_a = R["n"].get(hid, 0), R["n"].get(aid, 0)
     sample = min(1.0, min(n_h, n_a) / SOCCER["n_full"])
-    return dict(kind="poisson", lam_home=lh, lam_away=la, exp_total=lh + la, mu=lh - la, p_home=pw, p_draw=pd, p_away=pl,
+    pb = sum(mat[i][j] for i in range(1, len(mat)) for j in range(1, len(mat)))      # ambos anotan
+    return dict(kind="poisson", lam_home=lh, lam_away=la, exp_total=lh + la, mu=lh - la, p_home=pw, p_draw=pd, p_away=pl, p_btts=pb,
                 n_home=n_h, n_away=n_a, sample=sample, hfa=None,
                 cover=lambda t: cover_matrix(mat, lambda i, j: i - j, t),
                 total=lambda t: cover_matrix(mat, lambda i, j: i + j, t),
@@ -142,6 +143,12 @@ def build_candidates(model, odds, home_name, away_name):
                     if (T * 4) % 2 != 0: continue
                     win = model["total"](T)[0] if side == "over" else model["total"](T)[1]
                     c.append(_cand("Total", side, f"{nm} {T:g}", tt[side]["price"], win, nvt.get(side), w, line=T))
+    bt = (odds or {}).get("btts") or {}
+    if bt and model.get("p_btts") is not None:                     # ambos anotan (fútbol): cuota real de DraftKings vía ESPN
+        nvb = nv.get("btts", {})
+        for side, nm in (("yes", "Ambos anotan: Sí"), ("no", "Ambos anotan: No")):
+            if bt.get(side) is not None:
+                c.append(_cand("BTTS", side, nm, bt[side], model["p_btts"] if side == "yes" else 1 - model["p_btts"], nvb.get(side), w))
     for x in c: x["status"] = status_for(x["edge"], x["ev"])
     return c
 
