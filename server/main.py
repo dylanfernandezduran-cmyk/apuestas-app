@@ -305,6 +305,15 @@ async def grade_now():
     """Califica ahora lo pendiente (también corre solo cada GRADE_MIN min)."""
     return dict(result=await grade_once(), summary=REC.summary())
 
+@app.get("/api/record/day")
+async def record_day(date: str | None = None):
+    """Récord de UN día (fecha del juego en hora CDMX, default hoy) + calendario de días con su G-P (pt92u)."""
+    import re as _re
+    today = REC.cdmx_date()
+    date = date or today
+    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date): raise HTTPException(400, "Fecha inválida (AAAA-MM-DD)")
+    return dict(date=date, today=today, days=REC.days(), **REC.day(date), grading=dict(GRADE_STATE, every_min=GRADE_MIN), now=time.time())
+
 @app.get("/api/record/game/{league}/{eid}")
 async def record_game(league: str, eid: str):
     return dict(rows=REC.game_rows(league, eid))

@@ -276,6 +276,16 @@ def _ref_line(books, mkt, side, cons):
     ls = [b[mkt][side]["line"] for b in books if b["kind"] in ("book", "sharp") and (b.get(mkt) or {}).get(side)]
     return max(set(ls), key=ls.count) if ls else None
 
+def _drop_bad_lines(books, cons):
+    """Quita de una casa el total/hándicap que claramente NO es del partido completo (p. ej. BetMGM 'O 17.5' en NBA con
+    consenso 226.5: es un total de cuarto/equipo mal etiquetado por la fuente). Si no, sale como 'mejor línea' y ensucia el % s/vig."""
+    for mkt, side, tol in (("total", "over", lambda r: max(0.2 * abs(r), 2.0)), ("spread", "home", lambda r: max(0.5 * abs(r), 7.0))):
+        ref = _ref_line(books, mkt, side, cons)
+        if ref is None: continue
+        for b in books:
+            if b["kind"] in ("book", "sharp") and (b.get(mkt) or {}).get(side) and abs(b[mkt][side]["line"] - ref) > tol(ref):
+                b.pop(mkt, None)
+
 def _flags(books, cons):
     """Marca mejor precio (misma línea que el consenso) y mejor línea (número más favorable)."""
     fl = {b["id"]: {} for b in books}
@@ -469,6 +479,7 @@ async def game_market(league, game, snapshot=True):
     cons = next((b for b in books if b["kind"] == "consensus"), None)
     opn = next((b for b in books if b["kind"] == "open"), None)
     sharp = next((b for b in books if b["kind"] == "sharp"), None)
+    _drop_bad_lines(books, cons)
     # referencia para las banderas: consenso AN si existe; si no, la mayoría
     flags = _flags(books, cons)
     for b in books:

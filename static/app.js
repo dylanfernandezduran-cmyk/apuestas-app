@@ -56,7 +56,7 @@ const GRADE = {GANADO:['✅','Ganado','g-w'],PERDIDO:['❌','Perdido','g-l'],PUS
 const gradeBadge = (r,withScore) => { if(!r) return ''; const x=GRADE[r.status]||GRADE.PENDIENTE;
   return `<span class="gbadge ${x[2]}" title="${esc(r.note||'')}">${x[0]} ${x[1]}</span>${withScore&&r.score_text?` <span class="sub mono">${esc(r.score_text)}</span>`:''}`; };
 const typeLbl = t => t==='main' ? '<span class="badge b-pick">PICK PRINCIPAL</span>' : '<span class="badge b-model">SUGERENCIA</span>';
-const mktKey = c => ({ML:'ml',Spread:'spread',Total:'total'})[c.market]||c.market;
+const mktKey = c => ({ML:'ml',Spread:'spread',Total:'total',BTTS:'btts'})[c.market]||c.market;
 let REC_MAP = {};
 const recFor = (market, side, line) => { const r = REC_MAP[market+'.'+side]; return r && (line==null || r.line==null || Number(r.line)===Number(line)) ? r : null; };   // sólo si es la MISMA línea registrada
 const units = u => u==null ? '—' : (u>0?'+':'')+Number(u).toFixed(2)+'u';
@@ -78,7 +78,10 @@ async function route(){
     if(h[0]==='juego'){ setNav('sports'); return await viewGame(h[1], h[2]); }
     if(h[0]==='prop'){ setNav('sports'); return await viewProp(h[1], h[2], h[3], h[4]); }
     if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'24h'); }
-    if(h[0]==='record'){ setNav('record'); return await viewRecord(); }
+    if(h[0]==='record'){ setNav('record');
+      if(h[1]==='total') return await viewRecord();
+      if(h[1]==='cal') return await viewRecordCal(h[2]);
+      return await viewRecordDay(h[1]==='dia'?h[2]:null); }
     if(h[0]==='info'){ setNav('info'); return await viewInfo(); }
     await viewHome();
   }catch(e){ if(seq!==ROUTE_SEQ) return; $app.innerHTML = errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); }
@@ -326,7 +329,7 @@ async function viewRecord(){
   const f=n=>Number.isInteger(n)?n:n.toFixed(1);
   const since = S.since ? tsFmt(S.since) : SD;
   const kpi=(l,v,c='')=>`<div class="kpi"><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
-  let html=`<h1>📒 Historial / Récord</h1>
+  let html=`<h1>📒 Récord</h1>${rdTabs('total')}<div class="day" style="margin-top:4px">Total de la temporada (todo el historial)</div>
    <div class="sub" style="margin-bottom:8px">¿Se ganaron el pick principal y las sugerencias? Se registran al generarse (antes del juego) y se califican con el marcador final real. Historial desde <b>${since}</b> (no hay datos anteriores: nunca se reconstruyen picks de juegos pasados).</div>
    ${S.backfilled?`<div class="card" style="border-color:var(--amb);margin-bottom:8px">⚠️ Incluye <b>${S.backfilled}</b> picks que NO son del modelo en vivo (source ≠ live: demostración/retroactivos). Los picks reales sólo se registran antes del juego.</div>`:''}
    ${pills('sport',[['','Todos'],...SPORTS.map(s=>[s.key,s.emoji+' '+s.name])])}
@@ -342,7 +345,7 @@ async function viewRecord(){
   if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
   else html+=`<div class="day">Últimos picks calificados</div><div class="rec-list">`+d.recent.map(r=>`<div class="rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
      <div class="rl-m">${recMatch(r)}</div><div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div>${lineMove(r,{state:'post'})}<div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>
-     <div class="rr">${r.status==='PENDIENTE'&&g.state==='in'?(provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)):gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
+     <div class="rr">${gradeBadge(r,false)}<div class="mono ${r.units>0?'pos':r.units<0?'neg':'mut'}">${units(r.units)}</div></div></div>`).join('')+`</div>`;
   $app.innerHTML=html;
 }
 function setRecF(k,v){ RECF[k]=v; viewRecord(); }

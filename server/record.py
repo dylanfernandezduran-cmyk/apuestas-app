@@ -273,3 +273,44 @@ def summary(sport=None, typ=None, days=None, basis=None):
                 win_pct=(W / (W + L) * 100 if (W + L) else None), units=round(units, 2), n_priced=n_priced, n_unpriced=n_unpriced,
                 roi=(units / n_priced * 100 if n_priced else None),
                 backfilled=sum(1 for r in rows if r["source"] != "live"), since=since)
+
+# ------------------------------------------------------------------ récord por día (pt92u): días en hora de CDMX (UTC-6 fijo, México sin horario de verano)
+CDMX_OFF = -6 * 3600
+_DAY_SQL = f"date(start_ts + ({CDMX_OFF}), 'unixepoch')"
+
+def cdmx_date(ts=None):
+    return time.strftime("%Y-%m-%d", time.gmtime((ts if ts is not None else time.time()) + CDMX_OFF))
+
+def _agg(rows):
+    W = L = P = 0.0; u = 0.0; npr = 0; pend = void = 0
+    for r in rows:
+        s = r["status"]
+        if s == "GANADO": W += 1
+        elif s == "PERDIDO": L += 1
+        elif s == "PUSH": P += 1
+        elif s == "MEDIO_GANADO": W += .5; P += .5
+        elif s == "MEDIO_PERDIDO": L += .5; P += .5
+        elif s == "PENDIENTE": pend += 1
+        elif s == "ANULADO": void += 1
+        if s in DONE and r.get("units") is not None: u += r["units"]; npr += 1
+    return dict(W=W, L=L, P=P, pending=pend, void=void, n=len(rows), units=round(u, 2), n_priced=npr,
+                win_pct=(W / (W + L) * 100 if W + L else None), roi=(u / npr * 100 if npr else None))
+
+def days(sport=None, typ=None):
+    """Lista de días con picks: [{date, W, L, P, pending, void, units, ...}] (más reciente primero)."""
+    w, a = ["1=1"], []
+    if sport: w.append("sport=?"); a.append(sport)
+    if typ in ("main", "suggestion"): w.append("type=?"); a.append(typ)
+    by = {}
+    for r in _rows(f"SELECT {_DAY_SQL} AS d, status, units FROM picks WHERE {' AND '.join(w)}", tuple(a)):
+        by.setdefault(r["d"], []).append(r)
+    return [dict(date=d, **_agg(rs)) for d, rs in sorted(by.items(), reverse=True)]
+
+def day(date):
+    """Todos los picks (cualquier estado) cuyo juego es en `date` (YYYY-MM-DD, CDMX) + resumen total y por deporte."""
+    rows = _rows("SELECT p.*, (SELECT logo FROM team_logos t WHERE t.league=p.league AND t.team_id=p.home_id) AS home_logo, "
+                 "(SELECT logo FROM team_logos t WHERE t.league=p.league AND t.team_id=p.away_id) AS away_logo "
+                 f"FROM picks p WHERE {_DAY_SQL}=? ORDER BY start_ts, eid, (type='main') DESC, id", (date,))
+    sp = {}
+    for r in rows: sp.setdefault(r["sport"], []).append(r)
+    return dict(summary=_agg(rows), by_sport={k: _agg(v) for k, v in sp.items()}, picks=rows)

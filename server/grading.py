@@ -143,7 +143,10 @@ def parse_tennis_event(ev_comp, home_id, away_id):
     cs = ev_comp.get("competitors", [])
     H = next((c for c in cs if str(c.get("id")) == str(home_id)), None)
     A = next((c for c in cs if str(c.get("id")) == str(away_id)), None)
-    if not H or not A: return dict(state="pending", note="No se pudo identificar a los jugadores")
+    if not H or not A:
+        # ESPN reutiliza el id del partido cuando un jugador se retira antes de jugar (entra lucky loser/alterno): el partido
+        # registrado nunca se jugó -> se anula (las casas también anulan), en vez de quedar pendiente para siempre.
+        return dict(state="void", note="El partido cambió de jugadores (baja antes de jugar / lucky loser): el pick registrado se anula")
     sh = [_ival(x) for x in H.get("linescores", [])]; sa = [_ival(x) for x in A.get("linescores", [])]
     if not sh or len(sh) != len(sa) or None in sh + sa: return dict(state="pending", note="Marcador por sets no disponible")
     if any(max(x, y) > 7 or max(x, y) < 6 for x, y in zip(sh, sa)):

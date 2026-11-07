@@ -69,8 +69,12 @@ async function chLocal(q){
   const qn=chNorm(q);
   if(/^(hola|buenas|hey|que tal|ayuda|help)\b/.test(qn)) return 'Hola 👋 Pregúntame por <b>los mejores picks de hoy</b>, un equipo (ej. «Chiefs»), sus <b>lesiones</b>, <b>props</b> de jugadores o el <b>récord</b>. Respondo sólo con los datos de la app.';
   if(/record|historial|cuanto (llevamos|vamos)|acierto/.test(qn)){
+    const rel={antier:-2,anteayer:-2,ayer:-1,hoy:0,manana:1}, k=Object.keys(rel).find(w=>new RegExp('\\b'+w+'\\b').test(qn));
+    if(k){ const d0=await api('/api/record/day'), dt=new Date(Date.parse(d0.today+'T12:00:00Z')+rel[k]*864e5).toISOString().slice(0,10);
+      const d=rel[k]?await api('/api/record/day?date='+dt):d0, a=d.summary;
+      return `Récord de <b>${k==='manana'?'mañana':k}</b> (${dt}): <b>${a.W}-${a.L}-${a.P}</b>${a.win_pct!=null?` · ${a.win_pct.toFixed(1)}%`:''}${a.n_priced?` · ${a.units>0?'+':''}${a.units.toFixed(2)} u`:''} · ${a.pending} pendientes de ${a.n} picks. <a href="#/record/dia/${dt}">Ver el día →</a>`; }
     const r=await api('/api/record?limit=80'); const s=r.summary||{};
-    return `Récord de picks (paper trading): <b>${s.W??'—'}-${s.L??'—'}-${s.P??'—'}</b>${s.win_pct!=null?` · ${s.win_pct.toFixed(1)}% de acierto`:''}${s.units!=null?` · ${s.units>0?'+':''}${(+s.units).toFixed(2)} u a 1u plano`:''}${s.roi!=null?` (ROI ${s.roi.toFixed(1)}%)`:''} · ${s.pending??0} pendientes. <a href="#/record">Ver récord →</a>`;
+    return `Récord de picks (paper trading): <b>${s.W??'—'}-${s.L??'—'}-${s.P??'—'}</b>${s.win_pct!=null?` · ${s.win_pct.toFixed(1)}% de acierto`:''}${s.units!=null?` · ${s.units>0?'+':''}${(+s.units).toFixed(2)} u a 1u plano`:''}${s.roi!=null?` (ROI ${s.roi.toFixed(1)}%)`:''} · ${s.pending??0} pendientes. <a href="#/record/total">Ver récord →</a>`;
   }
   const cur=chCurGame(), items=await chPicks();
   const named=chFindGame(items,qn);

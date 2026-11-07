@@ -10,6 +10,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.ins
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "site"))
 HOURS = float(sys.argv[2]) if len(sys.argv) > 2 else 48
 import httpx
+from server import record as REC
 from server import main, data
 from server.config import LEAGUES
 
@@ -79,6 +80,9 @@ async def main_():
         # 5) resúmenes (después de analizar: picks registrados/actualizados en este ciclo)
         for sc in ("24h", "hoy", "manana", "72h"): await get(f"/api/picks?scope={sc}")
         await get("/api/home"); await get("/api/record?limit=80")
+        # récord por día (pt92u): hoy + cada día con picks (máx. 120 días)
+        for dd in [x["date"] for x in REC.days()][:120]: await get(f"/api/record/day?date={dd}")
+        await get("/api/record/day")
         await get("/api/chat/status")
     meta = dict(built=built, seconds=round(time.time() - t0, 1), games=len(jobs), ok=STATS["ok"], err=STATS["err"], errors=STATS["errors"][:40])
     json.dump(meta, open(os.path.join(OUT, "data", "build.json"), "w"), indent=1)
