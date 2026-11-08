@@ -155,3 +155,16 @@ def test_strict_flag_off_by_default():
     from server import strict as ST
     import os
     assert ST.ENABLED == (os.environ.get("NRNM_STRICT", "0") == "1") and os.environ.get("NRNM_STRICT") != "1"
+
+
+def test_retiro_ml_con_ganador_real():
+    from server import grading as G
+    comp = dict(status=dict(type=dict(name="STATUS_RETIRED", state="post", detail="Retired")),
+                competitors=[dict(id="1", winner=False, linescores=[dict(value=6), dict(value=1)]), dict(id="2", winner=True, linescores=[dict(value=4), dict(value=3)])])
+    res = G.parse_tennis_event(comp, "1", "2")
+    assert res["state"] == "retired" and res["winner"] == "away"
+    row = dict(market="ml", selection="away", odds=-150, home="A", away="B", start_ts=0, sport="tenis")
+    assert G.grade_row(row, res)[0] == "GANADO"
+    assert G.grade_row(dict(row, market="total"), res)[0] == "ANULADO"
+    wo = dict(comp, status=dict(type=dict(name="STATUS_WALKOVER", state="post", detail="Walkover")))
+    assert G.parse_tennis_event(wo, "1", "2")["state"] == "void"

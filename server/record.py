@@ -205,7 +205,12 @@ def games_rows(league, eids):
 def pending(now=None, limit=500):
     """Picks sin calificar cuyo juego ya empezó."""
     now = int(now or time.time())
-    return _rows("SELECT * FROM picks WHERE status='PENDIENTE' AND start_ts<=? ORDER BY start_ts LIMIT ?", (now, limit))
+    # también los cancelados/invertidos antes del inicio: se califican con el resultado real, salvo que el mismo juego+mercado ya tenga
+    # otro pick vivo (o un anulado más reciente) -> así nunca se cuentan ambos lados ni dos versiones del mismo mercado
+    return _rows("SELECT * FROM picks p WHERE start_ts<=? AND (status='PENDIENTE' OR (status='ANULADO' AND state IN ('CANCELADO','INVERTIDO') AND graded_at IS NULL "
+                 "AND NOT EXISTS (SELECT 1 FROM picks q WHERE q.league=p.league AND q.eid=p.eid AND q.market=p.market AND q.id<>p.id AND "
+                 "(q.status<>'ANULADO' OR (q.state IN ('CANCELADO','INVERTIDO') AND COALESCE(q.updated_at,q.created_at)*1e7+q.id > COALESCE(p.updated_at,p.created_at)*1e7+p.id))))) "
+                 "ORDER BY start_ts LIMIT ?", (now, limit))
 
 def set_grade(pid, status, units, score_text, fh, fa, note, now=None):
     """Escribe SÓLO columnas de resultado."""

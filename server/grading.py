@@ -137,7 +137,18 @@ def parse_tennis_event(ev_comp, home_id, away_id):
     st = (ev_comp.get("status") or {}).get("type") or {}
     name, state = st.get("name") or "", st.get("state")
     if any(k in name for k in VOID_NAMES) or any(k in (st.get("detail") or "").upper() for k in ("RETIRED", "WALKOVER", "RETIRE", "W/O")):
-        if state == "post": return dict(state="void", note=f"Partido sin final normal ({st.get('detail') or name}): las casas liquidan distinto; no se califica")
+        if state == "post":
+            # retiro a media partida: el partido sí se jugó y hay ganador real -> el ML se califica con ese ganador; walkover (no se jugó) se anula
+            if "WALKOVER" not in (name + " " + (st.get("detail") or "")).upper() and "W/O" not in (st.get("detail") or "").upper():
+                cs = ev_comp.get("competitors", [])
+                H = next((c for c in cs if str(c.get("id")) == str(home_id)), None)
+                A = next((c for c in cs if str(c.get("id")) == str(away_id)), None)
+                if H and A and bool(H.get("winner")) != bool(A.get("winner")):
+                    sh = [_ival(x) for x in H.get("linescores", [])]; sa = [_ival(x) for x in A.get("linescores", [])]
+                    return dict(state="retired", winner="home" if H.get("winner") else "away",
+                                score_text=" ".join(f"{x}-{y}" for x, y in zip(sh, sa) if x is not None and y is not None) + " ret.",
+                                note=f"Retiro ({st.get('detail') or name}): el ML se califica con el ganador real; los demás mercados se anulan")
+            return dict(state="void", note=f"Partido sin final normal ({st.get('detail') or name}): las casas liquidan distinto; no se califica")
     if state != "post": return dict(state="pending", note=None)
     if name != "STATUS_FINAL": return dict(state="pending", note=f"Estado '{name}' no reconocido como final; sigue pendiente")
     cs = ev_comp.get("competitors", [])
@@ -162,13 +173,20 @@ async def fetch_result(row):
     lg = row["league"]; cfg = LEAGUES.get(lg)
     if not cfg: return dict(state="pending", note="Liga desconocida")
     if cfg["family"] == "tennis":
-        d = await get_json(f"{ESPN}/{cfg['path']}/scoreboard", ttl=120)
-        if not d: return dict(state="pending", note="Fuente sin respuesta")
-        for e in d.get("events", []):
-            for gr in e.get("groupings", []):
-                if "Singles" not in gr["grouping"]["displayName"]: continue
-                for c in gr["competitions"]:
-                    if str(c.get("id")) == str(row["eid"]): return parse_tennis_event(c, row["home_id"], row["away_id"])
+        import datetime as _dt
+        day = _dt.datetime.utcfromtimestamp(row["start_ts"]).strftime("%Y%m%d") if row.get("start_ts") else None
+        got = False
+        for params in (None, {"dates": day} if day else None):
+            if params is None and got: continue
+            d = await get_json(f"{ESPN}/{cfg['path']}/scoreboard", ttl=120, **({"params": params} if params else {}))
+            if not d: continue
+            got = True
+            for e in d.get("events", []):
+                for gr in e.get("groupings", []):
+                    if "Singles" not in gr["grouping"]["displayName"]: continue
+                    for c in gr["competitions"]:
+                        if str(c.get("id")) == str(row["eid"]): return parse_tennis_event(c, row["home_id"], row["away_id"])
+        if not got: return dict(state="pending", note="Fuente sin respuesta")
         return dict(state="pending", note="El partido ya no aparece en el marcador de ESPN; sin resultado confirmado")
     summ = await get_json(f"{ESPN}/{cfg['path']}/summary", ttl=60, params={"event": row["eid"]})
     if not summ: return dict(state="pending", note="Fuente sin respuesta")
@@ -179,6 +197,11 @@ def grade_row(row, res, now=None):
     now = now or time.time()
     if res["state"] == "void":
         return ("ANULADO", None, None, None, None, res.get("note"))
+    if res["state"] == "retired":
+        txt = f"{res['score_text']} ({row['home']} vs {row['away']})"
+        if row["market"] != "ml": return ("ANULADO", None, txt, None, None, res.get("note"))
+        st = "GANADO" if row["selection"] == res["winner"] else "PERDIDO"
+        return (st, R.profit(st, row["odds"]), txt, None, None, res.get("note"))
     if res["state"] != "final":
         if res.get("postponed") and now - row["start_ts"] > 7 * 86400:
             return ("ANULADO", None, None, None, None, "Pospuesto más de 7 días sin jugarse: anulado")
@@ -226,8 +249,11 @@ async def grade_pending(now=None, limit=500):
             g = grade_row(r, res, now)
             if g is None:
                 out["still_pending"] += 1
-                if res.get("note") and res.get("note") != r.get("note"): R.set_note(r["id"], res["note"])
+                if r["status"] == "PENDIENTE" and res.get("note") and res.get("note") != r.get("note"): R.set_note(r["id"], res["note"])
                 continue
+            if r["status"] == "ANULADO" and g[0] != "ANULADO":   # cancelado/invertido antes del inicio, calificado con el resultado real
+                g = g[:5] + ("; ".join(x for x in (f"{'Invertido' if r.get('state') == 'INVERTIDO' else 'Cancelado'} antes del inicio; calificado con el resultado real a la línea registrada", g[5]) if x),)
+            elif r["status"] == "ANULADO": g = g[:5] + (r.get("note") or g[5],)
             R.set_grade(r["id"], *g, now=now)
             out["void" if g[0] == "ANULADO" else "graded"] += 1
     return out
