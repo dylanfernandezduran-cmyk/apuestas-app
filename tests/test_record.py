@@ -168,3 +168,19 @@ def test_retiro_ml_con_ganador_real():
     assert G.grade_row(dict(row, market="total"), res)[0] == "ANULADO"
     wo = dict(comp, status=dict(type=dict(name="STATUS_WALKOVER", state="post", detail="Walkover")))
     assert G.parse_tennis_event(wo, "1", "2")["state"] == "void"
+
+
+def test_cancelado_se_activa_al_empezar(tmp_path, monkeypatch):
+    import sqlite3
+    from server import record as R
+    c = R._c()
+    if c is None: return
+    c.execute("DELETE FROM picks")
+    for i, (sel, st, up) in enumerate([("away", "CANCELADO", 10), ("home", "INVERTIDO", 5)]):
+        c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'ml',?,'ANULADO',?,1,?)", (sel, st, up))
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'total','over','ANULADO',NULL,1,1)")
+    c.commit()
+    assert R.activate_started(50) == 0
+    assert R.activate_started(200) == 1
+    rows = {r["selection"]: r["status"] for r in R._rows("SELECT * FROM picks")}
+    assert rows == {"away": "PENDIENTE", "home": "ANULADO", "over": "ANULADO"}

@@ -233,6 +233,7 @@ def score_line_futbol(home, hs, as_, away):
 async def grade_pending(now=None, limit=500):
     """Califica todo lo pendiente cuyo juego ya empezó. Agrupa por juego (una consulta por juego). Devuelve resumen."""
     now = now or time.time()
+    R.activate_started(now)
     rows = R.pending(now, limit)
     by = {}
     for r in rows: by.setdefault((r["league"], r["eid"]), []).append(r)

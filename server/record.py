@@ -192,15 +192,35 @@ def _rows(sql, args=()):
         return [dict(zip(names, r)) for r in cur.fetchall()]
 
 def game_rows(league, eid):
+    activate_started()
     return _rows("SELECT * FROM picks WHERE league=? AND eid=? ORDER BY (type='main') DESC, id", (league, str(eid)))
 
 def games_rows(league, eids):
     eids = [str(e) for e in eids]
     if not eids: return {}
+    activate_started()
     out = {}
     for r in _rows(f"SELECT * FROM picks WHERE league=? AND eid IN ({','.join('?' * len(eids))}) ORDER BY (type='main') DESC, id", (league, *eids)):
         out.setdefault(r["eid"], []).append(r)
     return out
+
+def activate_started(now=None):
+    """En cuanto el juego empieza, el último pick cancelado/invertido de cada juego+mercado (sin otro pick vivo ni anulado más reciente)
+    vuelve a PENDIENTE: se muestra En vivo/Pendiente y luego se califica con el resultado real. Los anulados verdaderos (WO, cambio de
+    jugadores, retiro) no tienen state CANCELADO/INVERTIDO y no se tocan."""
+    now = int(now or time.time())
+    with history._lock:
+        c = _c()
+        if c is None: return 0
+        n = c.execute("UPDATE picks SET status='PENDIENTE', state='ACTIVO', updated_at=?, "
+                      "note=CASE state WHEN 'INVERTIDO' THEN 'Invertido antes del inicio; se mantiene activo y se califica con el resultado real' "
+                      "ELSE 'Cancelado antes del inicio; se mantiene activo y se califica con el resultado real' END "
+                      "WHERE id IN (SELECT p.id FROM picks p WHERE p.start_ts<=? AND p.status='ANULADO' AND p.state IN ('CANCELADO','INVERTIDO') AND p.graded_at IS NULL "
+                      "AND NOT EXISTS (SELECT 1 FROM picks q WHERE q.league=p.league AND q.eid=p.eid AND q.market=p.market AND q.id<>p.id AND "
+                      "(q.status<>'ANULADO' OR (q.state IN ('CANCELADO','INVERTIDO') AND COALESCE(q.updated_at,q.created_at)*1e7+q.id > COALESCE(p.updated_at,p.created_at)*1e7+p.id))))",
+                      (now, now)).rowcount
+        c.commit()
+    return n
 
 def pending(now=None, limit=500):
     """Picks sin calificar cuyo juego ya empezó."""
