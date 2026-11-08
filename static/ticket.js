@@ -60,22 +60,82 @@ function tkOpen(){
     ${ck.err.map(x=>`<div class="tkw err">⛔ ${esc(x)}</div>`).join('')}${ck.warn.map(x=>`<div class="tkw">⚠️ ${esc(x)}</div>`).join('')}
     <div class="sub" style="margin:6px 0">Paper trading: no se apuesta dinero. Prob. combinada = producto de las probabilidades del modelo (asume independencia). ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
     <input id="tkn" class="tkin" maxlength="60" placeholder="Nombre del ticket (opcional)">
-    <div class="tkbtns"><button type="button" class="btn" onclick="TK.legs=[];tkSave_();tkClose();route()">Vaciar</button><button type="button" class="btn pri" ${ck.err.length||!L.length||STATIC?'disabled':''} onclick="tkSubmit(this)">${STATIC?'Guardar (sólo en link local)':'Guardar ticket'}</button></div>`);
+    <div class="tkbtns"><button type="button" class="btn" onclick="TK.legs=[];tkSave_();tkClose();route()">Vaciar</button><button type="button" class="btn pri" ${ck.err.length||!L.length?'disabled':''} onclick="tkSubmit(this)">Guardar ticket</button></div>`);
 }
 function tkDel(i){ TK.legs.splice(i,1); tkSave_(); if(TK.legs.length) tkOpen(); else tkClose(); }
 async function tkSubmit(btn){
   btn.disabled=true; btn.textContent='Guardando…';
-  try{ const r=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({legs:TK.legs,name:(document.getElementById('tkn')||{}).value||''})});
-    const j=await r.json(); if(!r.ok) throw new Error(j.detail||'Error');
-    TK.legs=[]; tkSave_(); tkClose(); location.hash='#/tickets/'+(j.day||''); tkToast('Ticket #'+j.id+' guardado'); }
-  catch(e){ btn.disabled=false; btn.textContent='Guardar ticket'; tkToast(e.message); }
+  const name=(document.getElementById('tkn')||{}).value||'';
+  try{
+    let day;
+    if(STATIC){ day=tkLocalCreate(TK.legs,name); }                  // GitHub Pages: sin servidor -> se guarda en este iPhone (localStorage)
+    else { const r=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({legs:TK.legs,name})});
+      const j=await r.json().catch(()=>({detail:'Respuesta inválida del servidor'})); if(!r.ok) throw new Error(j.detail||('Error '+r.status)); day=j.day; }
+    TK.legs=[]; tkSave_(); tkClose(); location.hash='#/tickets/'+(day||''); tkToast('Ticket guardado'+(STATIC?' en este dispositivo':''));
+  }catch(e){ btn.disabled=false; btn.textContent='Guardar ticket'; tkToast(e.message); }
+}
+// ---------------- modo GitHub Pages: tickets en localStorage + calificación en el navegador con los marcadores publicados
+const TKL_KEY='nrnm_tickets';
+const tkCdmx = ms => new Date(ms-6*3600e3).toISOString().slice(0,10);
+const tkLocalAll = () => { try{ return JSON.parse(localStorage.getItem(TKL_KEY)||'[]'); }catch(e){ return []; } };
+const tkLocalPut = a => { try{ localStorage.setItem(TKL_KEY, JSON.stringify(a)); }catch(e){} };
+function tkLocalCreate(legs,name){
+  const ck=tkCheck(legs); if(ck.err.length) throw new Error(ck.err[0]);
+  if(!legs.length) throw new Error('El ticket no tiene piernas');
+  const now=Date.now(); if(legs.some(l=>!l.start_ts||l.start_ts*1000<=now)) throw new Error('Una pierna ya empezó: sólo se aceptan piernas pre-juego');
+  const dec=legs.reduce((a,l)=>a*tkDec(l.odds),1), pm=legs.every(l=>l.p!=null)?legs.reduce((a,l)=>a*l.p,1):null;
+  const day=tkCdmx(Math.min(...legs.map(l=>l.start_ts))*1000);
+  const all=tkLocalAll(); all.push({id:now, created_at:Math.round(now/1000), day, name:name.trim().slice(0,60)||null, legs:legs.map(l=>Object.assign({},l,{status:'PENDIENTE'})), status:'PENDIENTE', dec, p_model:pm, units:null, local:true});
+  tkLocalPut(all); return day;
+}
+function tkFrac(v){ return v>0?1:v<0?0:.5; }
+function tkLineSt(fn,line){ const ls=(line!=null&&(line*4)%2!==0)?[line-.25,line+.25]:[line||0]; const f=ls.reduce((a,x)=>a+tkFrac(fn(x)),0)/ls.length;
+  return f===1?'GANADO':f>=.75?'MEDIO_GANADO':f===.5?'PUSH':f>=.25?'MEDIO_PERDIDO':'PERDIDO'; }
+function tkSettle(l,h,a){                                        // misma lógica que server/grading.py settle() (marcador final; fútbol a 90')
+  const m=l.market, s=l.selection;
+  if(m==='ml'){ if(s==='draw') return h===a?'GANADO':'PERDIDO'; if(h===a) return l.sport==='futbol'?'PERDIDO':'PUSH'; return (s==='home')===(h>a)?'GANADO':'PERDIDO'; }
+  if(m==='spread') return tkLineSt(x=>(s==='home'?h-a:a-h)+x, l.line);
+  if(m==='total') return tkLineSt(x=>s==='over'?(h+a)-x:x-(h+a), l.line);
+  if(m==='btts') return ((h>0&&a>0)===(s==='yes'))?'GANADO':'PERDIDO';
+  return null;
+}
+function tkTicketSt(legs){ let m=1, pend=false;
+  for(const l of legs){ const s=l.status||'PENDIENTE', d=tkDec(l.odds);
+    if(s==='PENDIENTE'){ pend=true; continue; }
+    m*= s==='GANADO'?d : s==='MEDIO_GANADO'?(1+d)/2 : s==='MEDIO_PERDIDO'?.5 : s==='PERDIDO'?0 : 1; }
+  if(m===0) return ['PERDIDO',0]; if(pend) return ['PENDIENTE',null]; if(Math.abs(m-1)<1e-9) return ['PUSH',1]; return [m>1?'GANADO':'PERDIDO',m]; }
+async function tkGradeLocal(){
+  const all=tkLocalAll(), cache={}, now=Date.now(); let ch=false;
+  for(const t of all){ if(t.status!=='PENDIENTE') continue;
+    for(const l of t.legs){ if((l.status||'PENDIENTE')!=='PENDIENTE'||l.start_ts*1000>now) continue;
+      if(l.kind==='prop'||l.sport==='tenis'&&l.market!=='ml'){ l.note='Se califica en el link local (la versión en línea no publica ese dato)'; continue; }
+      try{ cache[l.league]=cache[l.league]||await api('/api/games?league='+encodeURIComponent(l.league)); }catch(e){ continue; }
+      const g=(cache[l.league].games||[]).find(x=>String(x.id)===String(l.eid)); if(!g||g.state!=='post') continue;
+      if(/cancel|postpon|aplaz|suspend/i.test(g.status||'')){ l.status='ANULADO'; ch=true; continue; }
+      let st=null;
+      if(l.sport==='tenis'){ const w=g.home.winner?'home':g.away.winner?'away':null; if(w) st=(w===l.selection)?'GANADO':'PERDIDO'; }
+      else { const h=Number(g.home.score), a=Number(g.away.score); if(Number.isFinite(h)&&Number.isFinite(a)) st=tkSettle(l,h,a); }
+      if(st){ l.status=st; ch=true; } }
+    const [st,m]=tkTicketSt(t.legs); if(st!==t.status){ t.status=st; t.units=m==null?null:Math.round((m-1)*1e4)/1e4; ch=true; } }
+  if(ch) tkLocalPut(all);
+  return all;
+}
+function tkAgg(rows){ const W=rows.filter(r=>r.status==='GANADO').length, L=rows.filter(r=>r.status==='PERDIDO').length, P=rows.filter(r=>r.status==='PUSH').length,
+  done=rows.filter(r=>r.units!=null), u=Math.round(done.reduce((a,r)=>a+r.units,0)*100)/100;
+  return {W,L,P,pending:rows.filter(r=>r.status==='PENDIENTE').length,n:rows.length,units:u,n_priced:done.length}; }
+async function tkLocalDay(date){
+  const all=(await tkGradeLocal()).map(t=>Object.assign({},t,{american:(()=>{const v=tkAm(t.dec);return v==='—'?null:+v;})()}));
+  const today=tkCdmx(Date.now()); date=date||today; const by={};
+  all.forEach(t=>(by[t.day]=by[t.day]||[]).push(t));
+  return {today, date, tickets:all.filter(t=>t.day===date).sort((a,b)=>b.created_at-a.created_at), summary:tkAgg(by[date]||[]),
+          days:Object.keys(by).sort().reverse().map(d=>Object.assign({date:d},tkAgg(by[d]))), total:tkAgg(all)};
 }
 // ---------------- sección Tickets (por día, como el Récord)
 const TKST = {GANADO:['✅','Ganado','g-w'],PERDIDO:['❌','Perdido','g-l'],PUSH:['➖','Push','g-p'],PENDIENTE:['⏳','Pendiente','g-n'],ANULADO:['⚪','Anulado','g-v'],MEDIO_GANADO:['✅','Medio ganado','g-w'],MEDIO_PERDIDO:['❌','Medio perdido','g-l']};
 const tkBadge = s => { const x=TKST[s]||TKST.PENDIENTE; return `<span class="gbadge ${x[2]}">${x[0]} ${x[1]}</span>`; };
 async function viewTickets(date){
   loading('Cargando tickets…');
-  const d = await api('/api/tickets'+(date?'?date='+encodeURIComponent(date):''));
+  const d = STATIC ? await tkLocalDay(date) : await api('/api/tickets'+(date?'?date='+encodeURIComponent(date):''));
   date=d.date; const today=d.today, byDay=Object.fromEntries(d.days.map(x=>[x.date,x]));
   const lo=[...d.days.map(x=>x.date), rdAdd(today,-6)].sort()[0], hi=[...d.days.map(x=>x.date), rdAdd(today,1), date].sort().pop();
   const strip=[]; for(let s=lo; s<=hi && strip.length<120; s=rdAdd(s,1)) strip.push(s);
@@ -84,17 +144,17 @@ async function viewTickets(date){
   const kpi=(l,v,c='')=>`<div class="kpi"><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
   const card=t=>`<div class="rec-list rdg tkc"><div class="rdgh tkch"><span><b>${esc(t.name||'Ticket #'+t.id)}</b> <span class="sub">${t.legs.length} pierna${t.legs.length>1?'s':''} · ${t.american>0?'+':''}${t.american??'—'}${t.p_model!=null?' · modelo '+(t.p_model*100).toFixed(1)+'%':''}</span></span><span>${tkBadge(t.status)} <span class="mono ${t.units>0?'pos':t.units<0?'neg':'mut'}">${units(t.units)}</span></span></div>
      ${t.legs.map(l=>`<div class="rec-r"><div class="rl"><b>${esc(l.label)}</b> <span class="mono sub">${l.odds>0?'+'+l.odds:l.odds}</span><div class="sub">${esc(l.kind==='prop'?(l.player||'prop'):l.home+' vs '+l.away)} · ${fmtShort(new Date(l.start_ts*1000).toISOString())} ${fmtTime(new Date(l.start_ts*1000).toISOString())}</div></div><div class="rr">${tkBadge(l.status)}</div></div>`).join('')}
-     ${t.status==='PENDIENTE'&&!STATIC?`<div style="padding:6px 0 10px"><button class="btn" onclick="tkRm(${t.id})">Borrar ticket</button></div>`:''}</div>`;
+     ${t.status==='PENDIENTE'?`<div style="padding:6px 0 10px"><button class="btn" onclick="tkRm(${t.id})">Borrar ticket</button></div>`:''}</div>`;
   $app.innerHTML=`<h1>📒 Récord</h1>${rdTabs('tk')}
    <div class="rdnav"><a class="rdar" href="#/tickets/${rdAdd(date,-1)}" aria-label="Día anterior">‹</a><div class="rdt"><b>${rdName(date,today)}</b><span class="sub">Tickets de papel · día del primer juego (CDMX)</span></div><a class="rdar" href="#/tickets/${rdAdd(date,1)}" aria-label="Día siguiente">›</a></div>
    <div class="rdstrip" id="rdstrip">${strip.map(chip).join('')}</div>
    <div class="kpis">${kpi('Tickets del día G-P',A.W+A.L+A.P?`${A.W}-${A.L}${A.P?'-'+A.P:''}`:SD)}${kpi('Unidades (1u)',A.n_priced?units(A.units):SD,A.units>0?'pos':A.units<0?'neg':'')}</div>
    <div class="kpis s">${kpi('Tickets',A.n)}${kpi('⏳ Pendientes',A.pending)}${kpi('Total histórico',T.W+T.L+T.P?`${T.W}-${T.L}-${T.P} · ${units(T.units)}`:SD)}</div>
    ${d.tickets.length?d.tickets.map(card).join(''):`<div class="card mut" style="margin-top:10px">Sin tickets este día. Agrega piernas con <b>+ Ticket</b> en los picks, el detalle de un juego o un prop, o pídele al chat «arma un parlay de 3 con lo más seguro de hoy».</div>`}
-   <div class="sub" style="margin-top:10px">Se califican solos con el marcador final real (cada pierna y el ticket). Push/anulada = la pierna se quita del momio. Paper trading: sin dinero real.</div>`;
+   <div class="sub" style="margin-top:10px">${STATIC?'Versión en línea: los tickets se guardan en este dispositivo (no en la PC) y se califican con los marcadores publicados cada ~10-15 min. ':''}Se califican solos con el marcador final real (cada pierna y el ticket). Push/anulada = la pierna se quita del momio. Paper trading: sin dinero real.</div>`;
   const st=document.getElementById('rdstrip'), on=st&&st.querySelector('.on'); if(on) st.scrollLeft=on.offsetLeft-st.clientWidth/2+on.offsetWidth/2;
 }
-async function tkRm(id){ if(!confirm('¿Borrar este ticket pendiente?')) return; await fetch('/api/tickets/'+id,{method:'DELETE'}); route(); }
+async function tkRm(id){ if(!confirm('¿Borrar este ticket pendiente?')) return; if(STATIC) tkLocalPut(tkLocalAll().filter(t=>t.id!==id)); else await fetch('/api/tickets/'+id,{method:'DELETE'}); route(); }
 // cargar piernas sugeridas (chat) al ticket y abrirlo
 function tkLoad(legs){ legs.forEach(l=>{ if(!TK.legs.some(x=>tkKey(x)===tkKey(l))) TK.legs.push(Object.assign({official:true},l)); }); tkSave_(); tkOpen(); }
 // pierna de un prop (pantalla del jugador): completa hora/equipos con el juego (cacheado en el servidor)

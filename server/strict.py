@@ -17,6 +17,10 @@ Filtros duros (si falla uno NO es pick oficial):
 Máximo 1 pick oficial por juego; un 2.º sólo si es de otro tipo de mercado (lado + total), ambos ≥ 75 puntos y no se contradicen.
 Todo lo demás con edge > 0 que coincide con la predicción queda como «También considerado» (no recomendado, no se registra)."""
 
+import os
+# Modo estricto APAGADO por defecto (pt98: Dylan pidió regresar a los picks anteriores). Encender con NRNM_STRICT=1.
+ENABLED = os.environ.get("NRNM_STRICT", "0") == "1"
+
 EDGE_MIN, P_MIN, SCORE_MIN, SECOND_MIN = 2.0, 0.55, 60, 75
 SIG_PTS = {"a_favor": 15, "neutral": 7, "sin_dato": 7, "mixto": 5, "en_contra": 0}
 CONF_PTS = {"Alta": 15, "Media": 9, "Baja": 3}

@@ -72,17 +72,20 @@ async function chParlay(qn){
   const sp={nba:/nba|basket/,nfl:/nfl|americano/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier/,tenis:/tenis|atp|wta/,mlb:/mlb|beis/};
   const spk=Object.keys(sp).find(k=>sp[k].test(qn));
   let scope=/manana/.test(qn)?'manana':'hoy', d=await api('/api/picks?scope='+scope);
-  const off=x=>(x.official||[]).filter(c=>c.price!=null&&['ML','Spread','Total','BTTS'].includes(c.market));
-  let pool=d.items.filter(it=>off(it).length&&(!spk||it.game.sport===spk));
-  if(scope==='hoy'&&pool.length<n){ const d2=await api('/api/picks?scope=24h'); const have=new Set(pool.map(it=>it.game.league+it.game.id)); pool=pool.concat(d2.items.filter(it=>off(it).length&&(!spk||it.game.sport===spk)&&!have.has(it.game.league+it.game.id))); scope='24h'; }
-  pool.sort((a,b)=>(off(b)[0].score||0)-(off(a)[0].score||0));
+  // picks oficiales si el modo estricto está encendido; si no (por defecto), el pick del juego (PICK o LEAN)
+  const off=x=>((x.official&&x.official.length)?x.official:((x.status==='PICK'||x.status==='LEAN')&&x.lean?[x.lean]:[])).filter(c=>c.price!=null&&c.edge!=null&&c.edge>0&&['ML','Spread','Total','BTTS'].includes(c.market));
+  const rk=c=>c.score!=null?c.score:(c.edge||0)*(c.p_final||0);
+  const fut=it=>Date.parse(it.game.date)>Date.now()+60e3;          // la versión en línea puede traer juegos que ya empezaron
+  let pool=d.items.filter(it=>fut(it)&&off(it).length&&(!spk||it.game.sport===spk));
+  if(scope==='hoy'&&pool.length<n){ const d2=await api('/api/picks?scope=24h'); const have=new Set(pool.map(it=>it.game.league+it.game.id)); pool=pool.concat(d2.items.filter(it=>fut(it)&&off(it).length&&(!spk||it.game.sport===spk)&&!have.has(it.game.league+it.game.id))); scope='24h'; }
+  pool.sort((a,b)=>(b.status==='PICK')-(a.status==='PICK')||rk(off(b)[0])-rk(off(a)[0]));
   const pick=pool.slice(0,n);
-  if(!pick.length) return `No hay picks oficiales${spk?' de '+spk.toUpperCase():''} ${scope==='manana'?'mañana':'en las próximas 24 h'}: hoy ningún juego pasa el filtro estricto, así que no armo un parlay con relleno.`;
-  const legs=pick.map(it=>tkLegFromCand(it.game,Object.assign({official:true},off(it)[0])));
+  if(!pick.length) return `No hay picks con ventaja${spk?' de '+spk.toUpperCase():''} ${scope==='manana'?'mañana':'en las próximas 24 h'}, así que no armo un parlay con relleno.`;
+  const legs=pick.map(it=>tkLegFromCand(it.game,Object.assign({official:it.status==='PICK'},off(it)[0])));
   const dd=legs.reduce((a,l)=>a*tkDec(l.odds),1), pm=legs.every(l=>l.p!=null)?legs.reduce((a,l)=>a*l.p,1):null;
   CH.parlay=legs;
-  const lines=pick.map((it,i)=>{ const c=off(it)[0], v=(c.signals||{}).verdict; return `${i+1}. <b>${esc(c.label)}</b> ${esc(c.price_txt||'')} — ${esc(chGame(it))} (${esc(chWhen(it.game.date))})<br>&nbsp;&nbsp;puntaje ${c.score}/100 · prob. ${chPct(c.p_final)}${chEdge(c.edge)}${v&&v!=='sin_dato'?' · señales '+esc(v.replace('_',' ')):''}`; });
-  return `Parlay de ${legs.length}${legs.length<n?` (sólo hay ${legs.length} picks oficiales; no relleno con picks débiles)`:''} con los picks oficiales de mayor puntaje, 1 por juego (sin correlación):<br>${lines.join('<br>')}
+  const lines=pick.map((it,i)=>{ const c=off(it)[0], v=(c.signals||{}).verdict; return `${i+1}. <b>${esc(c.label)}</b> ${esc(c.price_txt||'')} — ${esc(chGame(it))} (${esc(chWhen(it.game.date))})<br>&nbsp;&nbsp;${c.score!=null?'puntaje '+c.score+'/100 · ':''}${esc(it.status)} · prob. ${chPct(c.p_final)}${chEdge(c.edge)}${v&&v!=='sin_dato'?' · señales '+esc(v.replace('_',' ')):''}`; });
+  return `Parlay de ${legs.length}${legs.length<n?` (sólo hay ${legs.length} picks con ventaja; no relleno)`:''} con los picks de mayor ventaja (PICK primero), 1 por juego (sin correlación):<br>${lines.join('<br>')}
     <br>Momio combinado <b>${tkAm(dd)}</b> · prob. del modelo <b>${pm==null?'—':(pm*100).toFixed(1)+'%'}</b> (asume independencia) · implícita ${(100/dd).toFixed(1)}%.
     <br><button type="button" class="btn pri ch-mk" onclick="tkLoad(CH.parlay)">🎟️ Crear ticket con estas piernas</button><br><span class="ch-mut">Paper trading. Más piernas = mucho menos probable; ningún parlay es «seguro».</span>`;
 }
@@ -102,16 +105,15 @@ async function chLocal(q){
   const named=chFindGame(items,qn);
   if(named) return chGameAnswer(named.game.league, named.game.id, qn);
   if(cur && (/(este|esta|del|el) (juego|partido)|aqui/.test(qn) || (/lesion|baja|prop|jugador|marcador|prediccion/.test(qn) && !/mejores|hoy|manana|todos/.test(qn)))) return chGameAnswer(cur.league, cur.eid, qn);
-  let pool=items.filter(it=>it.lean&&it.lean.edge!=null&&it.status==='PICK');
+  let pool=items.filter(it=>it.lean&&it.lean.edge!=null);
   const sp={nba:/nba|basket/,nfl:/nfl|americano/,mlb:/mlb|beis/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier|champions/,tenis:/tenis|atp|wta/};
   for(const [k,re] of Object.entries(sp)) if(re.test(qn)) pool=pool.filter(it=>it.game.sport===k);
   if(/ambos anotan|btts/.test(qn)) pool=pool.filter(it=>(it.lean.market||'')==='BTTS'||(it.top||[]).some(t=>t.market==='BTTS'));
   if(/hoy/.test(qn)){ const today=new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date()); pool=pool.filter(it=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date(it.game.date))===today); }
   if(/pick|recomien|apost|mejor|valor|hoy|manana|parlay|btts|ambos/.test(qn) || pool.length!==items.length){
     pool.sort((a,b)=>(b.status==='PICK')-(a.status==='PICK')||(b.lean.edge||0)-(a.lean.edge||0));
-    if(!pool.length) return 'No hay picks oficiales para eso en las próximas 72 h (ningún juego pasa el filtro estricto).';
-    pool.sort((a,b)=>(b.lean.score||0)-(a.lean.score||0));
-    return `Picks oficiales (por puntaje, próximas 72 h${/hoy/.test(qn)?', hoy':''}):<br>`+pool.slice(0,5).map(chPickLine).join('<br>')+'<br><span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading.</span>';
+    if(!pool.length) return 'No encuentro picks con ventaja para eso en las próximas 72 h.';
+    return `Mejores picks (por edge, próximas 72 h${/hoy/.test(qn)?', hoy':''}):<br>`+pool.slice(0,5).map(chPickLine).join('<br>')+'<br><span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading.</span>';
   }
   return 'No encontré ese equipo/juego en los próximos 3 días. Prueba con el nombre del equipo (ej. «Real Madrid», «Lakers»), «mejores picks hoy», «props» o «lesiones» desde un juego abierto.';
 }

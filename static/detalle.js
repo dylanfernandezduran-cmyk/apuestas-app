@@ -41,9 +41,32 @@ function dRec(d){
   return ds('rec','Picks registrados',body,{right, info:'Cada pick guarda su línea/cuota de APERTURA y, hasta que empieza el juego, se re-evalúa con el modelo a la línea ACTUAL: si la línea se mueve se actualiza («Abrió 48.5 · Actual 40.5»); si el modelo ahora prefiere el otro lado queda INVERTIDO (y se registra el lado nuevo); si ya no hay valor queda CANCELADO. Al inicio se bloquea la línea de cierre y se califica contra ella. Se califican solos con el marcador final de ESPN cada ~10 min; mientras no haya final confirmado quedan pendientes. Unidades a 1u plano.'});
 }
 
+// ---- 2. Mejores picks
+function dPicks(d){
+  const p=d.picks, g=d.game; if(!p) return '';
+  if(p.strict) return dPicksStrict(d);
+  const l=p.lean, c=p.confidence, st=STATUS[p.status]||STATUS.PASS;
+  const rr=recFor(mktKey(l),l.side,l.line);
+  const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
+  const cell=(k,v,cls='')=>`<div class="pc"><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;
+  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell('Edge',sg(l.edge)+' pp',l.edge>0?'k-t':'k-p'),cell('Confianza',c?esc(c.level):SD)]
+    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('Confianza',c?esc(c.level):SD)];
+  const sig=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[l.signals.verdict]||'mut'}">●</span> ${esc((VERD[l.signals.verdict]||[])[1]||'')}${l.signals.best?` · mejor precio <b class="mono">${esc(l.signals.best.price_txt)}</b> en ${esc(l.signals.best.book)}`:''}</div>` : '';
+  const main = `<div class="mp2 ${p.status==='PICK'?'hot':''}"><div class="mph"><span class="mpk ${p.status==='PICK'?'k-p':p.status==='LEAN'?'k-a':'mut'}">${esc(st[1])}</span>${gb}</div>
+    <div class="mpl">${esc(l.label)}</div><div class="pcs">${cells.join('')}</div>${sig}${g.state==='pre'&&l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:p.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}</div>`;
+  const cs=(p.candidates||[]).filter(x=>x.p_model!=null||x.p_nv!=null).slice().sort((a,b)=>(b.edge??-99)-(a.edge??-99));
+  const crow=x=>{ const e=x.edge, pv=x.p_model!=null?x.p_model:x.p_nv, r2=recFor(mktKey(x),x.side,x.line);
+    return `<div class="cr2"><div class="cl"><b>${esc(shortLbl(x.label,g))}</b><span class="mt">${esc(x.price_txt||SD)}${r2?' · '+gradeBadge(r2,false):''}</span></div><div class="cb"><span class="pbar"><i style="width:${Math.round((pv||0)*100)}%;background:${e>=3?DC.tl:DC.bl}"></i></span></div><div class="cp mono">${pct(pv,0)}</div><div class="ce mono ${e>0?'k-t':e<0?'k-p':'mut'}">${e==null?'':sg(e)}</div>${g.state==='pre'&&x.price!=null?tkBtn(tkLegFromCand(g,Object.assign({official:x.status==='PICK'},x)),'+'):''}</div>`; };
+  const top=cs.slice(0,4), rest=cs.slice(4);
+  const list = cs.length ? `<div class="cl2">${top.map(crow).join('')}${rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">Ver ${rest.length} más</div><div class="sg">${rest.map(crow).join('')}</div></div>`:''}</div>` : '';
+  const why=[ 'Prob. final = mezcla modelo/mercado'+(d.model&&d.model.w_model!=null?` (${Math.round(d.model.w_model*100)}% modelo, ${100-Math.round(d.model.w_model*100)}% mercado s/vig)`:'')+'. Edge = prob. final − prob. s/vig del mercado, en puntos porcentuales. Precio máx. = el que deja EV ≥ +2%.',
+    c&&c.reasons&&c.reasons.length?'Confianza: '+esc(c.reasons.join(' · '))+'.':'', l.downgraded?'Era PICK pero se degradó a LEAN por confianza baja.':'', p.status==='PASS'?'Sin ventaja suficiente en ningún mercado: es el lean menos malo, no una recomendación fuerte.':'', l.price_txt?'':'Sin precio de mercado: sólo valdría la pena a ese momio o mejor.'].filter(Boolean).join(' ');
+  return ds('picks','Mejores picks',main+list,{right:tag2('ESTIMACIÓN','mod'), info:why});
+}
+
 // ---- 2. Mejores picks (estricto: máx. 1 pick oficial por juego, coherente con la Predicción NRNM; lo demás sólo «También considerado»)
 const SCP = {edge:'Edge',prob:'Prob.',señales:'Señales',confianza:'Confianza',contexto:'Contexto'};
-function dPicks(d){
+function dPicksStrict(d){
   const p=d.picks, g=d.game; if(!p) return '';
   const c=p.confidence, off=p.official||[], cons=p.considered||[];
   const cell=(k,v,cls='')=>`<div class="pc"><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;

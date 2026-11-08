@@ -211,9 +211,9 @@ async def tennis_detail(league, mid):
         if mk: MK.attach_signals(dec["candidates"], mk)
         res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label="Heurística por puntos de ranking (logística sobre ln de puntos)")
         res["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
-        ST.apply(res["picks"], {})
+        if ST.ENABLED: ST.apply(res["picks"], {})
         res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=res["picks"])
-        ST.finalize(res["picks"], res["pred"])
+        if ST.ENABLED: ST.finalize(res["picks"], res["pred"])
     else:
         res["model"] = None
         res["picks"] = None
@@ -443,9 +443,9 @@ async def _analyze(league, eid):
         out["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
         wx = game.get("weather") or {}
         crit = "abridor de MLB sin confirmar" if league == "mlb" and not flags["pitchers_known"] else None
-        ST.apply(out["picks"], dict(key_injury=flags["key_injury"], critical_missing=crit, windy=(wx.get("gust") or 0) >= 25))
+        if ST.ENABLED: ST.apply(out["picks"], dict(key_injury=flags["key_injury"], critical_missing=crit, windy=(wx.get("gust") or 0) >= 25))
         out["pred"] = PRED.build(game, mdl, odds, fam, out.pop("_cor", None), picks=out["picks"])
-        ST.finalize(out["picks"], out["pred"])
+        if ST.ENABLED: ST.finalize(out["picks"], out["pred"])
         out["probs"] = PR.build(game, mdl, odds, mk)
     else:
         out["picks"] = None
@@ -493,11 +493,14 @@ async def picks(scope="24h"):
         if not a or not a.get("picks"): return None
         p = a["picks"]
         return dict(game=a["game"], lean=p["lean"], status=p["status"], confidence=p["confidence"], has_odds=bool(a.get("odds")),
-                    official=p.get("official") or [], considered=p.get("considered") or [], pred=_pred_brief(a.get("pred")),
+                    official=p.get("official") or [], considered=p.get("considered") or [], strict=("official" in p), pred=_pred_brief(a.get("pred")),
                     top=[c for c in p["candidates"][:3]], model=a.get("model"), brief=PR.brief(a.get("probs")))
     rs = [r for r in await asyncio.gather(*[one(g) for g in games]) if r]
     pri = {"PICK": 0, "LEAN": 1, "PASS": 2, "SIN_LINEA": 3}
-    rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("score")) or 0)))
+    if ST.ENABLED: rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("score")) or 0)))
+    else:
+        cw = {"Alta": 1.0, "Media": 0.7, "Baja": 0.4}
+        rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("edge") or 0) * cw.get(r["confidence"]["level"], .4))))
     res = dict(scope=scope, generated=time.time(), n_games=len(games), items=rs, window=[t0.isoformat(), t1.isoformat()])
     _picks_cache[key] = (time.time(), res)
     return res

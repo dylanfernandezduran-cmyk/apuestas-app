@@ -188,19 +188,22 @@ def leg_from(game, c):
 async def suggest(n=3, scope="hoy", sport=None):
     from . import data
     d = await data.picks(scope)
-    if scope == "hoy" and not any(it.get("official") for it in d["items"]): d = await data.picks("24h")
+    if scope == "hoy" and not any(it.get("official") or it.get("status") in ("PICK", "LEAN") for it in d["items"]): d = await data.picks("24h")
     pool = []
     for it in d["items"]:
         if sport and it["game"].get("sport") != sport: continue
-        for c in (it.get("official") or [])[:1]:                     # 1 pierna por juego (sin correlación dentro del ticket)
-            if c.get("price") is None or c.get("market") not in ("ML", "Spread", "Total", "BTTS"): continue
-            pool.append((c.get("score") or 0, it["game"], c))
+        # estricto encendido -> pick oficial; por defecto -> el pick del juego (PICK o LEAN). 1 pierna por juego (sin correlación)
+        src = it.get("official") or ([it["lean"]] if it.get("lean") and it.get("status") in ("PICK", "LEAN") else [])
+        for c in src[:1]:
+            if c.get("price") is None or c.get("market") not in ("ML", "Spread", "Total", "BTTS") or (c.get("edge") or 0) <= 0: continue
+            rank = c["score"] if c.get("score") is not None else (100 if it.get("status") == "PICK" else 0) + (c.get("edge") or 0) * (c.get("p_final") or 0)
+            pool.append((rank, it["game"], c))
     pool.sort(key=lambda x: -x[0])
     legs, why = [], []
     for sc, g, c in pool[:max(1, min(int(n), 6))]:
         legs.append(leg_from(g, c))
         vs = f"{g['home']['name']} vs {g['away']['name']}" if g.get("sport") in ("futbol", "tenis") else f"{g['away']['name']} @ {g['home']['name']}"
-        why.append(f"{c['label']} ({vs}): puntaje {sc}/100 · prob. {round(100 * (c.get('p_final') or 0))}% · edge {c.get('edge', 0):+.1f} pp"
+        why.append(f"{c['label']} ({vs}): " + (f"puntaje {c['score']}/100 · " if c.get("score") is not None else "") + f"prob. {round(100 * (c.get('p_final') or 0))}% · edge {c.get('edge', 0):+.1f} pp"
                    + (f" · señales {((c.get('signals') or {}).get('verdict') or '').replace('_', ' ')}" if (c.get('signals') or {}).get('verdict') not in (None, 'sin_dato') else ""))
     out = dict(legs=legs, why=why, available=len(pool), asked=n, scope=d["scope"])
     if legs: out.update(combine(legs)); out.update(check(legs))

@@ -1,6 +1,6 @@
 /* Service worker: caparazón de la app sin conexión. Requiere HTTPS (o localhost). Datos /api: red primero, con respaldo del último valor visto. */
-const V = 'shell-v22';
-const SHELL = ['/', '/static/style.css?v=21', '/static/extras.js?v=14', '/static/detalle.js?v=7', '/static/props.js?v=2', '/static/app.js?v=18', '/static/recdia.js?v=2', '/static/ticket.js?v=1', '/static/chat.js?v=3', '/static/brand/icons/icon-192.png', '/manifest.webmanifest'];
+const V = 'shell-v23';
+const SHELL = ['/', '/static/style.css?v=22', '/static/extras.js?v=15', '/static/detalle.js?v=8', '/static/props.js?v=2', '/static/app.js?v=19', '/static/recdia.js?v=2', '/static/ticket.js?v=2', '/static/chat.js?v=4', '/static/brand/icons/icon-192.png', '/manifest.webmanifest'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'api-v1').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
