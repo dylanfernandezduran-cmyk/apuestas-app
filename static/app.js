@@ -176,11 +176,12 @@ function sgrRow(b,g,rec){
 const briefRows = (items,g,rec) => (items||[]).map(b=>sgrRow(b,g,rec)).join('');
 function briefBlock(g,items){
   if(!items||!items.length) return `<div class="pickline none">Probabilidades: ${SD}</div>`;
-  const rec=g.rec||[], rm=rec.find(x=>x.type==='main'&&x.status!=='ANULADO')||rec.find(x=>x.type==='main');
+  const rec=g.rec||[], _mains=(rec||[]).filter(x=>x.type==='main'), rm=[..._mains].reverse().find(x=>x.status!=='ANULADO')||_mains[_mains.length-1];
   let main = rm && items.find(b=>b.market===rm.market&&b.side===rm.selection);
   let line;
   if(!main && rm){
-    line=`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(rm.label,g))}</span>${gradedBadge(rm)}</div>`;
+    const inv=rec.find(x=>x.market===rm.market&&x.status==='ANULADO'&&x.state==='INVERTIDO');
+    line=`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(rm.label,g))}</span>${gradedBadge(rm)}</div>`+(inv?`<div class="sub">antes: ${esc(shortLbl(inv.label,g))} · invertido</div>`:'');
   } else {
     if(!main) main=items.slice().sort((a,b)=>(b.edge==null?-99:b.edge)-(a.edge==null?-99:a.edge))[0];
     line=`<div class="pickline" title="${esc(main.title||'')} · ${esc(main.label)}"><span class="k">PICK</span><span class="t">${esc(shortLbl(main.label,g))}</span>${main.p_model!=null?`<span class="m mono">${pct(main.p_model,0)}</span>`:''}${main.edge!=null?`<span class="e mono ${main.edge>0?'pos':'neg'}">edge ${sg(main.edge)}pp</span>`:''}${gradedBadge(rm&&rm.market===main.market&&rm.selection===main.side?rm:null)}</div>`;
@@ -191,7 +192,7 @@ function briefBlock(g,items){
 }
 function recBlock(g){
   const r=g.rec||[]; if(!r.length) return '';
-  const m=r.find(x=>x.type==='main'&&x.status!=='ANULADO')||r.find(x=>x.type==='main'), rest=r.filter(x=>x!==m);
+  const _ms=r.filter(x=>x.type==='main'), m=[..._ms].reverse().find(x=>x.status!=='ANULADO')||_ms[_ms.length-1], rest=r.filter(x=>x!==m);
   const gb=x=>x.status==='PENDIENTE'&&g.state==='in' ? (provBadge(g.prov,x.market,x.selection)||gradeBadge(x,false)) : gradeBadge(x,false);
   const row=x=>`<div class="sgr"><span class="mk">${esc(MKL[x.market]||String(x.market).slice(0,3).toUpperCase())}</span><span class="lb">${esc(shortLbl(x.label,g))}</span>${gb(x)}</div>`;
   return `<div class="gp">${m?`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(m.label,g))}</span>${gb(m)}</div>`:''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;

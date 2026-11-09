@@ -175,14 +175,32 @@ def test_cancelado_se_activa_al_empezar(tmp_path, monkeypatch):
     c = R._c()
     if c is None: return
     c.execute("DELETE FROM picks")
-    for sel, st, up in [("away", "CANCELADO", 10), ("home", "INVERTIDO", 5)]:
-        c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'ml',?,'ANULADO',?,1,?)", (sel, st, up))
+    # CANCELADO sin reemplazo -> se reactiva; INVERTIDO con reemplazo vivo -> se queda anulado
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'ml','away','ANULADO','CANCELADO',1,10)")
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','Y',100,'ml','home','ANULADO','INVERTIDO',1,5)")
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','Y',100,'ml','away','PENDIENTE','ACTIVO',2,2)")
     c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'total','over','ANULADO',NULL,1,1)")
     c.commit()
     assert R.activate_started(50) == 0
-    assert R.activate_started(200) == 2   # cancelado e invertido; el void sin state no
-    rows = {r["selection"]: r["status"] for r in R._rows("SELECT * FROM picks")}
-    assert rows == {"away": "PENDIENTE", "home": "PENDIENTE", "over": "ANULADO"}
+    assert R.activate_started(200) == 1
+    rows = {(r["eid"], r["selection"]): r["status"] for r in R._rows("SELECT * FROM picks")}
+    assert rows[("X","away")] == "PENDIENTE"
+    assert rows[("Y","home")] == "ANULADO"
+    assert rows[("Y","away")] == "PENDIENTE"
+    assert rows[("X","over")] == "ANULADO"
+
+def test_dedupe_conserva_el_mas_reciente(tmp_path, monkeypatch):
+    from server import record as R
+    c = R._c()
+    if c is None: return
+    c.execute("DELETE FROM picks")
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,type,label) VALUES('tenis','atp','1',1,'ml','home','GANADO','ACTIVO',1,'main','A ML')")
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,type,label) VALUES('tenis','atp','1',1,'ml','away','PERDIDO','ACTIVO',2,'main','B ML')")
+    c.commit()
+    assert R.dedupe_market('atp','1','ml') == 1
+    rows = {r['selection']: (r['status'], r.get('state')) for r in R._rows("SELECT * FROM picks")}
+    assert rows['away'][0] == 'PERDIDO'   # el más reciente se conserva
+    assert rows['home'][0] == 'ANULADO' and rows['home'][1] == 'INVERTIDO'
 
 
 def test_tennis_model_imputa_ranking_faltante():
@@ -194,14 +212,3 @@ def test_tennis_model_imputa_ranking_faltante():
     assert M.tennis_model(None, None) is None
 
 
-def test_dedupe_market_conserva_el_primero(tmp_path, monkeypatch):
-    from server import record as R
-    c = R._c()
-    if c is None: return
-    c.execute("DELETE FROM picks")
-    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,type,label) VALUES('tenis','atp','1',1,'ml','home','GANADO','ACTIVO',1,'main','A ML')")
-    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,type,label) VALUES('tenis','atp','1',1,'ml','away','PERDIDO','ACTIVO',2,'main','B ML')")
-    c.commit()
-    assert R.dedupe_market('atp','1','ml') == 1
-    rows = {r['selection']: r['status'] for r in R._rows("SELECT * FROM picks")}
-    assert rows['home'] == 'GANADO' and rows['away'] == 'ANULADO'
