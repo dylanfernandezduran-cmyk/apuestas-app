@@ -18,7 +18,7 @@ setInterval(()=>{document.getElementById('clock').textContent = new Intl.DateTim
 const API_TIMEOUT_MS = 45000;
 // Modo GitHub Pages (pt90u): sin servidor; las respuestas de /api vienen de JSON estáticos que un GitHub Action regenera cada ~10-15 min
 const STATIC = typeof window!=='undefined' && !!window.NRNM_STATIC;
-const LOCAL_URL = 'http://192.168.100.11:8765';
+const LOCAL_URL = 'http://192.168.100.14:8765';
 const NOSTATIC = [/^\/api\/prop\//, /^\/api\/search/, /^\/api\/grade/, /^\/api\/history\//];
 function staticUrl(path){
   if(/^\/api\/record(\?|$)/.test(path)) path='/api/record?limit=80';            // filtros del récord: se aplican sobre el último récord publicado
