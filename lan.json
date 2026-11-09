@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "ip": "192.168.100.14",
+  "port": 8765,
+  "hostname": "DESKTOP-NOG66RU",
+  "url_local": "http://DESKTOP-NOG66RU.local:8765",
+  "url_ip": "http://192.168.100.14:8765",
+  "preferred": "http://DESKTOP-NOG66RU.local:8765",
+  "updated": "2026-11-09T23:39:43Z",
+  "note": "url_local (.local) no cambia con DHCP; url_ip es respaldo"
+}

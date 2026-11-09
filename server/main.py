@@ -361,6 +361,41 @@ async def snap_now():
     await snapshot_once()
     return dict(SNAP_STATE, db=history.stats())
 
+def _lan_ipv4():
+    """IPv4 de LAN (no loopback). Preferida: la que enruta a la gateway típica; si falla, la primera no-loopback."""
+    import socket
+    # 1) UDP connect trick: no envía paquetes, solo elige interfaz de salida
+    for probe in ("192.168.100.1", "8.8.8.8"):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.3)
+            s.connect((probe, 80))
+            ip = s.getsockname()[0]
+            s.close()
+            if ip and not ip.startswith("127."):
+                return ip
+        except Exception:
+            pass
+    # 2) hostname resolve
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127."):
+                return ip
+    except Exception:
+        pass
+    return None
+
+@app.get("/api/lan")
+async def lan():
+    """IP/URL LAN actuales + hostname .local (estable ante DHCP). Sin secretos."""
+    import socket
+    ip = _lan_ipv4()
+    host = (socket.gethostname() or "DESKTOP-NOG66RU").split(".")[0]
+    local = f"http://{host}.local:8765"
+    by_ip = f"http://{ip}:8765" if ip else None
+    return dict(ok=True, ip=ip, port=8765, hostname=host, url_local=local, url_ip=by_ip, preferred=local)
+
 @app.get("/api/health")
 async def health():
     return dict(ok=True, grading=dict(GRADE_STATE, every_min=GRADE_MIN), record=REC.summary(), cache=STATS, ratings={k: v["n_games"] for k, v in ratings._ratings.items()}, ts=time.time(), snapshots=dict(SNAP_STATE, every_min=SNAP_MIN, db=history.stats()), injuries=dict(INJ_STATE, every_min=INJ_MIN), lineups=LU_STATE)

@@ -53,8 +53,18 @@ async def main_():
         html = r.text if r else open(os.path.join(ROOT, "static", "index.html"), encoding="utf-8").read()
         html = html.replace('"/static/', '"static/').replace('"/manifest.webmanifest"', '"manifest.webmanifest"')
         built = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        html = html.replace("<head>", f"<head><script>window.NRNM_STATIC={{built:'{built}'}};</script>", 1)
+        lan = {}
+        for cand in (os.path.join(ROOT, "lan.json"), os.path.join(ROOT, "data", "lan.json")):
+            if os.path.isfile(cand):
+                try: lan = json.load(open(cand, encoding="utf-8"))
+                except Exception: lan = {}
+                break
+        lan_js = json.dumps(lan, ensure_ascii=False) if lan else "null"
+        html = html.replace("<head>", f"<head><script>window.NRNM_STATIC={{built:'{built}',lan:{lan_js}}};</script>", 1)
         open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(html)
+        if lan:
+            os.makedirs(os.path.join(OUT, "data"), exist_ok=True)
+            json.dump(lan, open(os.path.join(OUT, "data", "lan.json"), "w", encoding="utf-8"), indent=1)
         m = await get("/manifest.webmanifest", save=False)
         if m:
             mf = m.json(); mf["start_url"] = "./"; mf["scope"] = "./"

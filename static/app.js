@@ -18,7 +18,7 @@ setInterval(()=>{document.getElementById('clock').textContent = new Intl.DateTim
 const API_TIMEOUT_MS = 45000;
 // Modo GitHub Pages (pt90u): sin servidor; las respuestas de /api vienen de JSON estáticos que un GitHub Action regenera cada ~10-15 min
 const STATIC = typeof window!=='undefined' && !!window.NRNM_STATIC;
-const LOCAL_URL = 'http://192.168.100.14:8765';
+let LOCAL_URL = 'http://DESKTOP-NOG66RU.local:8765'; // estable ante DHCP (mDNS); IP se refresca abajo
 const NOSTATIC = [/^\/api\/prop\//, /^\/api\/search/, /^\/api\/grade/, /^\/api\/history\//];
 function staticUrl(path){
   if(/^\/api\/record(\?|$)/.test(path)) path='/api/record?limit=80';            // filtros del récord: se aplican sobre el último récord publicado
@@ -540,8 +540,34 @@ document.addEventListener('click',e=>{
 },true);
 document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('tg')){ e.preventDefault(); e.target.parentElement.classList.toggle('open'); } });
 
-// barra de la versión en línea: hora de los datos + link local
+// barra de la versión en línea: hora de los datos + link local (.local estable; IP de lan.json /api/lan)
+async function refreshLocalUrl(){
+  // Preferir siempre .local (estable). lan.json /api/lan solo aportan la IP de respaldo.
+  try{
+    const embedded = (window.NRNM_STATIC && window.NRNM_STATIC.lan) || null;
+    if(embedded) window.__NRNM_LAN = embedded;
+    if(STATIC){
+      const r = await fetch('data/lan.json', {cache:'no-cache'});
+      if(r.ok){ const j = await r.json(); window.__NRNM_LAN = Object.assign({}, window.__NRNM_LAN||{}, j); }
+    }
+  }catch(e){}
+  if(window.__NRNM_LAN && window.__NRNM_LAN.url_local) LOCAL_URL = window.__NRNM_LAN.url_local;
+  // Si el iPhone/PC está en la misma Wi‑Fi, confirmar que el servidor vive (http desde Pages puede fallar por mixed content; no pasa nada)
+  try{
+    const probe = (window.__NRNM_LAN && window.__NRNM_LAN.url_ip) || LOCAL_URL;
+    const ac = new AbortController(); const t = setTimeout(()=>ac.abort(), 2500);
+    const r = await fetch(probe + '/api/lan', {signal:ac.signal}); clearTimeout(t);
+    if(r.ok){ const j = await r.json(); window.__NRNM_LAN = j; if(j.url_local) LOCAL_URL = j.url_local; }
+  }catch(e){}
+}
 if(STATIC){ try{ const b=document.createElement('div'); b.className='stbar';
   const dt=new Intl.DateTimeFormat('es-MX',{timeZone:TZ,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(window.NRNM_STATIC.built));
-  b.innerHTML=`🌐 Versión en línea · datos de ${esc(dt)} (CDMX) · se actualizan cada ~10-15 min · <a href="${LOCAL_URL}">link local (en vivo)</a>`;
-  document.querySelector('header').after(b); }catch(e){} }
+  const paint = ()=>{
+    const lan = window.__NRNM_LAN || (window.NRNM_STATIC && window.NRNM_STATIC.lan) || {};
+    const ip = lan.url_ip ? ` · <a href="${esc(lan.url_ip)}">${esc((lan.ip||'')+':8765')}</a>` : '';
+    b.innerHTML=`🌐 Versión en línea · datos de ${esc(dt)} (CDMX) · se actualizan cada ~10-15 min · <a href="${LOCAL_URL}">link local (en vivo)</a>${ip}`;
+  };
+  paint();
+  document.querySelector('header').after(b);
+  refreshLocalUrl().then(paint).catch(()=>{});
+}catch(e){} }
