@@ -163,16 +163,27 @@ async function chGameAnswer(league, eid, qn){
     out.push(`Predicción NRNM: ${esc(sc)} · ganador ${esc(p.winner.side==='draw'?'empate':g[p.winner.side].name)} ${chPct(p.winner.p)}${p.total?` · ${esc(p.total.label)}`:''}${p.spread&&p.spread.line!=null?` · hándicap proy. ${p.spread.side==='home'?g.home.name:g.away.name} ${p.spread.line>0?'+':''}${p.spread.line}`:''}`); }
   else if(g.state==='pre'&&!p) out.push('Predicción NRNM: aún no hay (faltan datos del modelo).');
   else if(g.state!=='pre') out.push('Predicción NRNM: no aplica — el juego ya no está en pre-partido.');
-  if(pk&&pk.lean) out.push(`${pk.status==='PICK'?'Pick':'Lean'}: <b>${esc(pk.lean.label)}</b> ${esc(pk.lean.price_txt||'')} · prob. ${chPct(pk.lean.p_final)}${chEdge(pk.lean.edge)} · ${esc(pk.status)}${pk.confidence?' · confianza '+esc(pk.confidence.level):''}`);
-  else if(g.state==='pre'){
-    // lean sugerido desde el mejor outcome con edge, aunque no sea pick oficial
-    let best=null;
-    mkts.forEach(m=>m.outcomes.forEach(x=>{ if(x.edge!=null&&(best==null||x.edge>best.edge)) best=x; }));
-    if(best&&best.edge>0) out.push(`Lean sugerido (no es pick oficial): <b>${esc(best.label||best.name)}</b> edge ${best.edge>0?'+':''}${best.edge.toFixed(1)} pp · modelo ${chPct(best.p_final!=null?best.p_final:best.p_model)} vs mercado ${chPct(best.p_nv)}.`);
-    else if(best) out.push(`Mejor no apostar: ningún lado tiene edge positivo (mejor edge ${best.edge!=null?(best.edge>0?'+':'')+best.edge.toFixed(1)+' pp':'n/d'} en ${esc(best.label||'')}).`);
-    else {
-      const miss=(d.gaps||[]).filter(Boolean).slice(0,3);
-      out.push('Sin pick todavía.'+(miss.length?' Motivo: '+miss.map(esc).join(' · '):' No hay modelo ni edge calculable con los datos actuales.'));
+  if(g.state==='pre'){
+    const lean=pk&&pk.lean, predSide=p&&p.winner&&p.winner.side;
+    const agrees=!lean||!predSide||lean.side===predSide||(lean.market==='ML'&&lean.side===predSide);
+    if(lean && (lean.edge>0.5 || (pk.status==='PICK') || (agrees && lean.edge!=null && lean.edge>=0))){
+      out.push(`${pk.status==='PICK'?'Pick':'Lean'}: <b>${esc(lean.label)}</b> ${esc(lean.price_txt||'')} · prob. ${chPct(lean.p_final)}${chEdge(lean.edge)} · ${esc(pk.status)}${pk.confidence?' · confianza '+esc(pk.confidence.level):''}`);
+      if(!agrees) out.push('<span class="ch-mut">Ojo: este lean no coincide con la Predicción NRNM.</span>');
+    } else {
+      let best=null;
+      mkts.forEach(m=>m.outcomes.forEach(x=>{ if(x.edge!=null&&(best==null||x.edge>best.edge)) best=x; }));
+      // si el edge es ~0, alinear con la predicción (ganador proyectado)
+      if(predSide && (!best || !(best.edge>0.5))){
+        const ml=(mkts.find(m=>m.key==='ml')||{}).outcomes||[];
+        const pref=ml.find(x=>x.side===predSide)||ml[0];
+        if(pref) out.push(`Lean sugerido (alineado a la Predicción NRNM; no es pick oficial): <b>${esc(pref.label||pref.name)}</b> ${pref.best?esc(pref.best.price_txt):''} · modelo ${chPct(pref.p_final!=null?pref.p_final:pref.p_model)} vs mercado ${chPct(pref.p_nv)}${chEdge(pref.edge)}. Sin edge claro → mejor no forzar la apuesta.`);
+        else out.push('Mejor no apostar: sin edge positivo y sin predicción clara.');
+      } else if(best&&best.edge>0) out.push(`Lean sugerido (no es pick oficial): <b>${esc(best.label||best.name)}</b> edge +${best.edge.toFixed(1)} pp · modelo ${chPct(best.p_final!=null?best.p_final:best.p_model)} vs mercado ${chPct(best.p_nv)}.`);
+      else if(best) out.push(`Mejor no apostar: ningún lado tiene edge positivo (mejor edge ${best.edge!=null?(best.edge>0?'+':'')+best.edge.toFixed(1)+' pp':'n/d'} en ${esc(best.label||'')}).`);
+      else {
+        const miss=(d.gaps||[]).filter(Boolean).slice(0,3);
+        out.push('Sin pick todavía.'+(miss.length?' Motivo: '+miss.map(esc).join(' · '):' No hay modelo ni edge calculable con los datos actuales.'));
+      }
     }
   }
   if(/ambos|btts/.test(qn)){
@@ -220,16 +231,28 @@ async function chLocal(q){
     const r=await api('/api/record?limit=80'); const s=r.summary||{};
     return `Récord de picks (paper trading): <b>${s.W??'—'}-${s.L??'—'}-${s.P??'—'}</b>${s.win_pct!=null?` · ${s.win_pct.toFixed(1)}% de acierto`:''}${s.units!=null?` · ${s.units>0?'+':''}${(+s.units).toFixed(2)} u a 1u plano`:''}${s.roi!=null?` (ROI ${s.roi.toFixed(1)}%)`:''} · ${s.pending??0} pendientes. <a href="#/record/total">Ver récord →</a>`;
   }
-  if(/individual|sencill|solo uno|un solo pick|el mejor pick|mejor pick para/.test(qn)) return chBestSingle(qn);
-  const mq=chParseMarket(qn);
-  if(mq){ const sr=await chSearchGames(qn);
-    if(sr.hit) return chMarketAnswer(sr.hit, mq, qn);
-    const w=qn.split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!CH_STOP.has(x));
-    if(w.length) return `No encontré «${esc(w.join(' '))}» en juegos en vivo o de las próximas 72 h.${sr.near.length?' ¿Quisiste decir: '+sr.near.map(c=>`<a href="${chLink(c.g)}">${esc(c.name)}</a>`).join(', ')+'?':''}`;
-  }
+  // Primero entidad (equipo/jugador/torneo): «mejor pick en el juego de X» responde ese juego, no el mejor global
   const cur=chCurGame(), items=await chPicks();
-  const named=chFindGame(items,qn) || (/pick|mejor|recomien|valor|hoy|manana|btts|ambos|nba|nfl|nhl|mlb|futbol|tenis|atp|wta|liga/.test(qn)?null:await (async()=>{ const sr=await chSearchGames(qn); return sr.hit?{game:sr.hit.g}:null; })());
-  if(named) return chGameAnswer(named.game.league, named.game.id, qn);
+  let named=chFindGame(items,qn), near=[];
+  const srEnt=(!named)?await chSearchGames(qn):null;
+  if(!named && srEnt && srEnt.hit) named={game:srEnt.hit.g};
+  if(srEnt) near=srEnt.near||[];
+  if(named){
+    const mq=chParseMarket(qn);
+    if(mq){
+      const hit=(srEnt&&srEnt.hit)||(await chSearchGames(qn)).hit;
+      if(hit) return chMarketAnswer(hit, mq, qn);
+    }
+    return chGameAnswer(named.game.league, named.game.id, qn);
+  }
+  const mq=chParseMarket(qn);
+  if(mq){
+    const w=qn.split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!CH_STOP.has(x));
+    if(w.length) return `No encontré «${esc(w.join(' '))}» en juegos en vivo o de las próximas 72 h.${near.length?' ¿Quisiste decir: '+near.map(c=>`<a href="${chLink(c.g)}">${esc(c.name)}</a>`).join(', ')+'?':''}`;
+  }
+  // Mejor pick / individual global SÓLO sin entidad
+  if(/individual|sencill|solo uno|un solo pick|el mejor pick|mejor pick para|mejor apuesta|que le meto/.test(qn) && !/\bvs\b/.test(qn))
+    return chBestSingle(qn);
   if(cur && (/(este|esta|del|el) (juego|partido)|aqui/.test(qn) || (/lesion|baja|prop|jugador|marcador|prediccion/.test(qn) && !/mejores|hoy|manana|todos/.test(qn)))) return chGameAnswer(cur.league, cur.eid, qn);
   let pool=items.filter(it=>it.lean&&it.lean.edge!=null);
   const sp={nba:/nba|basket/,nfl:/nfl|americano/,mlb:/mlb|beis/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier|champions/,tenis:/tenis|atp|wta/};
