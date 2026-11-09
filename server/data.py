@@ -193,13 +193,17 @@ async def tennis_detail(league, mid):
     rk = await tennis_rankings(league)
     A, B = g["home"], g["away"]
     fa, fb = _tennis_matches_for(evs, A["id"]), _tennis_matches_for(evs, B["id"])
-    mdl = M.tennis_model(A["points"], B["points"])
     gaps = ["Cuotas (ESPN no publica momios de tenis): Sin dato", "Superficie / H2H / lesiones: Sin dato (no disponible en fuentes gratuitas)"]
     mk = await MK.game_market(league, g) if g["state"] == "pre" else None
     odds = MK.as_odds(mk, prefer=("sharp",)) if mk else None
     if odds:
         odds["src"] = "mk"
         gaps[0] = "Cuotas: sólo Pinnacle (referencia sharp, vía guest API pública); ESPN no publica momios de tenis. % tickets/% dinero: Sin dato"
+    p_mkt = (odds.get("nv") or {}).get("ml", {}).get("home") if odds else None
+    mdl = M.tennis_model(A["points"], B["points"], p_mkt_home=p_mkt)
+    if mdl and mdl.get("imputed"):
+        who = A["name"] if not A.get("points") else B["name"]
+        gaps.append(f"Ranking de {who}: Sin dato → modelo con puntos imputados (muestra baja; se apoya en el mercado si hay ML)")
     res = dict(game=g, kind="tennis", odds=odds, gaps=gaps, form={"home": fa, "away": fb}, market=mk, odds_note=("Cuotas tomadas de Pinnacle (ESPN no publica tenis)." if odds else None))
     if g.get("live"): res["live"] = dict(g["live"], state=g["state"], stats=[], plays=[])
     if g["state"] == "pre": res["probs"] = PR.build(g, mdl, odds, mk, w=(M.blend_weight(mdl) if mdl else None))
@@ -209,7 +213,8 @@ async def tennis_detail(league, mid):
         M.apply_confidence(cands, conf)
         dec = M.decide(cands, mdl, A["name"], B["name"])
         if mk: MK.attach_signals(dec["candidates"], mk)
-        res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label="Heurística por puntos de ranking (logística sobre ln de puntos)")
+        lab = "Heurística por puntos de ranking (logística sobre ln de puntos)" + (" · ranking imputado" if mdl.get("imputed") else "")
+        res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label=lab, imputed=bool(mdl.get("imputed")))
         res["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
         if ST.ENABLED: ST.apply(res["picks"], {})
         res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=res["picks"])
@@ -217,7 +222,8 @@ async def tennis_detail(league, mid):
     else:
         res["model"] = None
         res["picks"] = None
-        if not mdl: gaps.append("Ranking de uno de los jugadores: Sin dato → sin modelo")
+        if not mdl: gaps.append("Sin ranking de ninguno de los dos y sin ML de mercado → sin modelo")
+        elif g["state"] != "pre": gaps.append(f"Juego en estado «{g['state']}»: el pick/predicción se calculan sólo antes del inicio")
     return res
 
 # ------------------------------------------------------------------ MLB lanzadores (StatsAPI)

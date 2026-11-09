@@ -171,16 +171,37 @@ def test_retiro_ml_con_ganador_real():
 
 
 def test_cancelado_se_activa_al_empezar(tmp_path, monkeypatch):
-    import sqlite3
     from server import record as R
     c = R._c()
     if c is None: return
     c.execute("DELETE FROM picks")
-    for i, (sel, st, up) in enumerate([("away", "CANCELADO", 10), ("home", "INVERTIDO", 5)]):
+    for sel, st, up in [("away", "CANCELADO", 10), ("home", "INVERTIDO", 5)]:
         c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'ml',?,'ANULADO',?,1,?)", (sel, st, up))
     c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,updated_at) VALUES('futbol','mex.1','X',100,'total','over','ANULADO',NULL,1,1)")
     c.commit()
     assert R.activate_started(50) == 0
-    assert R.activate_started(200) == 1
+    assert R.activate_started(200) == 2   # cancelado e invertido; el void sin state no
     rows = {r["selection"]: r["status"] for r in R._rows("SELECT * FROM picks")}
-    assert rows == {"away": "PENDIENTE", "home": "ANULADO", "over": "ANULADO"}
+    assert rows == {"away": "PENDIENTE", "home": "PENDIENTE", "over": "ANULADO"}
+
+
+def test_tennis_model_imputa_ranking_faltante():
+    from server import model as M
+    both = M.tennis_model(1625, 800)
+    assert both and both["p_home"] > 0.5 and not both.get("imputed")
+    one = M.tennis_model(1625, None, p_mkt_home=0.80)
+    assert one and one.get("imputed") and abs(one["p_home"] - 0.80) < 0.05
+    assert M.tennis_model(None, None) is None
+
+
+def test_dedupe_market_conserva_el_primero(tmp_path, monkeypatch):
+    from server import record as R
+    c = R._c()
+    if c is None: return
+    c.execute("DELETE FROM picks")
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,type,label) VALUES('tenis','atp','1',1,'ml','home','GANADO','ACTIVO',1,'main','A ML')")
+    c.execute("INSERT INTO picks(sport,league,eid,start_ts,market,selection,status,state,created_at,type,label) VALUES('tenis','atp','1',1,'ml','away','PERDIDO','ACTIVO',2,'main','B ML')")
+    c.commit()
+    assert R.dedupe_market('atp','1','ml') == 1
+    rows = {r['selection']: r['status'] for r in R._rows("SELECT * FROM picks")}
+    assert rows['home'] == 'GANADO' and rows['away'] == 'ANULADO'

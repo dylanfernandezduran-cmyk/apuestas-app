@@ -74,12 +74,30 @@ def soccer_model(R, hid, aid, neutral=False):
                 total=lambda t: cover_matrix(mat, lambda i, j: i + j, t),
                 mat_top=sorted(((i, j, mat[i][j]) for i in range(7) for j in range(7)), key=lambda x: -x[2])[:5])
 
-def tennis_model(pa, pb):
-    """pa/pb: puntos ranking ATP/WTA. Logística sobre ln(puntos). Heurística simple."""
-    if not pa or not pb: return None
+def tennis_model(pa, pb, p_mkt_home=None):
+    """pa/pb: puntos ranking ATP/WTA. Logística sobre ln(puntos). Heurística simple.
+    Si falta el ranking de uno (lucky loser / wild card / junior), no se apaga el modelo:
+    se imputan puntos bajos o se calibran con el ML de mercado cuando existe."""
+    UNRANKED = 20.0   # ~fuera del top 500; se marca sample bajo
+    imputed = False
+    if not pa and not pb: return None
+    if not pa or not pb:
+        imputed = True
+        known = pa or pb
+        if p_mkt_home is not None and 0.02 < p_mkt_home < 0.98 and known:
+            # invierte la logística para que p_home ≈ mercado
+            logit = math.log(p_mkt_home / (1 - p_mkt_home))
+            # p = 1/(1+e^{-0.8 ln(pa/pb)}) => ln(pa/pb)=logit/0.8
+            ratio = math.exp(logit / 0.8)
+            if not pa: pa = max(5.0, known * ratio)
+            else: pb = max(5.0, known / ratio)
+        else:
+            if not pa: pa = UNRANKED
+            if not pb: pb = UNRANKED
     d = math.log(pa / pb)
     p = 1 / (1 + math.exp(-0.8 * d))
-    return dict(kind="ranking", p_home=p, p_away=1 - p, p_draw=None, mu=None, exp_total=None, sample=0.5, hfa=None, n_home=None, n_away=None)
+    return dict(kind="ranking", p_home=p, p_away=1 - p, p_draw=None, mu=None, exp_total=None,
+                sample=0.25 if imputed else 0.5, hfa=None, n_home=None, n_away=None, imputed=imputed)
 
 # ---------- candidatos ----------
 def blend_weight(model):

@@ -176,7 +176,7 @@ function sgrRow(b,g,rec){
 const briefRows = (items,g,rec) => (items||[]).map(b=>sgrRow(b,g,rec)).join('');
 function briefBlock(g,items){
   if(!items||!items.length) return `<div class="pickline none">Probabilidades: ${SD}</div>`;
-  const rec=g.rec||[], rm=rec.find(x=>x.type==='main');
+  const rec=g.rec||[], rm=rec.find(x=>x.type==='main'&&x.status!=='ANULADO')||rec.find(x=>x.type==='main');
   let main = rm && items.find(b=>b.market===rm.market&&b.side===rm.selection);
   let line;
   if(!main && rm){
@@ -191,7 +191,7 @@ function briefBlock(g,items){
 }
 function recBlock(g){
   const r=g.rec||[]; if(!r.length) return '';
-  const m=r.find(x=>x.type==='main'), rest=r.filter(x=>x!==m);
+  const m=r.find(x=>x.type==='main'&&x.status!=='ANULADO')||r.find(x=>x.type==='main'), rest=r.filter(x=>x!==m);
   const gb=x=>x.status==='PENDIENTE'&&g.state==='in' ? (provBadge(g.prov,x.market,x.selection)||gradeBadge(x,false)) : gradeBadge(x,false);
   const row=x=>`<div class="sgr"><span class="mk">${esc(MKL[x.market]||String(x.market).slice(0,3).toUpperCase())}</span><span class="lb">${esc(shortLbl(x.label,g))}</span>${gb(x)}</div>`;
   return `<div class="gp">${m?`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(m.label,g))}</span>${gb(m)}</div>`:''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;
@@ -276,7 +276,7 @@ async function viewGame(league, id, silent){
     <div class="hero">${heroSide(g,d,sides(g)[0])}<div class="hmid">${heroMid(g,d)}</div>${heroSide(g,d,sides(g)[1])}</div>
     ${sub?`<div class="sub hsub">${sub}</div>`:''}${g.wd?`<div class="sub hsub">⚠️ ${esc(g.wd)}</div>`:''}
     ${restTags(d)?`<div class="hsub">${restTags(d)}</div>`:''}<div class="hsub">${updTag(d.updated,live)}</div></div>`;
-  REC_MAP = {}; (d.record||[]).forEach(r=>{ REC_MAP[r.market+'.'+r.selection]=r; }); PROV = d.prov||{};
+  REC_MAP = {}; (d.record||[]).forEach(r=>{ const k=r.market+'.'+r.selection; if(!REC_MAP[k]||REC_MAP[k].status==='ANULADO') REC_MAP[k]=r; }); PROV = d.prov||{};
   let html = back + hero + courtLive(d) + liveSection(d) + marketBlocks(d) + detailSections(d);
   // conserva scroll y acordeón de «En vivo» al refrescar en vivo; el estado de secciones/ⓘ/pestañas vive en DST
   const keyOf=c=>c.querySelector(':scope > h2').textContent.trim().slice(0,24);

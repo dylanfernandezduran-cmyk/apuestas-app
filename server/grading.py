@@ -257,4 +257,7 @@ async def grade_pending(now=None, limit=500):
             elif r["status"] == "ANULADO": g = g[:5] + (r.get("note") or g[5],)
             R.set_grade(r["id"], *g, now=now)
             out["void" if g[0] == "ANULADO" else "graded"] += 1
+            if g[0] != "ANULADO":
+                try: R.dedupe_market(r["league"], r["eid"], r["market"], now=now)
+                except Exception: pass
     return out

@@ -123,7 +123,7 @@ function chPickLine(it){
 }
 async function chGameAnswer(league, eid, qn){
   const d = await api(`/api/game/${encodeURIComponent(league)}/${encodeURIComponent(eid)}`, 60000);
-  const g=d.game, out=[`<b>${esc(chVs(g))}</b> · ${esc(g.league_name||'')} · ${esc(chWhen(g.date))}`];
+  const g=d.game, out=[`<b>${esc(chVs(g))}</b> · ${esc(g.league_name||g.league||'')} · ${g.state==='in'?'<b>EN VIVO</b> '+(esc((d.live&&d.live.text)||g.status||'')):g.state==='post'?'FINAL':esc(chWhen(g.date))}`];
   if(/lesion|baja|injur|lastim/.test(qn)){
     const inj=d.injuries||{}; const rows=[];
     for(const t of [g.away,g.home]){ const L=(inj[t.id]||[]); rows.push(`<b>${esc(t.name)}</b>: ${L.length?L.slice(0,8).map(i=>`${esc(i.name)} (${esc(i.status||'?')})`).join(', '):'sin bajas reportadas por ESPN'}`); }
@@ -138,19 +138,50 @@ async function chGameAnswer(league, eid, qn){
     rows.slice(0,6).forEach(({pl,pr})=>out.push(`• ${esc(pl.name)} — ${esc(pr.label)} Más de ${pr.line}${pr.over!=null?' ('+esc(String(pr.over>0?'+'+pr.over:pr.over))+')':''} · cumplió ${pr.l10?pr.l10.hit+'/'+pr.l10.n:'—'}`));
     return out.join('<br>');
   }
-  const p=d.pred, pk=d.picks;
-  if(/ambos|btts/.test(qn)){
-    const m=((d.probs||{}).markets||[]).find(x=>x.key==='btts');
-    if(m) m.outcomes.forEach(o=>out.push(`${esc(o.label)}: modelo ${chPct(o.p_model)} · mercado ${chPct(o.p_nv)}${o.best?' · DraftKings '+esc(o.best.price_txt):''}${chEdge(o.edge)}`));
-    else if(p&&p.btts) out.push(`${esc(p.btts.label)} · modelo ${chPct(p.btts.p)}`);
-    else out.push('Sin datos de «Ambos anotan» para este juego (sólo fútbol, antes del inicio).');
+  // ranking / forma
+  const rk=[]; for(const side of ['home','away']){ const t=g[side]; if(t&&t.rank) rk.push(`${esc(t.name)} #${t.rank}`); else if(t) rk.push(`${esc(t.name)} sin ranking ESPN`); }
+  if(rk.length) out.push('Ranking: '+rk.join(' · '));
+  // mercados disponibles (línea + momio)
+  const o=d.odds; if(o){
+    const mk=[]; if(o.ml) mk.push(`ML ${esc(g.home.name)} ${esc(String(o.ml.home>0?'+'+o.ml.home:o.ml.home))} / ${esc(g.away.name)} ${esc(String(o.ml.away>0?'+'+o.ml.away:o.ml.away))}`);
+    if(o.spread&&o.spread.home) mk.push(`Hándicap ${esc(g.home.name)} ${o.spread.home.line>0?'+':''}${o.spread.home.line} (${esc(String(o.spread.home.price>0?'+'+o.spread.home.price:o.spread.home.price))})`);
+    if(o.total&&o.total.over) mk.push(`Total ${o.total.over.line} (O ${esc(String(o.total.over.price>0?'+'+o.total.over.price:o.total.over.price))} / U ${esc(String((o.total.under&&o.total.under.price)>0?'+'+o.total.under.price:o.total.under&&o.total.under.price))})`);
+    if(mk.length) out.push('Mercados: '+mk.join(' · '));
+  } else out.push('Mercados: sin cuotas publicadas ahora mismo en la app.');
+  // probs modelo vs mercado
+  const mkts=((d.probs||{}).markets)||[];
+  if(mkts.length){
+    const bits=[];
+    mkts.slice(0,4).forEach(m=>m.outcomes.slice(0,2).forEach(x=>{
+      if(x.p_nv!=null||x.p_final!=null||x.p_model!=null)
+        bits.push(`${esc(x.label||x.name)}: modelo ${chPct(x.p_final!=null?x.p_final:x.p_model)} · mercado ${chPct(x.p_nv)}${chEdge(x.edge)}`);
+    }));
+    if(bits.length) out.push(bits.slice(0,6).join('<br>'));
   }
-  if(pk&&pk.lean) out.push(`Pick: <b>${esc(pk.lean.label)}</b> ${esc(pk.lean.price_txt||'')} · prob. ${chPct(pk.lean.p_final)}${chEdge(pk.lean.edge)} · ${esc(pk.status)}`);
+  const p=d.pred, pk=d.picks;
   if(p&&p.score){ const sc=d.kind==='tennis'?(p.score.sets||[]).map(x=>x.join('-')).join(' '):`${p.score.home}-${p.score.away} (local-visita)`;
-    out.push(`Predicción NRNM: ${esc(sc)} · ganador ${esc(p.winner.side==='draw'?'empate':g[p.winner.side].name)} ${chPct(p.winner.p)}${p.total?` · ${esc(p.total.label)}`:''}${p.btts?` · ${esc(p.btts.label)} ${chPct(p.btts.p)}`:''}`); }
+    out.push(`Predicción NRNM: ${esc(sc)} · ganador ${esc(p.winner.side==='draw'?'empate':g[p.winner.side].name)} ${chPct(p.winner.p)}${p.total?` · ${esc(p.total.label)}`:''}${p.spread&&p.spread.line!=null?` · hándicap proy. ${p.spread.side==='home'?g.home.name:g.away.name} ${p.spread.line>0?'+':''}${p.spread.line}`:''}`); }
+  else if(g.state==='pre'&&!p) out.push('Predicción NRNM: aún no hay (faltan datos del modelo).');
+  else if(g.state!=='pre') out.push('Predicción NRNM: no aplica — el juego ya no está en pre-partido.');
+  if(pk&&pk.lean) out.push(`${pk.status==='PICK'?'Pick':'Lean'}: <b>${esc(pk.lean.label)}</b> ${esc(pk.lean.price_txt||'')} · prob. ${chPct(pk.lean.p_final)}${chEdge(pk.lean.edge)} · ${esc(pk.status)}${pk.confidence?' · confianza '+esc(pk.confidence.level):''}`);
+  else if(g.state==='pre'){
+    // lean sugerido desde el mejor outcome con edge, aunque no sea pick oficial
+    let best=null;
+    mkts.forEach(m=>m.outcomes.forEach(x=>{ if(x.edge!=null&&(best==null||x.edge>best.edge)) best=x; }));
+    if(best&&best.edge>0) out.push(`Lean sugerido (no es pick oficial): <b>${esc(best.label||best.name)}</b> edge ${best.edge>0?'+':''}${best.edge.toFixed(1)} pp · modelo ${chPct(best.p_final!=null?best.p_final:best.p_model)} vs mercado ${chPct(best.p_nv)}.`);
+    else if(best) out.push(`Mejor no apostar: ningún lado tiene edge positivo (mejor edge ${best.edge!=null?(best.edge>0?'+':'')+best.edge.toFixed(1)+' pp':'n/d'} en ${esc(best.label||'')}).`);
+    else {
+      const miss=(d.gaps||[]).filter(Boolean).slice(0,3);
+      out.push('Sin pick todavía.'+(miss.length?' Motivo: '+miss.map(esc).join(' · '):' No hay modelo ni edge calculable con los datos actuales.'));
+    }
+  }
+  if(/ambos|btts/.test(qn)){
+    const m=mkts.find(x=>x.key==='btts');
+    if(m) m.outcomes.forEach(o=>out.push(`${esc(o.label)}: modelo ${chPct(o.p_model)} · mercado ${chPct(o.p_nv)}${o.best?' · '+esc(o.best.price_txt):''}${chEdge(o.edge)}`));
+    else out.push('Sin datos de «Ambos anotan» para este juego.');
+  }
   const rec=(d.record||[]).filter(r=>r.open_line!=null&&r.line!=null&&r.open_line!==r.line);
   rec.slice(0,3).forEach(r=>out.push(`Línea movida: ${esc(r.label)} · abrió ${r.open_line} → ${g.state==='pre'?'actual':'cierre'} ${r.line}${r.state&&r.status==='ANULADO'?' ('+esc(r.state.toLowerCase())+')':''}`));
-  if(!pk&&!p) out.push('Sin pick ni predicción (el juego ya empezó o no hay modelo/línea).');
   out.push(`<a href="${chLink(g)}">Abrir el juego →</a>`);
   return out.join('<br>');
 }

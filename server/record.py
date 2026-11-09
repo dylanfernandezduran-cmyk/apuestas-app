@@ -205,9 +205,9 @@ def games_rows(league, eids):
     return out
 
 def activate_started(now=None):
-    """En cuanto el juego empieza, el último pick cancelado/invertido de cada juego+mercado (sin otro pick vivo ni anulado más reciente)
-    vuelve a PENDIENTE: se muestra En vivo/Pendiente y luego se califica con el resultado real. Los anulados verdaderos (WO, cambio de
-    jugadores, retiro) no tienen state CANCELADO/INVERTIDO y no se tocan."""
+    """En cuanto el juego empieza, los picks cancelados/invertidos vuelven a PENDIENTE para mostrarse en vivo
+    y calificarse con el resultado real. Los voids verdaderos (WO, cambio de jugadores, retiro no-ML) no tienen
+    state CANCELADO/INVERTIDO y no se tocan. Si hay dos lados del mismo mercado, dedupe_market limpia después."""
     now = int(now or time.time())
     with history._lock:
         c = _c()
@@ -215,22 +215,39 @@ def activate_started(now=None):
         n = c.execute("UPDATE picks SET status='PENDIENTE', state='ACTIVO', updated_at=?, "
                       "note=CASE state WHEN 'INVERTIDO' THEN 'Invertido antes del inicio; se mantiene activo y se califica con el resultado real' "
                       "ELSE 'Cancelado antes del inicio; se mantiene activo y se califica con el resultado real' END "
-                      "WHERE id IN (SELECT p.id FROM picks p WHERE p.start_ts<=? AND p.status='ANULADO' AND p.state IN ('CANCELADO','INVERTIDO') AND p.graded_at IS NULL "
-                      "AND NOT EXISTS (SELECT 1 FROM picks q WHERE q.league=p.league AND q.eid=p.eid AND q.market=p.market AND q.id<>p.id AND "
-                      "(q.status<>'ANULADO' OR (q.state IN ('CANCELADO','INVERTIDO') AND COALESCE(q.updated_at,q.created_at)*1e7+q.id > COALESCE(p.updated_at,p.created_at)*1e7+p.id))))",
+                      "WHERE start_ts<=? AND status='ANULADO' AND state IN ('CANCELADO','INVERTIDO') AND graded_at IS NULL",
                       (now, now)).rowcount
         c.commit()
     return n
 
+
 def pending(now=None, limit=500):
-    """Picks sin calificar cuyo juego ya empezó."""
+    """Picks sin calificar cuyo juego ya empezó (incluye cancelados/invertidos: se califican con el resultado real;
+    después grade_pending llama dedupe_market para no contar ambos lados del mismo mercado)."""
     now = int(now or time.time())
-    # también los cancelados/invertidos antes del inicio: se califican con el resultado real, salvo que el mismo juego+mercado ya tenga
-    # otro pick vivo (o un anulado más reciente) -> así nunca se cuentan ambos lados ni dos versiones del mismo mercado
-    return _rows("SELECT * FROM picks p WHERE start_ts<=? AND (status='PENDIENTE' OR (status='ANULADO' AND state IN ('CANCELADO','INVERTIDO') AND graded_at IS NULL "
-                 "AND NOT EXISTS (SELECT 1 FROM picks q WHERE q.league=p.league AND q.eid=p.eid AND q.market=p.market AND q.id<>p.id AND "
-                 "(q.status<>'ANULADO' OR (q.state IN ('CANCELADO','INVERTIDO') AND COALESCE(q.updated_at,q.created_at)*1e7+q.id > COALESCE(p.updated_at,p.created_at)*1e7+p.id))))) "
+    return _rows("SELECT * FROM picks WHERE start_ts<=? AND (status='PENDIENTE' OR (status='ANULADO' AND state IN ('CANCELADO','INVERTIDO') AND graded_at IS NULL)) "
                  "ORDER BY start_ts LIMIT ?", (now, limit))
+
+def dedupe_market(league, eid, market, now=None):
+    """Si un mismo juego+mercado tiene dos picks no anulados en lados opuestos, deja el más antiguo y anula el resto (SUPERSEDED)."""
+    now = int(now or time.time())
+    with history._lock:
+        c = _c()
+        if c is None: return 0
+        rows = c.execute("SELECT id, selection, status, created_at FROM picks WHERE league=? AND eid=? AND market=? AND status IN ('GANADO','PERDIDO','PUSH','MEDIO_GANADO','MEDIO_PERDIDO','PENDIENTE') ORDER BY id",
+                         (league, str(eid), market)).fetchall()
+        if len(rows) < 2: return 0
+        # conserva el primero; anula los demás si hay más de una selección distinta
+        sels = {r[1] for r in rows}
+        if len(sels) < 2 and len(rows) < 2: return 0
+        keep = rows[0][0]
+        n = 0
+        for pid, sel, status, _ in rows[1:]:
+            c.execute("UPDATE picks SET status='ANULADO', state='SUPERSEDED', updated_at=?, note=? WHERE id=?",
+                      (now, f"Superseded: se conserva el pick #{keep} del mismo mercado (no se cuentan ambos lados)", pid))
+            n += 1
+        c.commit()
+        return n
 
 def set_grade(pid, status, units, score_text, fh, fa, note, now=None):
     """Escribe SÓLO columnas de resultado."""
