@@ -34,14 +34,54 @@
  document.documentElement.classList.add('splashing');
  var done=false;function end(){if(done)return;done=true;s.classList.add('out');document.documentElement.classList.remove('splashing');setTimeout(function(){s.remove()},380)}
  if(/[?&]hold=1/.test(location.search))return;
- s.addEventListener('click',end);document.addEventListener('keydown',end);setTimeout(end,matchMedia('(prefers-reduced-motion:reduce)').matches?500:1500);})();
+ s.addEventListener('click',end);s.addEventListener('touchend',end,{passive:true});document.addEventListener('keydown',end);setTimeout(end,matchMedia('(prefers-reduced-motion:reduce)').matches?400:1400);setTimeout(end,2800);})();
 </script>
 <script src="/static/extras.js?v=15"></script>
 <script src="/static/detalle.js?v=8"></script>
 <script src="/static/props.js?v=2"></script>
-<script src="/static/app.js?v=20"></script>
+<script src="/static/app.js?v=21"></script>
 <script src="/static/recdia.js?v=2"></script>
 <script src="/static/ticket.js?v=2"></script>
-<script src="/static/chat.js?v=5"></script>
-<script>if('serviceWorker' in navigator&&window.isSecureContext&&!window.NRNM_STATIC){addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}</script>
+<script src="/static/chat.js?v=6"></script>
+<script>
+/* Boot seguro (iOS / PWA / Pages): si hay SW viejo o caché rota, se limpia. En modo estático NUNCA se registra SW. */
+(function(){
+  var STATIC=!!window.NRNM_STATIC;
+  function wipe(){ try{
+    if(!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); });
+    if(window.caches) caches.keys().then(function(ks){ ks.forEach(function(k){ if(/^shell-v|^api-v/.test(k)) caches.delete(k); }); });
+  }catch(e){} }
+  if(STATIC){ wipe(); }
+  else if('serviceWorker' in navigator && window.isSecureContext){
+    addEventListener('load', function(){
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    });
+  }
+  // Escape hatch: ?reset=1 limpia todo y recarga limpio (útil si el PWA quedó en blanco)
+  if(/[?&]reset=1/.test(location.search)){
+    try{ sessionStorage.clear(); localStorage.removeItem('nrnm_ver_reloaded'); }catch(e){}
+    wipe();
+    if(location.search.indexOf('reset=1')>=0){
+      history.replaceState(null,'',location.pathname+(location.hash||'#/'));
+      setTimeout(function(){ location.reload(); }, 200);
+    }
+  }
+  // Si #app sigue en "Cargando…" > 12s, mostrar recuperación
+  addEventListener('load', function(){
+    setTimeout(function(){
+      var a=document.getElementById('app'); if(!a) return;
+      var t=(a.textContent||'').trim();
+      if(!t || /^Cargando/.test(t) || t==='⏳ Cargando datos reales…'){
+        a.innerHTML='<div class="err">⚠️ La app no terminó de cargar.<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button class="btn" type="button" id="nrnm-retry">↻ Reintentar</button>'+
+          '<a class="btn pri" href="?reset=1">Reparar caché</a></div>'+
+          (STATIC?'<div class="sub" style="margin-top:8px">Versión en línea. Si sigue fallando, borra el sitio de la pantalla de inicio y vuelve a abrirlo desde Safari.</div>':'')+
+          '</div>';
+        var b=document.getElementById('nrnm-retry'); if(b) b.onclick=function(){ location.reload(); };
+      }
+    }, 12000);
+  });
+})();
+</script>
 </body></html>

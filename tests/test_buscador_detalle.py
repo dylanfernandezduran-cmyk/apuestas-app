@@ -58,7 +58,7 @@ def test_fuente_ui_buscador_y_detalle_limpio():
     ds_ = dj[dj.index("function detailSections"):]
     assert ds_.index("dPred") < ds_.index("dRec") < ds_.index("dPicks") < ds_.index("dProps") < ds_.index("dProb") and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
-    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == ["22", "8", "20", "15", "2", "5", "2", "2"] and "shell-v25" in SRC["sw.js"]
+    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == ["22", "8", "21", "15", "2", "6", "2", "2"] and "shell-v26" in SRC["sw.js"]
     assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
 
 def _py_playwright():

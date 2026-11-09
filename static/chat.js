@@ -254,12 +254,28 @@ async function chSend(q){
   });
   document.addEventListener('submit',e=>{ if(e.target.closest('#chp .ch-f')){ e.preventDefault(); const i=document.getElementById('chi'); const v=i.value; i.value=''; chSend(v); } });
 })();
-// pestaña abierta mucho tiempo: si se publicó una versión nueva (cambian los ?v= del index), recarga sola al volver a la pestaña
+// Versión nueva: NUNCA autorecargar en bucle (iOS Safari cachea el HTML y location.reload() vuelve al viejo → pantalla en blanco).
+// Como mucho 1 recarga con cache-bust por sesión; si sigue desfasado, un banner pide tocar para actualizar.
 (function(){
+  const KEY='nrnm_ver_reloaded', BAN='nrnm_ver_banner';
+  const vers=t=>{const o=[]; const re=/<script src="([^"]+\?v=\d+)"/g; let m; while((m=re.exec(t))) o.push(m[1]); return o.sort().join('|');};
   const mine=()=>[...document.scripts].map(s=>s.getAttribute('src')||'').filter(x=>/\?v=/.test(x)).sort().join('|');
-  async function chk(){ try{ const t=await (await fetch(location.pathname,{cache:'no-store'})).text();
-      const vs=[...t.matchAll(/<script src="([^"]+\?v=\d+)"/g)].map(m=>m[1]).sort().join('|');
-      if(vs&&vs!==mine()) location.reload(); }catch(e){} }
+  function banner(){ if(document.getElementById(BAN)) return;
+    const b=document.createElement('button'); b.id=BAN; b.type='button';
+    b.textContent='Hay una versión nueva — toca para actualizar';
+    b.setAttribute('style','position:fixed;left:12px;right:12px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:99999;padding:14px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#FF1179,#3C85F7);color:#fff;font:600 15px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)');
+    b.onclick=()=>{ try{sessionStorage.removeItem(KEY);}catch(e){} location.href=location.pathname+(location.search?location.search+'&':'?')+'_='+Date.now()+location.hash; };
+    document.body.appendChild(b); }
+  async function chk(){ try{
+      if(sessionStorage.getItem(BAN)==='1'){ banner(); return; }
+      const r=await fetch(location.pathname.replace(/\/index\.html$/,'/')||'./',{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+      if(!r.ok) return;
+      const vs=vers(await r.text()); if(!vs||vs===mine()) return;
+      if(sessionStorage.getItem(KEY)==='1'){ try{sessionStorage.setItem(BAN,'1');}catch(e){} banner(); return; }
+      try{sessionStorage.setItem(KEY,'1');}catch(e){}
+      location.href=location.pathname+(location.search?location.search+'&':'?')+'_='+Date.now()+location.hash;
+    }catch(e){} }
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') chk(); });
-  setInterval(()=>{ if(document.visibilityState==='visible') chk(); }, 15*60e3);
+  setTimeout(chk, 8e3);
+  setInterval(()=>{ if(document.visibilityState==='visible') chk(); }, 30*60e3);
 })();
