@@ -1,6 +1,7 @@
-# NRNM en GitHub Pages (pt90u): cada ~10 min (GitHub puede retrasar los cron 5-15 min) corre el backend en el runner,
-# genera JSON estáticos con datos reales y publica el sitio. La base SQLite (picks, apertura/cierre, récord) persiste en la rama `estado`.
-# No usa llaves: las fuentes (ESPN, Action Network, Pinnacle guest, Open-Meteo) son públicas. Nada de dinero real (paper trading).
+# NRNM en GitHub Pages (pt90u): genera JSON estáticos con datos reales y publica el sitio.
+# La base SQLite (picks, apertura/cierre, récord) persiste en la rama `estado`.
+# No usa llaves: fuentes públicas. Paper trading.
+# NOTA: copiar a .github/workflows/pages.yml (el token del bot no tiene scope workflow).
 name: NRNM Pages
 on:
   schedule:
@@ -19,11 +20,11 @@ permissions:
   pages: write
   id-token: write
 concurrency:
-  group: nrnm-pages
+  group: pages
   cancel-in-progress: false
 jobs:
   build:
-    # apagado hasta activarlo: Settings > Pages > Source = GitHub Actions y variable de repo NRNM_PAGES=1 (manual siempre se puede)
+    # Settings > Pages > Source = GitHub Actions y variable NRNM_PAGES=1 (manual siempre se puede)
     if: ${{ vars.NRNM_PAGES == '1' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -31,8 +32,8 @@ jobs:
       APUESTAS_DB: /tmp/state/history.db
       TZ: America/Mexico_City
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -52,7 +53,7 @@ jobs:
           mkdir -p /tmp/st && cd /tmp/st && git init -q && cp /tmp/state/history.db . && git add history.db
           git -c user.name="nrnm-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "estado $(date -u +%FT%TZ)"
           git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:estado
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
   deploy:
@@ -60,7 +61,34 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.d.outputs.page_url }}
+      url: ${{ steps.final.outputs.page_url }}
     steps:
-      - id: d
+      - id: d1
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - name: Esperar si el deploy chocó con otro
+        if: steps.d1.outcome == 'failure'
+        run: sleep 90
+      - id: d2
+        if: steps.d1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - name: Esperar segundo reintento
+        if: steps.d1.outcome == 'failure' && steps.d2.outcome == 'failure'
+        run: sleep 120
+      - id: d3
+        if: steps.d1.outcome == 'failure' && steps.d2.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+      - id: final
+        name: Confirmar deploy
+        run: |
+          if [ "${{ steps.d1.outcome }}" = "success" ]; then
+            echo "page_url=${{ steps.d1.outputs.page_url }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.d2.outcome }}" = "success" ]; then
+            echo "page_url=${{ steps.d2.outputs.page_url }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.d3.outcome }}" = "success" ]; then
+            echo "page_url=${{ steps.d3.outputs.page_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deploy falló tras reintentos"; exit 1
+          fi
+          echo "Deploy OK"
