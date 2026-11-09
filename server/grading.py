@@ -233,6 +233,19 @@ def score_line_futbol(home, hs, as_, away):
 async def grade_pending(now=None, limit=500):
     """Califica todo lo pendiente cuyo juego ya empezó. Agrupa por juego (una consulta por juego). Devuelve resumen."""
     now = now or time.time()
+    # Deshace SUPERSEDED de la regla anterior (contaba el original): vuelven a PENDIENTE y dedupe conserva el más reciente
+    try:
+        with R.history._lock:
+            c = R._c()
+            if c is not None:
+                c.execute(
+                    "UPDATE picks SET status='PENDIENTE', state='ACTIVO', units=NULL, graded_at=NULL, "
+                    "score_text=NULL, final_home=NULL, final_away=NULL, updated_at=?, note=? "
+                    "WHERE status='ANULADO' AND state='SUPERSEDED'",
+                    (int(now), "Restaurado: cuenta el pick actualizado en vigor al saque"))
+                c.commit()
+    except Exception:
+        pass
     R.activate_started(now)
     rows = R.pending(now, limit)
     by = {}
