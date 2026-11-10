@@ -318,7 +318,7 @@ async function chAsk(q){
 function chRender(){
   let p=document.getElementById('chp');
   if(!p){ p=document.createElement('div'); p.id='chp'; p.setAttribute('role','dialog'); p.setAttribute('aria-label','Chat IA'); document.body.appendChild(p); }
-  p.hidden=!CH.open; const fab=document.getElementById('chb'); if(fab) fab.classList.toggle('on',CH.open); chSyncNav();
+  p.hidden=!CH.open; document.body.classList.toggle('ch-open', !!CH.open); const fab=document.getElementById('chb'); if(fab){ fab.classList.toggle('on',CH.open); fab.setAttribute('aria-label', CH.open?'Cerrar chat IA':'Abrir chat IA'); fab.setAttribute('aria-expanded', CH.open?'true':'false'); } chSyncNav();
   if(!CH.open) return;
   const _bk=typeof BK==='function'?BK():{bankroll:'',unit_pct:1};
   const sug=['Props NBA','Alineaciones','Armar ticket'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
@@ -361,7 +361,7 @@ async function chSend(q){
   function banner(){ if(document.getElementById(BAN)) return;
     const b=document.createElement('button'); b.id=BAN; b.type='button';
     b.textContent='Hay una versión nueva — toca para actualizar';
-    b.setAttribute('style','position:fixed;left:12px;right:12px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:99999;padding:14px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#FF1179,#3C85F7);color:#fff;font:600 15px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)');
+    b.setAttribute('style','position:fixed;left:12px;right:12px;top:calc(8px + env(safe-area-inset-top,0px));z-index:80;padding:12px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#FF1179,#3C85F7);color:#fff;font:600 15px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)');
     b.onclick=()=>{ try{sessionStorage.removeItem(KEY);}catch(e){} location.href=location.pathname+(location.search?location.search+'&':'?')+'_='+Date.now()+location.hash; };
     document.body.appendChild(b); }
   async function chk(){ try{

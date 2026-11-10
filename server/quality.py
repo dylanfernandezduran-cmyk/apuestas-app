@@ -192,6 +192,14 @@ def _am(o):
     return f"+{o}" if o > 0 else str(o)
 
 
+def ev_as_pct(ev):
+    """model.py guarda ev en porcentaje; algunos tests/candidatos viejos usan fracción (|ev|≤1)."""
+    if ev is None:
+        return None
+    ev = float(ev)
+    return ev * 100.0 if abs(ev) <= 1.0 else ev
+
+
 def _modelo(cand, pred):
     pf = cand.get("p_final")
     pnv = cand.get("p_nv")
@@ -201,7 +209,7 @@ def _modelo(cand, pred):
     w = ((pred or {}).get("winner") or {})
     bits = [f"pFinal { _pct(pf) }", f"modelo {_pct(pm)}", f"mercado s/vig {_pct(pnv)}"]
     if ev is not None:
-        bits.append(f"EV {ev * 100:+.1f}%")
+        bits.append(f"EV {ev_as_pct(ev):+.1f}%")
     if w.get("side") is not None and w.get("src") == "pfinal":
         bits.append(f"ganador pFinal: {w['side']} ({_pct(w.get('p'))})")
     if pf is None:
@@ -748,7 +756,7 @@ def publish_reason(cand, analysis, conf, status):
     if ev is None:
         return "EV: sin dato (no se publica sin valor esperado)"
     if ev <= 0:
-        return f"EV no positivo ({ev * 100:+.1f}%)"
+        return f"EV no positivo ({ev_as_pct(ev):+.1f}%)"
     if level not in CONF_OK:
         return f"confianza {level or 'sin dato'} (se exige Media o Alta)"
     n_pres = (analysis or {}).get("n_present") or 0

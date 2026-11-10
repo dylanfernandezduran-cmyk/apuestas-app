@@ -169,6 +169,7 @@ async function route(){
   const h = location.hash.replace(/^#\/?/,'').split('/').map(decodeURIComponent);
   window.scrollTo(0,0); $app.classList.remove('gd');
   try{
+    if(h[0]!=='ia' && typeof chOpen==='function') chOpen(false);
     if(!h[0]||h[0]===''||h[0]==='inicio'){ setNav('inicio'); refreshNavDots(); return await viewHome(); }
     if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'hoy'); }
     if(h[0]==='lineas'){ setNav('lineas'); return await viewLineas(h[1]||'todos'); }
@@ -198,7 +199,7 @@ async function viewSports(){
   try{ home=await api('/api/home'); }catch(e){ $app.innerHTML=errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); return; }
   if(seq!==ROUTE_SEQ) return;
   const chips=`<div class="pills">${(SPORTS||[]).map(s=>`<a class="pill" href="#/deporte/${s.key}"><span class="em">${s.emoji||''}</span> ${esc(s.name)}</a>`).join('')}</div>`;
-  const search=`<section class="hm" id="sp-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
+  const search=`<section class="hm" id="sp-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo o torneo" aria-label="Buscar juego, equipo, jugador o torneo"></label><div class="srch-r" hidden></div></section>`;
   const live=(home.live&&home.live.length)?`<div class="card" id="sp-live"><h2>En vivo ahora <span class="badge b-live">${home.live.length}</span></h2>${home.live.slice(0,8).map(g=>{
     const href=`#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id||g.eid)}`;
     return typeof liveRowHtml==='function'?liveRowHtml(g):`<a class="card" href="${href}">${esc((g.away&&(g.away.abbr||g.away.name))||'')} vs ${esc((g.home&&(g.home.abbr||g.home.name))||'')}</a>`;
@@ -285,7 +286,11 @@ const badge = (t,s) => { s=s||22; t=t||{}; const u=t.logo, ini=initials(t.name||
   return `<span class="tl${u?'':' ini'}${ph?' ph':''}" style="--s:${s}px" data-i="${esc(ini)}">${u?`<img src="${esc(imgSrc(u,s*2))}" width="${s}" height="${s}" loading="lazy" decoding="async" alt="" onerror="this.parentNode.classList.add('ini');this.remove()">`:''}</span>`; };
 const matchup = (g,short) => sides(g).map(sd=>`<span class="mu">${badge(g[sd],16)}<span>${esc(short?(g[sd].short||g[sd].name):g[sd].name)}</span></span>`).join(` <span class="vs">${vsMark(g)}</span> `);
 const tn = t => (t&&(t.abbr||t.short))||((t&&t.name)||'').split(' ').slice(-1)[0];
-const shortLbl = (l,g) => { let x=String(l||''); [g.away,g.home].forEach(t=>{ if(t&&t.name&&t.name.length>3) x=x.split(t.name).join(tn(t)); }); return x.replace(/\s*\((visitante|local)\)/g,'').trim(); };
+const shortLbl = (l,g) => { let x=String(l||''); if(!g) return x.replace(/\s*\((visitante|local)\)/g,'').trim();
+  [g.away,g.home].forEach(t=>{ if(!t) return; const last=((t.name||'').split(/\s+/).filter(Boolean).slice(-1)[0]||''); const short=(t.short&&t.short.length>2?t.short:last)||tn(t);
+    if(t.name&&t.name.length>3) x=x.split(t.name).join(short);
+    if(last&&last.length>2){ try{ x=x.replace(new RegExp('(?:[A-ZÁÉÍÓÚÑÜ]\\.?\\s+)?'+last.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g'), short); }catch(e){} }
+  }); return x.replace(/\s*\((visitante|local)\)/g,'').trim(); };
 const MKL = {ml:'ML',spread:'SPR',total:'TOT',sspread:'HÁN',stotal:'TOT',dc:'DC',btts:'BTTS'};
 const mkl = b => MKL[b.market]||String(b.title||b.market||'').slice(0,3).toUpperCase();
 let GAMES = {};
@@ -360,7 +365,7 @@ const MK_ORDER={ml:0,total:1,spread:2,dc:3,btts:4,corners:5};
 function mkTitle(m,g){
   const sp=g.sport, k=m.key;
   if(k==='ml') return isSoc(g)?'Resultado final':sp==='tenis'?'Ganador del partido':'Ganador';
-  if(k==='total') return sp==='tenis'?'Total':'Total de '+(sp==='futbol'?'goles':sp==='mlb'||sp==='nhl'?'carreras/goles':'puntos');
+  if(k==='total') return sp==='tenis'?'Total':sp==='mlb'?'Total de carreras':(sp==='futbol'||sp==='nhl')?'Total de goles':'Total de puntos';
   if(k==='spread') return sp==='mlb'?'Run line':sp==='futbol'?'Hándicap asiático':sp==='tenis'?'Hándicap de juegos':'Hándicap (spread)';
   if(k==='dc') return 'Doble oportunidad';
   if(k==='btts') return 'Ambos anotan';
@@ -428,9 +433,10 @@ function marketBlocks(d){
     return arr;
   };
   const evOf=o=>{
-    if(o.ev!=null) return o.ev;
+    /* el servidor guarda ev ya en porcentaje (p*dec-1)*100 */
+    if(o.ev!=null) return +o.ev;
     const pr=o.best&&o.best.price!=null?o.best.price:o.price, dec=mkDec(pr);
-    return (o.p_final!=null&&dec)?(o.p_final*dec-1):null;
+    return (o.p_final!=null&&dec)?(o.p_final*dec-1)*100:null;
   };
   const btn=o=>{
     const pk=isPick(o), v=o.edge!=null&&o.edge>=3, rr=recFor(String(o.market||'').toLowerCase(),o.side,o.line);
@@ -438,7 +444,7 @@ function marketBlocks(d){
     const ev=evOf(o);
     const bits=[];
     if(o.p_final!=null) bits.push(pct(o.p_final,0));
-    if(ev!=null) bits.push((ev>=0?'+':'')+(ev*100).toFixed(0)+'% EV');
+    if(ev!=null) bits.push((ev>=0?'+':'')+ev.toFixed(0)+'% EV');
     else if(pk&&o.edge!=null) bits.push(sg(o.edge)+' pp');
     const book=o.best&&(o.best.book||'');
     const title=[pr?('Mejor cuota '+pr):'', book?('en '+book):'', o.best&&o.best.n_books>1?(o.best.n_books+' casas'):''].filter(Boolean).join(' · ');
@@ -447,7 +453,7 @@ function marketBlocks(d){
     if(leg&&typeof tkBtn==='function'){ id='t'+(++TK.n); TK.reg[id]=leg; }
     const on=leg&&TK.legs&&TK.legs.some(x=>tkKey(x)===tkKey(leg));
     const aria=`${obLabel(o,g)}${pr?' '+pr:''}${pk?' (pick NRNM)':''}${book?' · '+book:''}`;
-    return `<button type="button" class="ob ${pk?'pick':''} ${v?'val':''} ${on?'on':''}" ${id?`data-tk="${id}"`:''} ${id?'':'disabled'} aria-label="${esc(aria)}" aria-pressed="${on?'true':'false'}" ${title?`title="${esc(title)}"`:''}><span class="ol">${esc(obLabel(o,g))}</span>${pk?'<span class="ob-pk">PICK</span>':''}<span class="or"><span class="oq mono">${esc(pr||'—')}</span>${bits.length?`<span class="op">${bits.join(' · ')}</span>`:''}</span></button>`;
+    return `<button type="button" class="ob ${pk?'pick':''} ${v?'val':''} ${on?'on':''}" ${id?`data-tk="${id}"`:''} ${id?'':'disabled'} aria-label="${esc(aria)}" aria-pressed="${on?'true':'false'}" ${title?`title="${esc(title)}"`:''}><span class="ol">${esc(shortLbl(obLabel(o,g),g))}</span>${pk?'<span class="ob-pk">PICK</span>':''}<span class="or"><span class="oq mono">${esc(pr||'—')}</span>${bits.length?`<span class="op">${bits.join(' · ')}</span>`:''}</span></button>`;
   };
   const grid=(os,key)=>{
     const n = key==='ml'&&os.length===3 ? 3 : (os.length===1?1:2);
@@ -731,7 +737,7 @@ async function viewPicks(scope){
       ${l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'Agregar al ticket')}</div>`:''}
       <div class="sub"><a href="#/juego/${encodeURIComponent(g.league)}/${g.id}">Ver juego →</a></div></div>`;
   };
-  const compact=`<section class="hm" id="pk-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
+  const compact=`<section class="hm" id="pk-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo o torneo" aria-label="Buscar juego, equipo, jugador o torneo"></label><div class="srch-r" hidden></div></section>`;
   let html=`${compact}<h1>Picks</h1>${t}<p class="ago">${esc(agoTxt(d.generated||d.ts||d.now))}</p>`;
   html+=featOf();
   if(!published.length) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick principal (el filtro pidió al menos 4 señales a favor, EV&gt;0 y confianza Media/Alta).':'No hay pick principal en esta ventana.'}</div>`;

@@ -394,7 +394,7 @@ function dAnalisis(d){
     if(f.p_final!=null) bits.push('pFinal '+(f.p_final*100).toFixed(1)+'%');
     if(f.p_model!=null) bits.push('modelo '+(f.p_model*100).toFixed(1)+'%');
     if(f.p_nv!=null) bits.push('mercado s/vig '+(f.p_nv*100).toFixed(1)+'%');
-    if(f.ev!=null) bits.push('EV '+(f.ev>=0?'+':'')+(f.ev*100).toFixed(1)+'%');
+    if(f.ev!=null){ const evp=Math.abs(f.ev)<=1?f.ev*100:f.ev; bits.push('EV '+(evp>=0?'+':'')+evp.toFixed(1)+'%'); }
     if(f.open_odds!=null||f.now_odds!=null) bits.push('cuota '+am(f.open_odds)+' → '+am(f.now_odds));
     if(f.open_line!=null||f.now_line!=null) bits.push('línea '+(f.open_line??'sin dato')+' → '+(f.now_line??'sin dato'));
     if(f.d_nv_pp!=null) bits.push((f.d_nv_pp>0?'+':'')+Number(f.d_nv_pp).toFixed(1)+' pp');

@@ -34,9 +34,11 @@ async function viewLineas(filter){
   if(!rows.length) html+=`<div class="card mut">No hay movimientos de al menos 3 puntos porcentuales en las últimas ${d.hours||36} h${filter!=='todos'?' con ese filtro':''}.</div>`;
   else html+=`<div class="ln-al">`+rows.map(it=>{
     const g=it.game;
-    const away=g&&g.away?(g.away.abbr||g.away.name||''):'';
-    const home=g&&g.home?(g.home.abbr||g.home.name||''):'';
-    const name=g?`${esc(away)} vs ${esc(home)}`:`${esc(it.league)} · ${esc(it.eid)}`;
+    const away=g&&g.away?(g.away.abbr||g.away.short||g.away.name||''):'';
+    const home=g&&g.home?(g.home.abbr||g.home.short||g.home.name||''):'';
+    const lg=(g&&g.league_name)||({atp:'ATP',wta:'WTA',mlb:'MLB',nfl:'NFL',nba:'NBA',nhl:'NHL'}[it.league]||String(it.league||'').toUpperCase());
+    const named=home||away;
+    const name=named?((g.sport==='futbol'||g.sport==='tenis')?`${esc(home)} vs ${esc(away)}`:`${esc(away)} @ ${esc(home)}`):esc(lg);
     const href=g?`#/juego/${encodeURIComponent(it.league)}/${encodeURIComponent(it.eid)}`:'#/lineas';
     const tags=(it.tags||[]).map(a=>{
       const k=String(a).toUpperCase();
