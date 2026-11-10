@@ -33,7 +33,8 @@ def _c():
             type TEXT, created_at INTEGER, source TEXT DEFAULT 'live',
             status TEXT DEFAULT 'PENDIENTE', units REAL, graded_at INTEGER, score_text TEXT, final_home REAL, final_away REAL, note TEXT,
             UNIQUE(league, eid, market, selection))""")
-        for col, typ in (("open_line", "REAL"), ("open_odds", "INTEGER"), ("state", "TEXT"), ("moves", "TEXT"), ("updated_at", "INTEGER")):
+        for col, typ in (("open_line", "REAL"), ("open_odds", "INTEGER"), ("state", "TEXT"), ("moves", "TEXT"), ("updated_at", "INTEGER"),
+                         ("conf_level", "TEXT"), ("ev", "REAL")):
             try: c.execute(f"ALTER TABLE picks ADD COLUMN {col} {typ}")
             except Exception: pass
         c.execute("UPDATE picks SET open_line=line, open_odds=odds WHERE open_line IS NULL AND open_odds IS NULL")
@@ -91,14 +92,34 @@ def extract(a, now=None):
             out.append(mk(market=b["market"], selection=b["side"], line=b.get("line"), label=b["label"], odds=best.get("price"), book=best.get("book"),
                           p_model=b.get("p_model"), p_final=b.get("p_final"), p_nv=b.get("p_nv"), edge=b.get("edge"),
                           basis=("modelo" if b.get("p_model") is not None else "mercado"), type="suggestion"))
+        _stamp_conf_ev(out, a)
         return out
     # modo estricto (NRNM_STRICT=1): sólo los picks OFICIALES (máx. 2 por juego)
     for i, c in enumerate(a["picks"].get("official") or []):
         if not MKT.get(c.get("market")) or not c.get("side"): continue
         out.append(mk(market=MKT[c["market"]], selection=c["side"], line=c.get("line"), label=c["label"], odds=c.get("price"),
                       book=(book if c.get("price") is not None else None), p_model=c.get("p_model"), p_final=c.get("p_final"), p_nv=c.get("p_nv"),
-                      edge=c.get("edge"), basis="modelo", type="main" if i == 0 else "suggestion"))
+                      edge=c.get("edge"), basis="modelo", type="main" if i == 0 else "suggestion",
+                      ev=c.get("ev"), conf_level=(a["picks"].get("confidence") or {}).get("level")))
+    _stamp_conf_ev(out, a)
     return out
+
+def _stamp_conf_ev(rows, a):
+    conf = ((a or {}).get("picks") or {}).get("confidence") or {}
+    level = conf.get("level")
+    for r in rows:
+        if r.get("conf_level") is None: r["conf_level"] = level
+        if r.get("ev") is None:
+            # busca ev del candidato que coincida
+            ev = None
+            lean = ((a or {}).get("picks") or {}).get("lean") or {}
+            if lean.get("side") == r.get("selection") and MKT.get(lean.get("market")) == r.get("market"):
+                ev = lean.get("ev")
+            if ev is None:
+                for c in ((a or {}).get("picks") or {}).get("candidates") or []:
+                    if c.get("side") == r.get("selection") and MKT.get(c.get("market")) == r.get("market"):
+                        ev = c.get("ev"); break
+            r["ev"] = ev
 
 def record_analysis(a, now=None):
     """Persiste los picks de un análisis. Devuelve cuántas filas nuevas se insertaron."""
@@ -143,9 +164,10 @@ def reconcile(rows, now=None, key=None):
                 new_state = "ACTUALIZADO" if moved else "ACTIVO"
                 if status == "ANULADO": cnt["reactivated"] += 1
                 elif changed: cnt["updated"] += 1
-                c.execute("UPDATE picks SET line=?, odds=?, label=?, book=COALESCE(?, book), p_model=?, p_final=?, p_nv=?, edge=?, status='PENDIENTE', state=?, moves=?, updated_at=?, "
+                c.execute("UPDATE picks SET line=?, odds=?, label=?, book=COALESCE(?, book), p_model=?, p_final=?, p_nv=?, edge=?, ev=?, conf_level=COALESCE(?, conf_level), status='PENDIENTE', state=?, moves=?, updated_at=?, "
                           "note=CASE WHEN ?='ANULADO' THEN NULL ELSE note END WHERE id=?",
-                          (f.get("line"), f.get("odds"), f["label"], f.get("book"), f.get("p_model"), f.get("p_final"), f.get("p_nv"), f.get("edge"), new_state,
+                          (f.get("line"), f.get("odds"), f["label"], f.get("book"), f.get("p_model"), f.get("p_final"), f.get("p_nv"), f.get("edge"),
+                           f.get("ev"), f.get("conf_level"), new_state,
                            json.dumps(mv), now, status, pid))
             elif status == "PENDIENTE":
                 if f:
@@ -174,7 +196,8 @@ def record_rows(rows):
             cur = c.execute(f"INSERT OR IGNORE INTO picks({COLS}) VALUES ({','.join('?' * 22)})", vals)
             if cur.rowcount:
                 n += 1
-                c.execute("UPDATE picks SET open_line=line, open_odds=odds, state='ACTIVO' WHERE id=?", (cur.lastrowid,))
+                c.execute("UPDATE picks SET open_line=line, open_odds=odds, state='ACTIVO', conf_level=?, ev=? WHERE id=?",
+                          (r.get("conf_level"), r.get("ev"), cur.lastrowid))
             elif typ == "main" and not has_main:
                 # el pick ya existía como sugerencia y el juego aún no tenía principal: se asciende (línea/cuota registradas NO cambian)
                 c.execute("UPDATE picks SET type='main' WHERE league=? AND eid=? AND market=? AND selection=? AND type='suggestion' AND status='PENDIENTE'",
@@ -313,14 +336,16 @@ def summary(sport=None, typ=None, days=None, basis=None):
     if basis in ("modelo", "mercado"): w.append("basis=?"); a.append(basis)
     if days: w.append("start_ts>=?"); a.append(int(time.time() - days * 86400))
     since = _rows("SELECT MIN(created_at) m FROM picks")[0]["m"]
-    rows = _rows(f"SELECT status, odds, units, source FROM picks WHERE {' AND '.join(w)}", tuple(a))
+    rows = _rows(f"SELECT status, odds, open_odds, units, source FROM picks WHERE {' AND '.join(w)}", tuple(a))
     cnt = {s: 0 for s in STATUSES}
-    units = 0.0; n_priced = 0; n_unpriced = 0
+    units = 0.0; n_priced = 0; n_unpriced = 0; clvs = []
     for r in rows:
         cnt[r["status"]] = cnt.get(r["status"], 0) + 1
         if r["status"] in DONE:
             if r["units"] is None: n_unpriced += 1
             else: units += r["units"]; n_priced += 1
+            v = clv_pct(r.get("open_odds"), r.get("odds"))
+            if v is not None: clvs.append(v)
     W = cnt["GANADO"] + 0.5 * cnt["MEDIO_GANADO"]
     L = cnt["PERDIDO"] + 0.5 * cnt["MEDIO_PERDIDO"]
     P = cnt["PUSH"] + 0.5 * (cnt["MEDIO_GANADO"] + cnt["MEDIO_PERDIDO"])
@@ -328,7 +353,18 @@ def summary(sport=None, typ=None, days=None, basis=None):
     return dict(total=len(rows), graded=graded, pending=cnt["PENDIENTE"], void=cnt["ANULADO"], counts=cnt, W=W, L=L, P=P,
                 win_pct=(W / (W + L) * 100 if (W + L) else None), units=round(units, 2), n_priced=n_priced, n_unpriced=n_unpriced,
                 roi=(units / n_priced * 100 if n_priced else None),
+                clv_avg=(round(sum(clvs) / len(clvs), 2) if clvs else None), clv_n=len(clvs),
                 backfilled=sum(1 for r in rows if r["source"] != "live"), since=since)
+
+def clv_pct(open_odds, close_odds):
+    """CLV en %: (dec_apertura / dec_cierre - 1) * 100. Positivo si la cuota de cierre se acortó (el mercado se movió a favor)."""
+    try:
+        if open_odds is None or close_odds is None: return None
+        do, dc = am_to_dec(int(open_odds)), am_to_dec(int(close_odds))
+        if not do or not dc: return None
+        return (do / dc - 1.0) * 100.0
+    except Exception:
+        return None
 
 # ------------------------------------------------------------------ récord por día (pt92u): días en hora de CDMX (UTC-6 fijo, México sin horario de verano)
 CDMX_OFF = -6 * 3600
@@ -338,7 +374,7 @@ def cdmx_date(ts=None):
     return time.strftime("%Y-%m-%d", time.gmtime((ts if ts is not None else time.time()) + CDMX_OFF))
 
 def _agg(rows):
-    W = L = P = 0.0; u = 0.0; npr = 0; pend = void = 0
+    W = L = P = 0.0; u = 0.0; npr = 0; pend = void = 0; clvs = []
     for r in rows:
         s = r["status"]
         if s == "GANADO": W += 1
@@ -349,8 +385,12 @@ def _agg(rows):
         elif s == "PENDIENTE": pend += 1
         elif s == "ANULADO": void += 1
         if s in DONE and r.get("units") is not None: u += r["units"]; npr += 1
+        if s in DONE:
+            v = clv_pct(r.get("open_odds"), r.get("odds"))
+            if v is not None: clvs.append(v)
     return dict(W=W, L=L, P=P, pending=pend, void=void, n=len(rows), units=round(u, 2), n_priced=npr,
-                win_pct=(W / (W + L) * 100 if W + L else None), roi=(u / npr * 100 if npr else None))
+                win_pct=(W / (W + L) * 100 if W + L else None), roi=(u / npr * 100 if npr else None),
+                clv_avg=(round(sum(clvs) / len(clvs), 2) if clvs else None), clv_n=len(clvs))
 
 def days(sport=None, typ=None):
     """Lista de días con picks: [{date, W, L, P, pending, void, units, ...}] (más reciente primero)."""
@@ -358,7 +398,7 @@ def days(sport=None, typ=None):
     if sport: w.append("sport=?"); a.append(sport)
     if typ in ("main", "suggestion"): w.append("type=?"); a.append(typ)
     by = {}
-    for r in _rows(f"SELECT {_DAY_SQL} AS d, status, units FROM picks WHERE {' AND '.join(w)}", tuple(a)):
+    for r in _rows(f"SELECT {_DAY_SQL} AS d, status, units, odds, open_odds FROM picks WHERE {' AND '.join(w)}", tuple(a)):
         by.setdefault(r["d"], []).append(r)
     return [dict(date=d, **_agg(rs)) for d, rs in sorted(by.items(), reverse=True)]
 

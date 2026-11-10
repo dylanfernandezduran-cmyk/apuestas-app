@@ -18,15 +18,17 @@ async def main():
         pg = await ctx.new_page(); errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
         await pg.add_init_script("sessionStorage.setItem('splash_seen','1')")
         jf = lambda body: (lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
-        home = dict(live=[game(1,"nba"), game(2,"mlb")], record=dict(graded=3, W=2, L=1, P=0), record_all=dict(graded=3), injuries=[dict(league="nba", id="1", name="X", pos="G", team="T", detail="out", n_out=1)],
+        home = dict(live=[game(1,"nba"), game(2,"mlb")], record=dict(graded=3, W=2, L=1, P=0), record_all=dict(graded=3, W=2, L=1, P=0), record_main=dict(graded=3, total=4, W=2, L=1, P=0, roi=10.0, clv_avg=1.5, clv_n=3), injuries=[dict(league="nba", id="1", name="X", pos="G", team="T", detail="out", n_out=1)],
                     sports=[dict(key=k, today=2, live=1 if k == "nba" else 0) for k, _ in SP], now=1.0)
         await pg.route("**/api/home*", jf(home))
         mixed = [item(10,"tenis"), item(11,"nhl"), item(12,"futbol"), item(13,"nba"), item(14,"mlb"), item(15,"nfl"), item(16,"futbol"), item(17,"mlb")]
         await pg.route("**/api/picks*", jf(dict(items=mixed, n_games=8)))
         await pg.route("**/api/img*", lambda r: r.fulfill(status=404, body="x"))
-        await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_selector(".snav a"); await pg.wait_for_selector("#hm-picks a.pk")
+        await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_selector(".snav a"); await pg.wait_for_selector("#hm-rec")
+        await pg.wait_for_function("() => (document.querySelector('#hm-rec')||{}).textContent && /R[eé]cord/i.test(document.querySelector('#hm-rec').textContent)")
         out["secciones"] = await pg.evaluate("[...document.querySelectorAll('main section.hm, main div.snav')].map(e=>e.id)")
-        out["texto_inicio_tiene"] = await pg.evaluate("['Récord ·','Bajas confirmadas'].filter(t=>document.querySelector('main').innerText.includes(t))")
+        out["hm_rec_text"] = await pg.evaluate("document.querySelector('#hm-rec') ? document.querySelector('#hm-rec').textContent : ''")
+        out["texto_inicio_tiene"] = await pg.evaluate("(()=>{const t=(document.querySelector('#hm-rec')&&document.querySelector('#hm-rec').textContent)||''; const m=(document.querySelector('main')&&document.querySelector('main').textContent)||''; return ['Récord acumulado','Bajas confirmadas'].filter(s=>t.includes(s)||m.includes(s));})()")
         out["nav"] = await pg.evaluate("[...document.querySelectorAll('.snav a')].map(a=>a.innerText.replace(/\\s+/g,' ').trim())")
         out["nav_href"] = await pg.evaluate("[...document.querySelectorAll('.snav a')].map(a=>a.getAttribute('href'))")
         out["nav_estilo"] = await pg.evaluate("(()=>{const a=getComputedStyle(document.querySelector('.snav a'));return {bw:a.borderTopWidth,bg:a.backgroundColor,sh:a.boxShadow}})()")

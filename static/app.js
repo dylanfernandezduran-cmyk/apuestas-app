@@ -42,6 +42,22 @@ async function api(path, ms){
 }
 const errBox = (msg) => `<div class="err">⚠️ ${esc(msg)}<div style="margin-top:10px"><button class="btn" id="retry" type="button">↻ Reintentar</button></div></div>`;
 const loading = t => $app.innerHTML = `<div class="loading">⏳ ${t||'Cargando datos reales…'}</div>`;
+const TIP = {
+  pp: 'Puntos porcentuales: diferencia de probabilidad en puntos (1 pp = 1%).',
+  RLM: 'Reverse Line Movement: el lado público (≥55% tickets) y la línea se mueve en su contra.',
+  's/vig': 'Probabilidad implícita del mercado sin el margen (vig) de la casa.',
+  SRS: 'Simple Rating System: margen promedio ajustado por rival y localía.',
+  EV: 'Valor esperado al precio pagado: prob. final × momio decimal − 1.',
+  CLV: 'Closing Line Value: (momio decimal de apertura / momio de cierre − 1) × 100. Positivo si el cierre se acortó (el mercado se movió a favor).',
+  edge: 'Diferencia (pp) entre la prob. final del modelo y la prob. del mercado sin vig.'
+};
+const tip = k => ` title="${String(TIP[k]||'').replace(/"/g,'&quot;')}"`;
+const tipAbbr = (k, label) => `<abbr${tip(k)}>${label||k}</abbr>`;
+const gameSkel = () => `<div class="skel-game" aria-busy="true" aria-live="polite">
+  <div class="skel-line" style="width:36%"></div>
+  <div class="card skel-hero"><div class="skel-circ"></div><div class="skel-mid"></div><div class="skel-circ"></div></div>
+  <div class="card skel-block"><div class="skel-line"></div><div class="skel-line" style="width:74%"></div><div class="skel-line" style="width:52%"></div></div>
+  <div class="sub">Cargando análisis con datos reales…</div></div>`;
 const todayKey = () => dayKey(new Date().toISOString());
 function dayLabel(iso){ const k=dayKey(iso); const t=todayKey(); const tm=dayKey(new Date(Date.now()+864e5).toISOString());
   const base = fmtDay(iso); return k===t?`Hoy · ${base}`:k===tm?`Mañana · ${base}`:base; }
@@ -266,8 +282,17 @@ function marketBlocks(d){
   return `<div class="card mkc"><h2>Mercados</h2>${blocks}<div class="sub mkn">${fb?'Cuotas de ESPN. ':''}Cuota = mejor precio disponible · % = probabilidad final${P&&P.markets&&P.markets.length?' (modelo + mercado)':''}.</div></div>`;
 }
 async function viewGame(league, id, silent){
-  if(!silent) loading('Analizando partido con datos reales…');
-  const d = await api(`/api/game/${encodeURIComponent(league)}/${id}`);
+  if(!silent) $app.innerHTML = gameSkel();
+  let d;
+  try{ d = await api(`/api/game/${encodeURIComponent(league)}/${id}`); }
+  catch(e){
+    if(!silent && location.hash.startsWith('#/juego/')){
+      $app.innerHTML = errBox(e.message||'No se pudo analizar el partido.');
+      const b=document.getElementById('retry'); if(b) b.onclick=()=>viewGame(league,id);
+      return;
+    }
+    throw e;
+  }
   if(!location.hash.startsWith('#/juego/')) return d;
   const g = d.game;
   const back = `<a class="back" href="#/deporte/${g.sport}/${encodeURIComponent(league)}">← ${esc(g.league_name)}</a>`;
@@ -368,11 +393,13 @@ async function viewPicks(scope){
     const sigH=sg_?`<div class="sub" style="margin:8px 0 4px">${(VERD[l.signals.verdict]||[])[0]||''} ${(VERD[l.signals.verdict]||[])[1]||''}${l.signals.tickets!=null?` · ${l.signals.tickets}% tickets / ${l.signals.money!=null?l.signals.money+'% dinero':'dinero '+SD}`:''}${l.signals.best?` · mejor ${esc(l.signals.best.price_txt)} en ${esc(l.signals.best.book)}`:''}</div>${tagChips(l.signals)}`:'';
     const nb=(r.brief||[]).length;
     const det=(sg_||nb)?`<div class="gp"><div class="tg" role="button" tabindex="0">Señales y mercados${nb?` (${nb})`:''}</div><div class="sg">${sigH}${nb?briefRows(r.brief,g,[]):''}</div></div>`:'';
+    const evCls = l.ev>0?'pos':l.ev<0?'neg':'mut';
+    const edgeBit = l.divergence_high ? `<span class="divf"${tip('edge')}>Divergencia alta</span>` : `<span class="${l.edge>0?'pos':'mut'}">${l.edge==null?SD:sg(l.edge)+'pp'}</span><small${tip('edge')}>edge s/vig</small>`;
     return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div class="pkt">${st[0]} ${esc(l.label)} <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span></div>
-    <div class="pke mono ${l.edge>0?'pos':'mut'}">${l.edge==null?SD:sg(l.edge)+'pp'}<small>edge</small></div></div>
-    <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}<span class="sub">${esc(g.league_name)} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
-    <div class="stat mono">Modelo ${pct(l.p_model)} · s/vig ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}${det}</a>`; };
-  let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por estado, edge y confianza. <b>Estimaciones del modelo</b>, no garantías.</div>`;
+    <div class="pke mono">${edgeBit}<span class="${evCls}">${l.ev==null?SD:sg(l.ev)+'%'}</span><small${tip('EV')}>EV</small></div></div>
+    <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}${l.divergence_high?' <span class="divf">Divergencia alta</span>':''}<span class="sub">${esc(g.league_name)} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
+    <div class="stat mono">Modelo ${pct(l.p_model)} · ${tipAbbr('s/vig')} ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}${det}</a>`; };
+  let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por ${tipAbbr('EV')}, confianza y estado (la divergencia alta no se promociona como edge). <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
   // agrupado por deporte (orden: MLB, NFL, Fútbol, NBA, NHL, Tenis; grupos vacíos ocultos). Dentro de cada grupo: con ventaja, PASS y sin línea (orden del servidor)
   const rank=r=>r.has_odds?(r.status==='PASS'?1:0):2;
@@ -509,18 +536,19 @@ function mvDraw(){
 // ------------------------------------------------------------ info
 function viewInfo(){
   $app.innerHTML=`<h1>ℹ️ Metodología y fuentes</h1>
-  <div class="card kv"><h2>Fuentes (públicas, sin llave)</h2><ul class="t"><li>ESPN site API: marcadores, resúmenes, calendarios y resultados, lesiones, líderes, tablas, rankings de tenis y cuotas de DraftKings (cuando existen).</li><li><b>Action Network</b> (API pública sin llave): cuotas de DraftKings, FanDuel, BetMGM, Caesars, BetRivers, bet365, Fanatics y Unibet, consenso, apertura y <b>% tickets / % dinero</b>. Cubre NBA, NFL, NHL, MLB, NCAA y fútbol de las grandes ligas; no cubre Liga MX ni tenis.</li><li><b>Pinnacle</b> (API de invitado, línea “sharp”): cuotas de todos los deportes incluidos Liga MX y tenis, sin % apuestas.</li><li><b>Historial propio</b>: el servidor guarda en SQLite un snapshot de líneas y % cada ~10 min (sólo cuando algo cambia) para construir nuestra propia curva de movimiento.</li><li>MLB StatsAPI: lanzadores abridores probables y sus estadísticas.</li><li>Todo se cachea (marcadores 90 s, resúmenes 150 s, calendarios 1 h). Si un dato no existe se muestra <b>${SD}</b>; nunca se inventa.</li></ul></div>
-  <div class="card kv" style="margin-top:10px"><h2>Modelo (transparente y simple)</h2><ul class="t">
-  <li><b>NFL / NBA / NHL / MLB:</b> rating SRS (margen promedio ajustado por rival y localía) calculado con todos los resultados reales de la liga, suavizado hacia 0 según juegos jugados, + ajuste por forma (últimos 5). Probabilidad = normal(margen esperado, σ). En MLB se añade un ajuste pequeño por ERA de abridores probables.</li>
+  <div class="card"><p>NRNM estima probabilidades con un modelo simple (${tipAbbr('SRS')} o Poisson) mezclado con el mercado ${tipAbbr('s/vig')}, usando sólo datos públicos. El ${tipAbbr('edge','edge')} es la diferencia en ${tipAbbr('pp')} frente a ese mercado; el ${tipAbbr('EV')} se calcula al precio pagado. Si un dato no está, se muestra «Sin dato»: nunca se inventa.</p></div>
+  <details class="card kv"><summary>Fuentes (públicas, sin llave)</summary><ul class="t"><li>ESPN site API: marcadores, resúmenes, calendarios y resultados, lesiones, líderes, tablas, rankings de tenis y cuotas de DraftKings (cuando existen).</li><li><b>Action Network</b> (API pública sin llave): cuotas de DraftKings, FanDuel, BetMGM, Caesars, BetRivers, bet365, Fanatics y Unibet, consenso, apertura y <b>% tickets / % dinero</b>. Cubre NBA, NFL, NHL, MLB, NCAA y fútbol de las grandes ligas; no cubre Liga MX ni tenis.</li><li><b>Pinnacle</b> (API de invitado, línea “sharp”): cuotas de todos los deportes incluidos Liga MX y tenis, sin % apuestas.</li><li><b>Historial propio</b>: el servidor guarda en SQLite un snapshot de líneas y % cada ~10 min (sólo cuando algo cambia) para construir nuestra propia curva de movimiento.</li><li>MLB StatsAPI: lanzadores abridores probables y sus estadísticas.</li><li>Todo se cachea (marcadores 90 s, resúmenes 150 s, calendarios 1 h). Si un dato no existe se muestra <b>${SD}</b>; nunca se inventa.</li></ul></details>
+  <details class="card kv" style="margin-top:10px"><summary>Modelo (transparente y simple)</summary><ul class="t">
+  <li><b>NFL / NBA / NHL / MLB:</b> rating ${tipAbbr('SRS')} (margen promedio ajustado por rival y localía) calculado con todos los resultados reales de la liga, suavizado hacia 0 según juegos jugados, + ajuste por forma (últimos 5). Probabilidad = normal(margen esperado, σ). En MLB se añade un ajuste pequeño por ERA de abridores probables. En NFL, si el QB titular (líder de pases) está confirmado fuera, se resta ~4.5 pts de margen a ese equipo y ~2 pts al total.</li>
   <li><b>Fútbol:</b> Poisson con fuerza de ataque/defensa suavizada y ventaja de local de la liga → 1X2, hándicap y totales.</li>
-  <li><b>Tenis:</b> logística sobre ln(puntos de ranking) sólo para el ganador. Hándicap y total son de <b>JUEGOS</b> (p. ej. Sinner -3.5 juegos, Over 22.5 juegos) y además hay hándicap/total de <b>SETS</b>, todos sólo mercado (Pinnacle). No hay empate ni 1X2 en tenis.</li><li><b>Filtro estricto (APAGADO; se enciende con NRNM_STRICT=1):</b> máx. 1 por juego (2 sólo si son de otro mercado y ambos ≥ 75/100). Debe tener edge ≥ 2 pp, prob. final ≥ 55 %, señales de mercado (RLM / dinero vs tickets) que no vayan en contra, ningún jugador clave en duda, abridores MLB confirmados, puntaje ≥ 60, y coincidir con la Predicción NRNM. Puntaje 0-100 = edge 35 + prob. 25 + señales 15 + confianza 15 + contexto 10 (clima/datos críticos). Umbrales elegidos con el récord real calificado (backtest: 694 picks 369-317, −51.6u → 33 picks 26-7, +9.3u; muestra chica, no es garantía). Lo demás sólo aparece como «También considerado».</li><li><b>Tickets / parlays (papel):</b> agrega piernas con «+ Ticket»; momio combinado = producto de momios decimales, prob. combinada = producto de probabilidades del modelo (asume independencia; se avisa si hay piernas del mismo juego). Se califican solos pierna por pierna; push/anulada se quita del momio.</li><li><b>Récord (¿se ganó?):</b> cada pick principal y sugerencia se guarda al generarse (antes del juego) con la primera línea y cuota; se califica con el marcador final real de ESPN (tenis: juegos y sets del marcador por sets). Ganado / Perdido / Push / medio ganado-perdido (líneas de cuarto) / Anulado; pendiente hasta que haya final confirmado. Unidades a 1u plano con la cuota registrada. El historial empieza cuando el servidor empezó a registrar.</li>
+  <li><b>Tenis:</b> logística sobre ln(puntos de ranking) sólo para el ganador. Hándicap y total son de <b>JUEGOS</b> (p. ej. Sinner -3.5 juegos, Over 22.5 juegos) y además hay hándicap/total de <b>SETS</b>, todos sólo mercado (Pinnacle). No hay empate ni 1X2 en tenis.</li><li><b>Filtro estricto (APAGADO; se enciende con NRNM_STRICT=1):</b> máx. 1 por juego (2 sólo si son de otro mercado y ambos ≥ 75/100). Debe tener edge ≥ 2 pp, prob. final ≥ 55 %, señales de mercado (RLM / dinero vs tickets) que no vayan en contra, ningún jugador clave en duda, abridores MLB confirmados, puntaje ≥ 60, y coincidir con la Predicción NRNM. Puntaje 0-100 = edge 35 + prob. 25 + señales 15 + confianza 15 + contexto 10 (clima/datos críticos). Umbrales elegidos con el récord real calificado (backtest: 694 picks 369-317, −51.6u → 33 picks 26-7, +9.3u; muestra chica, no es garantía). Lo demás sólo aparece como «También considerado».</li><li><b>Tickets / parlays (papel):</b> agrega piernas con «+ Ticket»; momio combinado = producto de momios decimales, La prob. y el ${tipAbbr('EV')} combinados se muestran <b>estimados</b>: se aplica un descuento por correlación / error de modelo (mayor si hay piernas del mismo juego); no se asume independencia plena. Se califican solos pierna por pierna; push/anulada se quita del momio.</li><li><b>Récord (¿se ganó?):</b> cada pick principal y sugerencia se guarda al generarse (antes del juego) con la primera línea y cuota; se califica con el marcador final real de ESPN (tenis: juegos y sets del marcador por sets). Ganado / Perdido / Push / medio ganado-perdido (líneas de cuarto) / Anulado; pendiente hasta que haya final confirmado. Unidades a 1u plano con la cuota registrada. El ${tipAbbr('CLV')} promedio usa la cuota de apertura vs. la de cierre guardada. El historial empieza cuando el servidor empezó a registrar.</li>
   <li><b>Prob. final</b> = mezcla del modelo y el mercado sin vig; el peso del modelo (máx. 50%) crece con la muestra. El modelo se recorta a ±20 pp del mercado.</li>
-  <li><b>Edge</b> = prob. final − prob. implícita sin vig (pp). <b>EV</b> = prob. final × momio decimal − 1. <b>Línea justa</b> = momio de la prob. final. <b>Precio máx.</b> = momio con EV = +2%.</li>
+  <li><b>Edge</b> = prob. final − prob. implícita ${tipAbbr('s/vig')} (${tipAbbr('pp')}). <b>${tipAbbr('EV')}</b> = prob. final × momio decimal − 1, al precio pagado. Si |modelo crudo − mercado s/vig| &gt; 10 pp se marca <b>Divergencia alta</b>: no se promociona como edge, no sube a PICK/estrella y baja la confianza. Los listados se ordenan por EV y confianza, no por edge crudo. <b>Línea justa</b> = momio de la prob. final. <b>Precio máx.</b> = momio con EV = +2%.</li>
   <li><b>Estados:</b> 🔥 PICK (edge ≥ 3 pp, EV ≥ 0 y confianza Media/Alta) · 🟡 LEAN (edge ≥ 1 pp) · ⛔ PASS (sin edge; igual se muestra el lean) · 🔍 SIN LÍNEA (no hay precio).</li>
   <li><b>Probabilidades por resultado:</b> en cada juego se listan ganador/1X2, doble oportunidad (fútbol), hándicap y over/under con el nombre real del equipo o jugador. Hándicap y totales del modelo salen de la normal del margen/total esperado (NBA, NFL, NHL, MLB) o de la matriz Poisson de goles (fútbol); en tenis el modelo sólo cubre al ganador (el resto: “Modelo: Sin dato”). Líneas de cuarto (asiáticas, p. ej. -0.75 o 2.75) sólo muestran mercado.</li>
   <li><b>Casas y consenso:</b> mejor precio = el momio más alto en la misma línea; consenso s/vig = promedio de las probabilidades sin vig de las casas en la línea de referencia.</li>
-  <li><b>RLM:</b> lado público (≥55% de tickets) y la línea/precio se mueve en su contra entre la apertura y ahora. <b>Dinero &gt; tickets:</b> % dinero − % tickets ≥ 10 pp. Se muestran junto al pick como etiquetas (a favor / en contra / mixto) <b>sin cambiar la probabilidad del modelo</b>: son indicadores, no garantías. Sin % de apuestas ⇒ “Sin dato”.</li>
-  <li><b>Confianza:</b> muestra de juegos, acuerdo con el mercado, líderes lesionados, abridores (MLB).</li></ul></div>
+  <li><b>${tipAbbr('RLM')}:</b> lado público (≥55% de tickets) y la línea/precio se mueve en su contra entre la apertura y ahora. <b>Dinero &gt; tickets:</b> % dinero − % tickets ≥ 10 ${tipAbbr('pp')}. Se muestran junto al pick como etiquetas (a favor / en contra / mixto) <b>sin cambiar la probabilidad del modelo</b>: son indicadores, no garantías. Sin % de apuestas ⇒ “Sin dato”.</li>
+  <li><b>Confianza:</b> muestra de juegos, acuerdo con el mercado, líderes lesionados, abridores (MLB). Divergencia alta también baja la confianza.</li></ul></details>
   <div class="note">El modelo no sabe de lesiones de último minuto, descansos, clima ni alineaciones. El mercado suele ser más informado que un modelo simple: trátalo como una segunda opinión. Sin promesas de rentabilidad.</div>`;
 }
 

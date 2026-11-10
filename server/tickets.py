@@ -53,15 +53,41 @@ def check(legs):
         seen.setdefault(g, []).append(i)
     return dict(errors=list(dict.fromkeys(err)), warnings=list(dict.fromkeys(warn)))
 
+# Descuento por correlación / error de modelo: las piernas no son independientes.
+# Se aplica (1-h)^(n-1) a la prob. conjunta. Mismo juego usa un recorte mayor.
+CORR_HAIRCUT = 0.12
+SAME_GAME_HAIRCUT = 0.25
+
 def combine(legs):
     d = 1.0; p = 1.0; p_ok = True
+    keys = []
     for l in legs:
         d *= am_to_dec(l["odds"])
         if l.get("p") is None: p_ok = False
         else: p *= l["p"]
+        keys.append((l.get("league"), str(l.get("eid") or "")))
     imp = 1 / d if d else None
     pm = p if p_ok else None
-    return dict(dec=round(d, 4), american=dec_to_am(d), p_implied=imp, p_model=pm, ev=(pm * d - 1 if pm is not None else None))
+    n = len(legs)
+    same = False
+    seen = set()
+    for k in keys:
+        if k in seen and k[1] and k[1] != "None":
+            same = True; break
+        seen.add(k)
+    h = SAME_GAME_HAIRCUT if same else CORR_HAIRCUT
+    ev_indep = (pm * d - 1 if pm is not None else None)
+    if pm is not None and n >= 2:
+        p_est = pm * ((1 - h) ** (n - 1))
+        ev_est = p_est * d - 1
+        estimated = True
+    else:
+        p_est, ev_est, estimated, h = pm, ev_indep, False, 0.0
+    return dict(dec=round(d, 4), american=dec_to_am(d), p_implied=imp,
+                p_model=p_est, ev=ev_est,
+                p_model_indep=pm, ev_indep=ev_indep,
+                ev_estimated=estimated, ev_haircut=h,
+                ev_label=("estimado (descuento por correlación)" if estimated else None))
 
 # ------------------------------------------------------------------ CRUD
 FIELDS = ("kind", "league", "eid", "sport", "start_ts", "home", "away", "home_id", "away_id", "market", "selection", "line", "odds", "label", "p", "book", "aid", "key", "player")

@@ -283,7 +283,7 @@ function chRender(){
   if(!p){ p=document.createElement('div'); p.id='chp'; p.setAttribute('role','dialog'); p.setAttribute('aria-label','Chat IA'); document.body.appendChild(p); }
   p.hidden=!CH.open; document.getElementById('chb').classList.toggle('on',CH.open);
   if(!CH.open) return;
-  const sug=['Arma un parlay de 3 con lo más seguro de hoy','Mejores picks de hoy','Picks NBA','Ambos anotan','¿Cómo vamos en el récord?'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
+  const sug=['Arma un parlay de 3 con mayor confianza del modelo','Mejores picks de hoy','Picks NBA','Ambos anotan','¿Cómo vamos en el récord?'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
   p.innerHTML=`<div class="ch-h"><b>Chat NRNM</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
     <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):'<div class="ch-a">Hola, pregúntame por picks, un equipo, lesiones, props o el récord. Uso sólo los datos de la app.</div>'}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
     <div class="ch-s">${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>

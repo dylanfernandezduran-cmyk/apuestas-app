@@ -209,7 +209,7 @@ async def home():
                 for e in outs[:1]:
                     inj.append(dict(league=l, id=g["id"], team=g[sd]["short"], name=e["name"], pos=e["pos"], status=e["status_es"], detail=e["detail"], n_out=len([x for x in tm["entries"] if x["bucket"] == "out"])))
     inj.sort(key=lambda e: (e["pos"] != "QB", -e["n_out"]))
-    res = dict(live=live_g, record=REC.summary(days=30), record_all=REC.summary(), injuries=inj[:6], sports=list(sports.values()), now=time.time())
+    res = dict(live=live_g, record=REC.summary(days=30), record_all=REC.summary(), record_main=REC.summary(typ="main"), injuries=inj[:6], sports=list(sports.values()), now=time.time())
     _home_cache["h"] = (time.time(), res)
     return res
 
@@ -314,7 +314,10 @@ async def record_day(date: str | None = None):
     today = REC.cdmx_date()
     date = date or today
     if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date): raise HTTPException(400, "Fecha inválida (AAAA-MM-DD)")
-    return dict(date=date, today=today, days=REC.days(), **REC.day(date), grading=dict(GRADE_STATE, every_min=GRADE_MIN), now=time.time())
+    return dict(date=date, today=today, days=REC.days(), **REC.day(date),
+                cumulative=REC.summary(typ="main"), cumulative_all=REC.summary(),
+                cumulative_suggestion=REC.summary(typ="suggestion"),
+                grading=dict(GRADE_STATE, every_min=GRADE_MIN), now=time.time())
 
 # ---------------- tickets / parlays de papel
 @app.get("/api/tickets")

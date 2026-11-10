@@ -58,7 +58,7 @@ def test_fuente_ui_buscador_y_detalle_limpio():
     ds_ = dj[dj.index("function detailSections"):]
     assert ds_.index("dPred") < ds_.index("dRec") < ds_.index("dPicks") < ds_.index("dProps") < ds_.index("dProb") and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
-    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == ["22", "8", "24", "15", "2", "8", "2", "2"] and "shell-v30" in SRC["sw.js"]
+    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js")] == ["23", "9", "26", "16", "2", "9", "3", "3"] and "shell-v32" in SRC["sw.js"]
     assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
 
 def _py_playwright():
@@ -80,7 +80,7 @@ def test_buscador_y_detalle_limpio_e2e():
     finally:
         srv.terminate()
     # buscador
-    assert o["orden"] == ["hm-live", "hm-search", "hm-sp", "hm-picks"] and o["input_font"] >= 16 and o["oculto_al_inicio"] is True
+    assert o["orden"] == ["hm-live", "hm-search", "hm-sp", "hm-rec"] and o["input_font"] >= 16 and o["oculto_al_inicio"] is True
     assert o["llamadas"] == ["roma"]                                                      # debounce: teclear 'roma' = 1 petición
     assert o["grupos"] == ["LIGAS Y TORNEOS", "EQUIPOS Y JUGADORES", "JUEGOS"] and o["corto_oculta"] is True
     assert o["hrefs"] == ["#/deporte/futbol/mex.1", "#/juego/ita.1/77", "#/juego/ita.1/77"] and o["tap_liga"] == "#/deporte/futbol/mex.1"

@@ -257,6 +257,49 @@ async def mlb_pitchers(home_name, away_name, iso):
                     return out
     return None
 
+
+def _is_pass_yds_cat(cat):
+    c = (cat or "").lower().replace("-", " ")
+    return "passing" in c and "yard" in c
+
+def _inj_confirmado(i):
+    return classify_inj(i.get("status")) == "confirmado"
+
+def nfl_qb_out(hid, aid, inj, lead):
+    """Detecta QB titular (líder de pases) confirmado fuera. extra_margin se suma a mu = rh-ra+hfa:
+    QB local fuera resta (perjudica al local); QB visita fuera suma. extra_total baja el total esperado.
+    No trata 'Coach's Decision' ni questionable como baja del titular."""
+    notes = []
+    extra_margin = 0.0
+    extra_total = 0.0
+    sides = []
+    for tid, side in ((hid, "home"), (aid, "away")):
+        leaders = lead.get(tid) or lead.get(str(tid)) or []
+        injuries = inj.get(tid) or inj.get(str(tid)) or []
+        inj_by_id = {i.get("id"): i for i in injuries if i.get("id")}
+        qb = None
+        for l in leaders:
+            if _is_pass_yds_cat(l.get("cat")):
+                qb = l; break
+        if not qb:
+            # sin líder de pases publicado: no inventamos un titular
+            sides.append(dict(side=side, tid=tid, qb=None, out=False, reason="Sin dato de líder de pases"))
+            continue
+        hit = inj_by_id.get(qb.get("id"))
+        out = bool(hit and _inj_confirmado(hit))
+        rec = dict(side=side, tid=tid, qb=qb.get("name"), qb_id=qb.get("id"), out=out,
+                   status=(hit or {}).get("status") if hit else None)
+        if out:
+            notes.append(f"QB titular fuera: {qb.get('name')} ({hit.get('status')})")
+            extra_total -= M.NFL_QB_OUT_TOTAL
+            if side == "home":
+                extra_margin -= M.NFL_QB_OUT_MARGIN
+            else:
+                extra_margin += M.NFL_QB_OUT_MARGIN
+        sides.append(rec)
+    return dict(extra_margin=extra_margin, extra_total=extra_total, notes=notes, sides=sides,
+                applied=bool(notes))
+
 def _era_adj(p):
     """Ajuste de margen (carreras) por abridor: ERA suavizada vs ~4.2 liga, ~5.5 IP, peso 0.6. Devuelve carreras ahorradas."""
     try:
@@ -388,8 +431,8 @@ async def _analyze(league, eid):
     if not odds and game["state"] == "pre": gaps.append("Cuotas: Sin dato (ni ESPN/DraftKings, ni Action Network, ni Pinnacle publican línea para este juego todavía)")
     if game["state"] == "pre" and mk and not mk.get("splits"): gaps.append("% tickets / % dinero: Sin dato (Action Network no tiene este juego, o no lo cubre: Liga MX y tenis no están cubiertos)")
     if game["state"] == "pre" and not mk: gaps.append("Comparador multi-casa: Sin dato (ninguna fuente de mercado tiene este juego)")
-    # ---- MLB lanzadores
-    pitchers = None; extra = 0.0
+    # ---- MLB lanzadores / NFL QB titular fuera
+    pitchers = None; extra = 0.0; extra_total = 0.0; qb_out = None
     if league == "mlb":
         pitchers = await mlb_pitchers(H["name"], A["name"], game["date"])
         if not pitchers: gaps.append("Abridores probables: Sin dato")
@@ -397,10 +440,18 @@ async def _analyze(league, eid):
             if pitchers.get("home") and pitchers.get("away"):
                 extra = _era_adj(pitchers["home"]) - _era_adj(pitchers["away"])
             else: gaps.append("Abridor probable de uno de los equipos: Sin dato (no anunciado)")
+    elif league == "nfl":
+        qb_out = nfl_qb_out(H["id"], A["id"], inj, lead)
+        extra = qb_out["extra_margin"]
+        extra_total = qb_out["extra_total"]
+        if qb_out["applied"]:
+            gaps.append("Ajuste QB titular fuera: " + "; ".join(qb_out["notes"]))
+        elif any(s.get("reason") == "Sin dato de líder de pases" for s in qb_out["sides"]):
+            gaps.append("Líder de pases (QB titular): Sin dato en uno o ambos equipos; no se aplicó ajuste de QB fuera")
     # ---- modelo
     mdl = None
     if fam == "soccer": mdl = M.soccer_model(R, H["id"], A["id"], game["neutral"])
-    else: mdl = M.margin_model(R, H["id"], A["id"], game["neutral"], extra_margin=extra)
+    else: mdl = M.margin_model(R, H["id"], A["id"], game["neutral"], extra_margin=extra, extra_total=extra_total)
     out = dict(game=game, kind="team", odds=odds, teams={H["id"]: tsum[H["id"]], A["id"]: tsum[A["id"]]}, injuries=inj, leaders=lead,
                h2h=_h2h(summ), gaps=gaps, pitchers=pitchers, ratings_n=R["n_games"],
                espn_predictor=(summ.get("predictor") and dict(home=summ["predictor"]["homeTeam"].get("gameProjection"), away=summ["predictor"]["awayTeam"].get("gameProjection"))),
@@ -423,6 +474,8 @@ async def _analyze(league, eid):
     mout = dict(kind=mdl["kind"], p_home=mdl["p_home"], p_draw=mdl.get("p_draw"), p_away=mdl["p_away"], exp_total=mdl.get("exp_total"), exp_margin=mdl.get("mu"),
                 sample=mdl["sample"], n_home=mdl["n_home"], n_away=mdl["n_away"], w_model=M.blend_weight(mdl), hfa=mdl.get("hfa"),
                 lam_home=mdl.get("lam_home"), lam_away=mdl.get("lam_away"), pitcher_adj=extra if league == "mlb" else None,
+                qb_adj=extra if league == "nfl" else None, qb_total_adj=extra_total if league == "nfl" else None,
+                qb_out=qb_out,
                 rating_home=mdl.get("rating_home"), rating_away=mdl.get("rating_away"), top_scores=mdl.get("mat_top"), key_injuries=key_names)
     out["model"] = mout
     if game["state"] == "pre":
@@ -505,8 +558,14 @@ async def picks(scope="24h"):
     pri = {"PICK": 0, "LEAN": 1, "PASS": 2, "SIN_LINEA": 3}
     if ST.ENABLED: rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("score")) or 0)))
     else:
-        cw = {"Alta": 1.0, "Media": 0.7, "Baja": 0.4}
-        rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("edge") or 0) * cw.get(r["confidence"]["level"], .4))))
+        cw = {"Alta": 2, "Media": 1, "Baja": 0}
+        def _pr(r):
+            lean = r.get("lean") or {}
+            ev = lean.get("ev") if lean.get("ev") is not None else -999
+            conf = (r.get("confidence") or {}).get("level")
+            div = 1 if lean.get("divergence_high") else 0
+            return (pri.get(r["status"], 3), div, -ev, -cw.get(conf, 0))
+        rs.sort(key=_pr)
     res = dict(scope=scope, generated=time.time(), n_games=len(games), items=rs, window=[t0.isoformat(), t1.isoformat()])
     _picks_cache[key] = (time.time(), res)
     return res

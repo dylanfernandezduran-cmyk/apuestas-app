@@ -49,14 +49,22 @@ function dPicks(d){
   const rr=recFor(mktKey(l),l.side,l.line);
   const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
   const cell=(k,v,cls='')=>`<div class="pc"><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;
-  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell('Edge',sg(l.edge)+' pp',l.edge>0?'k-t':'k-p'),cell('Confianza',c?esc(c.level):SD)]
-    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('Confianza',c?esc(c.level):SD)];
+  const evTxt = l.ev==null?SD:sg(l.ev)+'%';
+  const edgeLbl = l.divergence_high ? 'Divergencia alta' : (l.edge==null?SD:sg(l.edge)+' pp');
+  const edgeCls = l.divergence_high ? 'k-a' : (l.edge>0?'k-t':'k-p');
+  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell(l.divergence_high?'Divergencia':('Edge <abbr'+((typeof tip==='function')?tip('edge'):'')+'>s/vig</abbr>'),edgeLbl,edgeCls),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',evTxt,l.ev>0?'k-t':l.ev<0?'k-p':''),cell('Confianza',c?esc(c.level):SD)]
+    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',SD),cell('Confianza',c?esc(c.level):SD)];
   const sig=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[l.signals.verdict]||'mut'}">●</span> ${esc((VERD[l.signals.verdict]||[])[1]||'')}${l.signals.best?` · mejor precio <b class="mono">${esc(l.signals.best.price_txt)}</b> en ${esc(l.signals.best.book)}`:''}</div>` : '';
   const main = `<div class="mp2 ${p.status==='PICK'?'hot':''}"><div class="mph"><span class="mpk ${p.status==='PICK'?'k-p':p.status==='LEAN'?'k-a':'mut'}">${esc(st[1])}</span>${gb}</div>
     <div class="mpl">${esc(l.label)}</div><div class="pcs">${cells.join('')}</div>${sig}${g.state==='pre'&&l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:p.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}</div>`;
-  const cs=(p.candidates||[]).filter(x=>x.p_model!=null||x.p_nv!=null).slice().sort((a,b)=>(b.edge??-99)-(a.edge??-99));
+  const cs=(p.candidates||[]).filter(x=>x.p_model!=null||x.p_nv!=null).slice().sort((a,b)=>{
+    const da=a.divergence_high?1:0, db=b.divergence_high?1:0; if(da!==db) return da-db;
+    const ea=a.ev??-999, eb=b.ev??-999; if(eb!==ea) return eb-ea;
+    return (b.edge??-99)-(a.edge??-99);
+  });
   const crow=x=>{ const e=x.edge, pv=x.p_model!=null?x.p_model:x.p_nv, r2=recFor(mktKey(x),x.side,x.line);
-    return `<div class="cr2"><div class="cl"><b>${esc(shortLbl(x.label,g))}</b><span class="mt">${esc(x.price_txt||SD)}${r2?' · '+gradeBadge(r2,false):''}</span></div><div class="cb"><span class="pbar"><i style="width:${Math.round((pv||0)*100)}%;background:${e>=3?DC.tl:DC.bl}"></i></span></div><div class="cp mono">${pct(pv,0)}</div><div class="ce mono ${e>0?'k-t':e<0?'k-p':'mut'}">${e==null?'':sg(e)}</div>${g.state==='pre'&&x.price!=null?tkBtn(tkLegFromCand(g,Object.assign({official:x.status==='PICK'},x)),'+'):''}</div>`; };
+    const evb = x.ev==null?'':((x.ev>0?'+':'')+Number(x.ev).toFixed(1)+'% EV');
+    return `<div class="cr2"><div class="cl"><b>${esc(shortLbl(x.label,g))}</b><span class="mt">${esc(x.price_txt||SD)}${evb?' · '+evb:''}${x.divergence_high?' · Divergencia alta':''}${r2?' · '+gradeBadge(r2,false):''}</span></div><div class="cb"><span class="pbar"><i style="width:${Math.round((pv||0)*100)}%;background:${e>=3&&!x.divergence_high?DC.tl:DC.bl}"></i></span></div><div class="cp mono">${pct(pv,0)}</div><div class="ce mono ${x.divergence_high?'k-a':e>0?'k-t':e<0?'k-p':'mut'}">${x.divergence_high?'div.':(e==null?'':sg(e))}</div>${g.state==='pre'&&x.price!=null?tkBtn(tkLegFromCand(g,Object.assign({official:x.status==='PICK'},x)),'+'):''}</div>`; };
   const top=cs.slice(0,4), rest=cs.slice(4);
   const list = cs.length ? `<div class="cl2">${top.map(crow).join('')}${rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">Ver ${rest.length} más</div><div class="sg">${rest.map(crow).join('')}</div></div>`:''}</div>` : '';
   const why=[ 'Prob. final = mezcla modelo/mercado'+(d.model&&d.model.w_model!=null?` (${Math.round(d.model.w_model*100)}% modelo, ${100-Math.round(d.model.w_model*100)}% mercado s/vig)`:'')+'. Edge = prob. final − prob. s/vig del mercado, en puntos porcentuales. Precio máx. = el que deja EV ≥ +2%.',

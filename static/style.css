@@ -18,7 +18,7 @@ nav a{display:flex;align-items:center;height:48px;padding:0 12px;color:var(--mut
 nav a.on{color:var(--tx);border-bottom-color:var(--acc)}nav a:hover{color:var(--tx)}
 #clock{color:var(--mut);font-size:12px;display:none}
 @media(min-width:1000px){#clock{display:block}}
-main{max-width:1100px;margin:0 auto;padding:var(--s4) var(--padr) var(--s4) var(--pad)}
+main{max-width:1100px;margin:0 auto;padding:var(--s4) var(--padr) calc(108px + env(safe-area-inset-bottom)) var(--pad)}
 h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:var(--s2) 0 var(--s3)}
 h2{font-size:14px;font-weight:600;margin:0 0 var(--s3);letter-spacing:.005em;display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2)}
 .grid{display:grid;gap:var(--s3)}.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
@@ -47,7 +47,7 @@ ul.t{margin:0;padding-left:18px}ul.t li{margin:4px 0}
 .row{display:flex;justify-content:space-between;gap:var(--s2);padding:6px 0;border-bottom:1px solid var(--hair)}
 .row2{padding:var(--s2) 0;border-bottom:1px solid var(--hair)}
 .kv{font-size:13px}.kv b{color:var(--tx)}
-footer{max-width:1100px;margin:var(--s5) auto;padding:0 var(--padr) calc(40px + env(safe-area-inset-bottom)) var(--pad);color:var(--mut);font-size:11.5px;line-height:1.5}
+footer{max-width:1100px;margin:var(--s5) auto;padding:0 var(--padr) calc(40px + env(safe-area-inset-bottom)) var(--pad);color:#c5cad3;font-size:12.5px;line-height:1.55}
 .btn{background:transparent;color:var(--acc);border:1px solid rgba(var(--acc-rgb),.45);border-radius:8px;padding:0 14px;min-height:36px;font:inherit;font-size:13px;cursor:pointer;margin-left:6px}.btn:disabled{opacity:.5}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
 .hide-m{}
@@ -690,3 +690,23 @@ body.noscroll{overflow:hidden}
 .cr2:has(.tkadd){grid-template-columns:minmax(0,1.6fr) minmax(30px,1fr) 34px 36px 36px}
 .cr2 .tkadd{margin:0;width:36px;height:36px;padding:0;border-radius:50%;font-size:18px;line-height:1}
 .tkadd{min-height:40px;font-size:14px;padding:8px 16px}
+
+/* review: skeleton de análisis, FABs no tapan edge, tooltips, divergencia, método plegable */
+.skel-game{padding:6px 0 20px}
+.skel-hero{display:flex;align-items:center;justify-content:space-around;min-height:120px;gap:12px;margin:8px 0}
+.skel-circ,.skel-mid,.skel-line{background:linear-gradient(90deg,#161616 0%,#2a2a2a 45%,#161616 100%);background-size:200% 100%;animation:skelsh 1.2s ease-in-out infinite}
+.skel-circ{width:64px;height:64px;border-radius:50%;flex-shrink:0}
+.skel-mid{width:86px;height:22px;border-radius:8px}
+.skel-line{height:12px;border-radius:6px;margin:8px 0;width:100%}
+.skel-block{margin-top:10px;min-height:88px;padding:14px}
+@keyframes skelsh{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.pke{display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:72px;text-align:right;line-height:1.15}
+.pke small{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#b4bcc8}
+.divf{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#F5B942;border:1px solid rgba(245,185,66,.4);border-radius:999px;padding:2px 7px;margin:0 4px 0 0;white-space:nowrap}
+abbr[title]{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
+details.card{padding:12px 16px}
+details.card>summary{cursor:pointer;font-weight:650;list-style:none;padding:2px 0}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::after{content:'▾';float:right;color:#c5cad3;font-weight:400}
+details.card:not([open])>summary::after{content:'▸'}
+.rd-cum{margin:8px 0 12px}

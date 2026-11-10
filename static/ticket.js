@@ -40,7 +40,7 @@ function tkCheck(legs){
       const same=(m.kind||'game')===(l.kind||'game')&&m.market===l.market&&(m.aid||'')===(l.aid||'')&&(m.key||'')===(l.key||'');
       if(same) err.push(m.selection!==l.selection?`Contradictorias: «${m.label}» y «${l.label}»`:`Repetida: «${l.label}»`);
       else if((l.kind||'game')==='game'&&(m.kind||'game')==='game'&&[m.market,l.market].sort().join()==='ml,spread') warn.push(m.selection===l.selection?`Correlacionadas: «${m.label}» + «${l.label}» (mismo lado)`:`Se contradicen en parte: «${m.label}» y «${l.label}»`);
-      else warn.push(`Mismo juego: «${m.label}» + «${l.label}» (correlacionadas; la prob. combinada asume independencia)`); });
+      else warn.push(`Mismo juego: «${m.label}» + «${l.label}» (correlacionadas; el EV mostrado es estimado, con descuento mayor)`); });
     (seen[g]=seen[g]||[]).push(i); });
   if(legs.some(l=>l.official===false)) warn.push('Incluye piernas que NO son pick oficial (no pasaron el filtro estricto).');
   return {err:[...new Set(err)], warn:[...new Set(warn)]};
@@ -48,17 +48,28 @@ function tkCheck(legs){
 function tkSheet(html){ let s=document.getElementById('tks'); if(!s){ s=document.createElement('div'); s.id='tks'; document.body.appendChild(s);
   s.addEventListener('click',e=>{ if(e.target===s) tkClose(); }); } s.innerHTML=`<div class="tks-in">${html}</div>`; s.classList.add('on'); document.body.classList.add('noscroll'); }
 function tkClose(){ const s=document.getElementById('tks'); if(s) s.classList.remove('on'); document.body.classList.remove('noscroll'); }
+const TK_CORR=0.12, TK_SAME=0.25;
+function tkCombine(L){
+  const d=L.reduce((a,l)=>a*(tkDec(l.odds)||1),1);
+  const pOk=L.every(l=>l.p!=null);
+  const pIndep=pOk?L.reduce((a,l)=>a*l.p,1):null;
+  let same=false; const seen={};
+  L.forEach(l=>{ const k=(l.league||'')+'/'+(l.eid||''); if(k!=='/' && seen[k]) same=true; seen[k]=1; });
+  const n=L.length, h=(n>=2?(same?TK_SAME:TK_CORR):0);
+  const p=(pIndep!=null&&n>=2)?pIndep*Math.pow(1-h,n-1):pIndep;
+  return {d, p, pIndep, ev:p!=null?p*d-1:null, evIndep:pIndep!=null?pIndep*d-1:null, h, estimated:n>=2&&pIndep!=null, same};
+}
 function tkOpen(){
-  const L=TK.legs, d=L.reduce((a,l)=>a*(tkDec(l.odds)||1),1), pOk=L.every(l=>l.p!=null), p=pOk?L.reduce((a,l)=>a*l.p,1):null, ev=p!=null?p*d-1:null, ck=tkCheck(L);
+  const L=TK.legs, cb=tkCombine(L), d=cb.d, p=cb.p, ev=cb.ev, ck=tkCheck(L);
   const row=(l,i)=>`<div class="tkl"><div class="tkl-t"><b>${esc(l.label)}</b><span class="sub">${esc(l.kind==='prop'?(l.player||'Prop'):l.home+' vs '+l.away)} · ${fmtShort(new Date(l.start_ts*1000).toISOString())} ${fmtTime(new Date(l.start_ts*1000).toISOString())}</span>
       <span class="sub">${l.p!=null?'modelo '+Math.round(l.p*100)+'% · ':''}${l.official?'<span class="k-t">pick oficial</span>':l.kind==='prop'?'prop (sin prob. de modelo)':'<span class="k-a">no oficial</span>'}</span></div>
       <b class="mono">${l.odds>0?'+'+l.odds:l.odds}</b><button type="button" class="tkx" onclick="tkDel(${i})" aria-label="Quitar">✕</button></div>`;
   tkSheet(`<div class="tks-h"><b>🎟️ Ticket (papel)</b><button type="button" class="tkx" onclick="tkClose()" aria-label="Cerrar">✕</button></div>
     ${L.length?L.map(row).join(''):'<div class="sub">Ticket vacío.</div>'}
-    <div class="kpis s tkk"><div class="kpi"><div class="sub">Momio combinado</div><div class="v mono">${tkAm(d)}</div></div><div class="kpi"><div class="sub">Prob. modelo</div><div class="v mono">${p==null?'—':(p*100).toFixed(1)+'%'}</div></div>
-      <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub">EV por 1u</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
+    <div class="kpis s tkk"><div class="kpi"><div class="sub">Momio combinado</div><div class="v mono">${tkAm(d)}</div></div><div class="kpi"><div class="sub">Prob. modelo${cb.estimated?' (est.)':''}</div><div class="v mono">${p==null?'—':(p*100).toFixed(1)+'%'}</div></div>
+      <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub"${typeof tip==='function'?tip('EV'):''}>EV por 1u${cb.estimated?' (estimado)':''}</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
     ${ck.err.map(x=>`<div class="tkw err">⛔ ${esc(x)}</div>`).join('')}${ck.warn.map(x=>`<div class="tkw">⚠️ ${esc(x)}</div>`).join('')}
-    <div class="sub" style="margin:6px 0">Paper trading: no se apuesta dinero. Prob. combinada = producto de las probabilidades del modelo (asume independencia). ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
+    <div class="sub" style="margin:6px 0">Paper trading: no se apuesta dinero. ${cb.estimated?`EV y prob. combinada son <b>estimados</b> (descuento ${(cb.h*100).toFixed(0)}% por correlación / error de modelo${cb.same?' · mismo juego':''}; no se asume independencia).`:'Prob. de una sola pierna sin descuento de correlación.'} ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
     <input id="tkn" class="tkin" maxlength="60" placeholder="Nombre del ticket (opcional)">
     <div class="tkbtns"><button type="button" class="btn" onclick="TK.legs=[];tkSave_();tkClose();route()">Vaciar</button><button type="button" class="btn pri" ${ck.err.length||!L.length?'disabled':''} onclick="tkSubmit(this)">Guardar ticket</button></div>`);
 }

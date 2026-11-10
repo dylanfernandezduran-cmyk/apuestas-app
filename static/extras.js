@@ -198,13 +198,22 @@ async function viewHome(){
    <section class="hm" id="hm-live"><h3>En vivo ahora</h3><div class="skel">Buscando juegos en vivo…</div></section>
    <section class="hm" id="hm-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>
    <div class="hm snav" id="hm-sp" role="navigation" aria-label="Deportes">${SNAV_ORDER.map(k=>SPORTS.find(x=>x.key===k)).filter(Boolean).concat(SPORTS.filter(x=>!SNAV_ORDER.includes(x.key))).map(sportNavItem).join('')}</div>
-   <section class="hm" id="hm-picks"><h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3><div class="skel">Calculando con el modelo…</div></section>
+   <section class="hm" id="hm-rec"><h3>Récord acumulado <a href="#/record" class="more">Ver día →</a></h3><div class="skel">Cargando récord…</div></section>
    <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo. Si algo no está disponible se muestra <b>${SD}</b>. Las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
   srchInit(document.getElementById('hm-search'));
   let timer=null;
   const fillHome = async (first)=>{
     try{
       const h = await api('/api/home');
+      const rec = h.record_main || h.record_all || h.record;
+      const elr=document.getElementById('hm-rec');
+      if(elr && rec){
+        const kpi=(l,v,c='',ti='')=>`<div class="kpi"${ti}><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
+        elr.innerHTML = `<h3>Récord acumulado · pick principal <a href="#/record" class="more">Ver día →</a></h3>
+          <div class="kpis">${kpi('Muestra', rec.graded==null?SD:(rec.graded+' calificados'+(rec.total!=null?` / ${rec.total}`:'')))}${kpi('G-P-E', (rec.W||rec.L||rec.P)?`${rec.W}-${rec.L}${rec.P?'-'+rec.P:''}`:SD)}
+          ${kpi('ROI', rec.roi==null?SD:((rec.roi>0?'+':'')+rec.roi.toFixed(1)+'%'), rec.roi>0?'pos':rec.roi<0?'neg':'')}
+          ${kpi('CLV promedio', rec.clv_avg==null?SD:((rec.clv_avg>0?'+':'')+rec.clv_avg.toFixed(1)+'%'+(rec.clv_n?` · n=${rec.clv_n}`:'')), rec.clv_avg>0?'pos':rec.clv_avg<0?'neg':'', typeof tip==='function'?tip('CLV'):'')}</div>`;
+      }
       const el=document.getElementById('hm-live'); if(!el) return;
       if(!el.querySelector('.hm-lh')) el.innerHTML='<h3 class="hm-lh"></h3><div class="hm-lb"></div>';
       el.querySelector('.hm-lh').innerHTML=`En vivo ahora${h.live.length?` <span class="badge b-live">${h.live.length}</span>`:''} ${updTag(h.now,h.live.length>0)}`;
@@ -212,19 +221,9 @@ async function viewHome(){
       if(h.live.length){ const nc=lb.querySelector('.hm-none'); if(nc) nc.remove(); carPatch(lb,h.live.slice(0,12)); }
       else lb.innerHTML=`<div class="card mut hm-none">No hay juegos en vivo en este momento.</div>`;
       h.sports.forEach(x=>{ const a=document.querySelector(`.snav a[data-sp="${x.key}"]`); if(a){ a.classList.toggle('lv',!!x.live); a.title = x.live?`${x.live} en vivo`:(x.today?`${x.today} juego${x.today===1?'':'s'} hoy`:'Sin juegos hoy'); } });
-      if(first) loadHomePicks();
       if(h.live.length && !timer) { Live.start(()=>fillHome(false),25000); timer=1; }
       if(!h.live.length && timer){ Live.stop(); timer=null; }
     }catch(e){ const l=document.getElementById('hm-live'); if(l&&first) l.innerHTML=`<h3>En vivo ahora</h3><div class="card mut">${SD}: ${esc(e.message)}</div>`; }
-  };
-  const loadHomePicks = async ()=>{
-    try{
-      const p = await api('/api/picks?scope=hoy');
-      const it = (p.items||[]).filter(x=>x.status==='PICK'||x.status==='LEAN').slice(0,3);
-      const el=document.getElementById('hm-picks'); if(!el) return;
-      el.innerHTML = `<h3>Mejores picks de hoy <a href="#/picks/hoy" class="more">Ver todos →</a></h3>` + (it.length ? it.map(x=>{ const g=x.game, l=x.lean;
-        return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div><div class="pkt">${esc(shortLbl(l.label,g))} <span class="mono">${esc(l.price_txt||'')}</span></div><div class="sub">${matchup(g,true)} · ${esc(g.league_name)} · ${fmtTime(g.date)}</div></div><div class="pke ${l.edge>0?'pos':''}">${l.edge==null?'':sg(l.edge)+'pp'}<small>edge</small></div></div><div class="meta">${badgeSt(x.status)} ${confBadge(x.confidence)}</div></a>`; }).join('') : `<div class="card mut">Sin picks con ventaja suficiente hoy (o los juegos de hoy ya empezaron). Revisa «Top picks» para las próximas 24 h.</div>`);
-    }catch(e){ const el=document.getElementById('hm-picks'); if(el) el.innerHTML=`<h3>Mejores picks de hoy</h3><div class="card mut">${SD}</div>`; }
   };
   fillHome(true);
 }

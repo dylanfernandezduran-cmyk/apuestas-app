@@ -33,7 +33,14 @@ def cover_matrix(mat, f, t):
     return (win / z, loss / z, push) if z > 0 else (0.5, 0.5, push)
 
 # ---------- modelos ----------
-def margin_model(R, hid, aid, neutral=False, extra_margin=0.0):
+# NFL: starting QB out is a large, documented rating hit. Public models often use ~3–6 pts of spread;
+# we use a conservative mid-range (4.5 pts of margin against the team, ~2 pts off the total).
+NFL_QB_OUT_MARGIN = 4.5
+NFL_QB_OUT_TOTAL = 2.0
+DIVERGENCE_HIGH = 0.10          # |p_model_raw − p_nv| > 10 pp → bandera, no PICK/estrella
+CONF_RANK = {"Alta": 2, "Media": 1, "Baja": 0}
+
+def margin_model(R, hid, aid, neutral=False, extra_margin=0.0, extra_total=0.0):
     fam = FAMILY[R["family"]]
     rh, ra = R["rating"].get(hid), R["rating"].get(aid)
     if rh is None or ra is None: return None
@@ -41,7 +48,7 @@ def margin_model(R, hid, aid, neutral=False, extra_margin=0.0):
     mu = rh - ra + hfa + extra_margin
     sigma = fam["sigma"]
     l = R["lg_pts"]
-    exp_total = ((R["off"][hid] + R["def"][aid]) / 2) + ((R["off"][aid] + R["def"][hid]) / 2)
+    exp_total = ((R["off"][hid] + R["def"][aid]) / 2) + ((R["off"][aid] + R["def"][hid]) / 2) + extra_total
     p_home = cover_normal(mu, sigma, 0)[0] if not float(0).is_integer() else None
     # P(gana local): margen > 0 (sin empates en estos deportes; en NFL los empates son raros)
     p_home = 1 - norm_cdf((0 - mu) / sigma)
@@ -121,10 +128,12 @@ def _cand(market, side, label, price, p_model, p_nv, w, line=None):
     if dec_min and dec_min > 1:
         pp = 1 / dec_min
         max_am = prob_to_am(pp)
+    div = abs(p_raw - p_nv) * 100 if p_nv is not None and p_raw is not None else None
     return dict(market=market, side=side, label=label, line=line, price=price, price_txt=fmt_am(price),
                 p_model=p_model, p_model_raw=p_raw, clipped=(abs(p_raw - p_model) > 1e-9), p_nv=p_nv, p_final=p_final, edge=edge, ev=(ev * 100 if ev is not None else None),
                 fair=fair, fair_txt=fmt_am(fair), max_price=max_am, max_txt=fmt_am(max_am),
-                implied_raw=(am_to_prob(price) if price is not None else None))
+                implied_raw=(am_to_prob(price) if price is not None else None),
+                divergence=div, divergence_high=(div is not None and div > DIVERGENCE_HIGH * 100))
 
 def status_for(edge, ev):
     if edge is None: return "SIN_LINEA"
@@ -181,7 +190,9 @@ def confidence(model, odds, flags, family):
         nv = odds["nv"]["ml"]
         gap = abs(model["p_home"] - nv.get("home", model["p_home"]))
         if gap <= 0.08: score += 1
-        elif gap > 0.15: score -= 1; reasons.append("el modelo difiere mucho del mercado")
+        elif gap > DIVERGENCE_HIGH:
+            score -= 1 if gap <= 0.15 else 2
+            reasons.append("Divergencia alta (modelo vs mercado s/vig > 10 pp)")
     else:
         reasons.append("sin línea de mercado para contrastar")
         score -= 1
@@ -195,9 +206,17 @@ STATUS_META = {
     "PICK": ("🔥", "PICK"), "LEAN": ("🟡", "LEAN LIGERO"), "PASS": ("⛔", "PASS"), "SIN_LINEA": ("🔍", "SIN LÍNEA"),
 }
 
+def rank_key(c):
+    """Orden: sin divergencia alta primero, luego mayor EV (al precio pagado), luego confianza, luego edge."""
+    ev = c.get("ev") if c.get("ev") is not None else -999
+    cw = CONF_RANK.get(c.get("conf_level") or "Baja", 0)
+    div = 1 if c.get("divergence_high") else 0
+    edge = c.get("edge") if c.get("edge") is not None else -99
+    return (div, -ev, -cw, -edge)
+
 def decide(cands, model, home_name, away_name):
-    """Lean siempre presente. PASS sólo si no hay edge."""
-    out = {"candidates": sorted(cands, key=lambda x: -(x["edge"] if x["edge"] is not None else -99))}
+    """Lean siempre presente. PASS sólo si no hay edge. Orden por EV y confianza, no por edge crudo."""
+    out = {"candidates": sorted(cands, key=rank_key)}
     if cands:
         best = out["candidates"][0]
         out["lean"] = best
@@ -218,7 +237,15 @@ def decide(cands, model, home_name, away_name):
 
 
 def apply_confidence(cands, conf):
-    """PICK sólo con confianza Media/Alta; con confianza Baja se degrada a LEAN (siempre se muestra el lean)."""
+    """PICK sólo con confianza Media/Alta; Baja o divergencia alta se degradan a LEAN (nunca estrella/top)."""
     for c in cands:
-        if c["status"] == "PICK" and conf["level"] == "Baja":
+        c["conf_level"] = conf.get("level")
+        if c.get("divergence_high"):
+            c["flag"] = "Divergencia alta"
+            # no se presenta el hueco bruto como «edge» promocionable
+            c["edge_display"] = None
+        else:
+            c["edge_display"] = c.get("edge")
+        if c["status"] == "PICK" and (conf["level"] == "Baja" or c.get("divergence_high")):
             c["status"] = "LEAN"; c["downgraded"] = True
+            if c.get("divergence_high"): c["downgraded_reason"] = "Divergencia alta"

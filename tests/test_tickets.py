@@ -17,7 +17,14 @@ def test_check_contradiction_and_correlation():
 
 def test_combine_odds_and_prob():
     cb = T.combine([leg(odds=-110, p=.6), leg(eid="2", odds=+150, p=.45)])
-    assert abs(cb["dec"] - (1 + 100 / 110) * 2.5) < 1e-3 and abs(cb["p_model"] - .27) < 1e-9 and cb["american"] > 0
+    assert abs(cb["dec"] - (1 + 100 / 110) * 2.5) < 1e-3 and abs(cb["p_model_indep"] - .27) < 1e-9 and cb["american"] > 0
+    assert cb["ev_estimated"] is True and abs(cb["p_model"] - .27 * (1 - T.CORR_HAIRCUT)) < 1e-9
+    assert cb["ev_label"] and "estimado" in cb["ev_label"]
+
+def test_combine_same_game_uses_larger_haircut():
+    cb = T.combine([leg(odds=-110, p=.6), leg(market="spread", line=-3.5, odds=-110, p=.55)])
+    assert cb["ev_haircut"] == T.SAME_GAME_HAIRCUT
+    assert abs(cb["p_model"] - (.6 * .55) * (1 - T.SAME_GAME_HAIRCUT)) < 1e-9
 
 def test_create_rejects_started_and_saves(db):
     T.reset_for_tests()
