@@ -1,5 +1,5 @@
 /* Detalle de juego premium (pt75u): 16 secciones visibles, compactas y en orden fijo. Sólo datos reales; sin datos => la sección no se dibuja. */
-const DC = {pk:'#8B7CC7', tl:'#2dd4bf', bl:'#8B7CC7', am:'#F5B942', gr:'#3A3A52'};
+const DC = {pk:'#FF1179', tl:'#06AAC4', bl:'#3C85F7', am:'#F5B942', gr:'#1f1f1f'};
 const DST = {rec:'t0', shut:{}, info:{}};   // estado que sobrevive al refresco en vivo (pestaña, secciones plegadas, ⓘ abiertos)
 const sideColor = (g,sd) => sd==='draw' ? DC.gr : sd==='over' ? DC.bl : sd==='under' ? DC.tl : (sides(g)[0]===sd ? DC.bl : DC.tl);
 const n1 = (v,dg=1) => (v==null||isNaN(v)) ? SD : Number(v).toFixed(dg).replace(/\.0+$/,'').replace(/(\.\d)0$/,'$1');
@@ -444,7 +444,7 @@ document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.ta
 // ================= CANCHA EN VIVO (pt75u): SVG por deporte + datos reales de ESPN (marcador, reloj, última jugada, situación). Sin balón animado inventado.
 function fieldBasket(){
   const L='stroke="#fff" stroke-opacity=".85" stroke-width="1.3" fill="none"';
-  const half=(m)=>`<g transform="${m}"><rect x="10" y="69" width="60" height="42" fill="rgba(90,59,140,.28)" stroke="#fff" stroke-opacity=".85" stroke-width="1.3"/><circle cx="70" cy="90" r="16" ${L}/><path d="M10 20 H56.6 A76 76 0 0 1 56.6 160 H10" ${L}/><circle cx="27" cy="90" r="3.5" stroke="#8B7CC7" stroke-width="1.6" fill="none"/><line x1="22" y1="82" x2="22" y2="98" stroke="#fff" stroke-width="1.6"/></g>`;
+  const half=(m)=>`<g transform="${m}"><rect x="10" y="69" width="60" height="42" fill="rgba(255,17,121,.28)" stroke="#fff" stroke-opacity=".85" stroke-width="1.3"/><circle cx="70" cy="90" r="16" ${L}/><path d="M10 20 H56.6 A76 76 0 0 1 56.6 160 H10" ${L}/><circle cx="27" cy="90" r="3.5" stroke="#FF1179" stroke-width="1.6" fill="none"/><line x1="22" y1="82" x2="22" y2="98" stroke="#fff" stroke-width="1.6"/></g>`;
   return {svg:`<defs><linearGradient id="wd" x1="0" x2="1"><stop offset="0" stop-color="#c58446"/><stop offset=".5" stop-color="#d0924f"/><stop offset="1" stop-color="#c58446"/></linearGradient></defs><rect x="10" y="10" width="300" height="160" rx="4" fill="url(#wd)"/><g ${L}><rect x="10" y="10" width="300" height="160"/><line x1="160" y1="10" x2="160" y2="170"/><circle cx="160" cy="90" r="18"/></g>${half('')}${half('translate(320 0) scale(-1 1)')}`, vb:'0 0 320 180'};
 }
 function fieldHockey(){
@@ -468,14 +468,14 @@ function courtLive(d){
       if(posSd && sit.yard_team){ own = sit.yard_team===ab(g[posSd]) ? sit.yard : sit.yard_team===ab(g[posSd==='home'?'away':'home']) ? 100-sit.yard : null; }
       else if(!sit.yard_team) own=sit.yard;
       if(own!=null){ const x=35+Math.max(0,Math.min(100,own))*2.5, fx=sit.distance!=null?Math.min(285,x+sit.distance*2.5):null;
-        over+=`<line x1="${x}" y1="12" x2="${x}" y2="148" stroke="#3C85F7" stroke-width="2.4"/>${fx!=null?`<line x1="${fx}" y1="12" x2="${fx}" y2="148" stroke="#F5B942" stroke-width="2.4"/>`:''}<g transform="translate(${x} 80)"><circle class="cvpulse" r="9" fill="none" stroke="#8B7CC7" stroke-width="2"/><ellipse rx="6.5" ry="4" fill="#8a4b1f" stroke="#fff" stroke-width=".8"/><line x1="-2" y1="0" x2="2" y2="0" stroke="#fff" stroke-width=".8"/></g>`; }
+        over+=`<line x1="${x}" y1="12" x2="${x}" y2="148" stroke="#3C85F7" stroke-width="2.4"/>${fx!=null?`<line x1="${fx}" y1="12" x2="${fx}" y2="148" stroke="#F5B942" stroke-width="2.4"/>`:''}<g transform="translate(${x} 80)"><circle class="cvpulse" r="9" fill="none" stroke="#FF1179" stroke-width="2"/><ellipse rx="6.5" ry="4" fill="#8a4b1f" stroke="#fff" stroke-width=".8"/><line x1="-2" y1="0" x2="2" y2="0" stroke="#fff" stroke-width=".8"/></g>`; }
     }
     const dn = sit.down ? `${sit.down}º y ${sit.distance!=null?sit.distance:'—'}` : '';
     if(posSd||dn) chips=`<span class="cvch">${posSd?badge(g[posSd],16)+'<b>'+tAbbr(g[posSd])+'</b>':''}${dn?`<span>${esc(dn)}</span>`:''}${sit.yard_team?`<span class="mt">${esc(sit.yard_team)} ${sit.yard}</span>`:''}${sit.red_zone?'<span class="tg2 k-p">Zona roja</span>':''}</span>`;
   }
   if(g.sport==='mlb'&&sit&&sit.bases){
     const pos=[[214,132],[160,78],[106,132]];
-    sit.bases.forEach((on,i)=>{ if(on) over+=`<g transform="translate(${pos[i][0]} ${pos[i][1]})"><circle class="cvpulse" r="10" fill="rgba(90,59,140,.25)" stroke="#8B7CC7" stroke-width="1.6"/><rect x="-5" y="-5" width="10" height="10" fill="#8B7CC7" transform="rotate(45)"/></g>`; });
+    sit.bases.forEach((on,i)=>{ if(on) over+=`<g transform="translate(${pos[i][0]} ${pos[i][1]})"><circle class="cvpulse" r="10" fill="rgba(255,17,121,.25)" stroke="#FF1179" stroke-width="1.6"/><rect x="-5" y="-5" width="10" height="10" fill="#FF1179" transform="rotate(45)"/></g>`; });
     const outs=sit.outs!=null?`<span class="cvo">${[0,1,2].map(i=>`<i class="${i<sit.outs?'on':''}"></i>`).join('')}<small>outs</small></span>`:'';
     const cnt=(sit.balls!=null&&sit.strikes!=null)?`<span class="cvch"><b class="mono">${sit.balls}-${sit.strikes}</b><small>cuenta</small></span>`:'';
     chips=outs+cnt;
@@ -517,7 +517,7 @@ function dPred(d){
   const pr=w.probs||{}; const seg=[[s0,DC.bl],...(pr.draw!=null?[['draw','#4b5563']]:[]),[s1,DC.pk]];
   const stack=`<div class="pdst">${seg.map(([k,c])=>`<i style="flex:${Math.max(.02,pr[k]||0)};background:${c}"></i>`).join('')}</div><div class="pdsl">${seg.map(([k,c])=>`<span><u style="background:${c}"></u>${k==='draw'?'Empate':nm(k)} <b class="mono">${pct(pr[k],0)}</b></span>`).join('')}</div>`;
   const mains=[];
-  const row=(ttl,main,sub,prob,mark)=>(mains.push(main),`<div class="pdr"><div class="pdl"><small>${ttl}</small><b>${main}</b>${sub?`<em>${sub}</em>`:''}</div><div class="pdp"><b class="mono">${pct(prob,prob<.1?1:0)}</b><span class="pbar"><i style="width:${Math.round((prob||0)*100)}%;background:linear-gradient(90deg,#8B7CC7,#5A3B8C)"></i></span></div>${mark}</div>`);
+  const row=(ttl,main,sub,prob,mark)=>(mains.push(main),`<div class="pdr"><div class="pdl"><small>${ttl}</small><b>${main}</b>${sub?`<em>${sub}</em>`:''}</div><div class="pdp"><b class="mono">${pct(prob,prob<.1?1:0)}</b><span class="pbar"><i style="width:${Math.round((prob||0)*100)}%;background:linear-gradient(90deg,#3C85F7,#FF1179)"></i></span></div>${mark}</div>`);
   const rows=[], sc=p.score;
   const al=o=>o&&o.aligned==='pick'?' · alineado con el pick del modelo':o&&o.aligned==='marcador'?' · ajustado al marcador exacto':'';
   rows.push(row('Ganador',`${w.side==='draw'?'Empate':'Gana '+wl}`,al(w).slice(3),w.p,prMark(R&&R.ml)));
@@ -535,7 +535,7 @@ function dPred(d){
 }
 function predRecord(P){
   if(!P) return '';
-  const cell=(l,a)=>`<div class="pkc"><small>${l}</small><b class="mono">${a&&a.n?a.pct.toFixed(0)+'%':SD}</b><em class="mono">${a&&a.n?`${a.hit}-${a.miss}${a.push?'-'+a.push:''}`:'—'}</em><span class="pbar"><i style="width:${a&&a.n?Math.round(a.pct):0}%;background:linear-gradient(90deg,#8B7CC7,#5A3B8C)"></i></span></div>`;
+  const cell=(l,a)=>`<div class="pkc"><small>${l}</small><b class="mono">${a&&a.n?a.pct.toFixed(0)+'%':SD}</b><em class="mono">${a&&a.n?`${a.hit}-${a.miss}${a.push?'-'+a.push:''}`:'—'}</em><span class="pbar"><i style="width:${a&&a.n?Math.round(a.pct):0}%;background:linear-gradient(90deg,#3C85F7,#FF1179)"></i></span></div>`;
   const rec=(P.recent||[]).slice(0,6).map(r=>`<div class="pkr"><span class="sub mono">${esc(r.league.toUpperCase())}</span><span class="pkm">${esc(r.home)} <i>vs</i> ${esc(r.away)}</span><span class="mono pkn">${esc(r.score_text||'')}</span>${prMark(r.ml)}${prMark(r.total)}${prMark(r.spread)}${prMark(r.corners)}${prMark(r.score)}</div>`).join('');
   return `<div class="card pkw"><h2>🎯 Predicción NRNM <span class="tg2" style="margin-left:6px">${P.graded} calificadas · ${P.pending} pendientes</span></h2><div>${P.graded?`<div class="pkg">${cell('Ganador',P.ml)}${cell('Total',P.total)}${cell('Hándicap',P.spread)}${P.corners&&P.corners.n?cell('Córners',P.corners):''}${P.btts&&P.btts.n?cell('Ambos anotan',P.btts):''}${cell('Marcador exacto',P.score)}${P.sets&&P.sets.n?cell('Sets (tenis)',P.sets):''}</div>${rec?`<div class="pkl">${rec}</div>`:''}`:`<div class="mut">Aún no hay predicciones calificadas. Se guardan antes de cada juego, se bloquean al inicio y se califican con el marcador final.</div>`}<div class="fine" style="margin-top:8px">% de acierto = aciertos / (aciertos + fallos), sin devoluciones. Marcador exacto es muy difícil: lo normal es un porcentaje bajo.</div></div></div>`;
 }

@@ -180,17 +180,21 @@ def test_screens_nav_footer_tokens_and_copy():
     html, css, app = src("static", "index.html"), src("static", "style.css"), src("static", "app.js")
     rec, ch, tk, det = src("static","recdia.js"), src("static","chat.js"), src("static","ticket.js"), src("static","detalle.js")
     blob = html + app + rec + ch + tk + det
-    for label in ("Inicio", "Picks", "Deportes", "Líneas", "Récord"):
+    for label in ("Inicio", "Picks", "Deportes", "Líneas"):
         assert label in html
     assert 'id="bnav"' in html and 'href="#/lineas"' in html
+    bnav = html.split('id="bnav"',1)[1].split("</nav>",1)[0]
+    assert "Récord" not in bnav and 'data-n="record"' not in bnav
+    assert 'data-n="inicio"' in bnav and 'href="#/record"' in html
     assert "juegosysorteos.gob.mx" not in html and "Línea de la Vida" not in html and 'id="legal"' not in html
     assert "Paper trading / estimaciones, no garantía." in app
     assert "nav-ia" not in html and "aria-label" in html
-    for hex_ in ("#000000", "#2A1E4D", "#5A3B8C", "#8B7CC7", "#C9C2E3", "#3A3A52",
-                 "#2dd4bf", "#F5B942", "#F07178", "#A89DC8", "#3A2A66"):
+    for hex_ in ("#000000", "#0d0d0d", "#FF1179", "#06AAC4", "#3C85F7", "#F5B942", "#e6ebf2"):
         assert hex_ in css
-    assert "--bg:#000000" in css
-    assert "sp-card" in css and "sp-draw" in css
+    for gone in ("#2A1E4D", "#5A3B8C", "#8B7CC7", "#C9C2E3", "#3A2A66"):
+        assert gone not in css
+    assert "--bg:#000000" in css and "--acc:#FF1179" in css
+    assert "sp-card" in css and "sp-draw" in css and "background:#111" in css
     assert 'class="sp-card"' in html and "No Risk No Money" in html and "sp-tag" not in html
     assert "function marketBlocks" in app and "ob-pk" in app and "mkb-tog" in app
     assert "height:44px" in css and ".mkb-h" in css

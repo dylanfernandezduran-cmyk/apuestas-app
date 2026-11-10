@@ -51,7 +51,7 @@ async def main():
             await pg.goto(f"http://localhost:{PORT}/#/juego/{league}/{gid}"); await pg.wait_for_selector(".ds"); await pg.wait_for_timeout(400)
             return await pg.evaluate("""(()=>{const S=[...document.querySelectorAll('#app .ds')];
               return {keys:S.map(s=>s.dataset.k), accs:document.querySelectorAll('#app > .acc').length, hero:!!document.querySelector('#app .gh2, #app .hero, #app .card'),
-              nombres:[...document.querySelectorAll('.gh2 .hs .n')].map(n=>n.innerText), bloques:[...document.querySelectorAll('.mkb-h')].map(h=>h.innerText),
+              nombres:[...document.querySelectorAll('.gh2 .hs .n')].map(n=>n.innerText), bloques:[...document.querySelectorAll('.mkb-t')].map(h=>h.innerText),
               bordes:S.filter(s=>parseFloat(getComputedStyle(s).borderTopWidth)>0).length, h:document.documentElement.scrollHeight,
               heads:S.slice(0,3).map(s=>[getComputedStyle(s.querySelector('.ttl')).textTransform, parseFloat(getComputedStyle(s.querySelector('.ttl')).letterSpacing)>0])}})()""")
         ORDER = ["pred","rec","picks","prob","odds","mkt","cmp","pitch","trd","rcn","h2h","key","mdl","splits","rlm","move","lin","inj","wx","players"]

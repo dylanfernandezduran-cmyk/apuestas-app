@@ -849,7 +849,7 @@ function movementSection(d){
    ${byBook.length?`<details class="dd"><summary>Por casa</summary><div class="tbl"><table><thead><tr><th>Casa</th><th>ML local</th><th>Spread</th><th>Total</th></tr></thead><tbody>${byBook.join('')}</tbody></table></div></details>`:''}`;
   return ds('move','Movimiento de líneas',body,{right:`<span class="tg2">${mk.movement_src?'Apertura real':'Sin apertura'}</span>`,info:`Apertura vs consenso actual${mk.movement_src?' · fuente: '+esc(mk.movement_src):''}. El cambio de ML se mide en prob. sin vig; spread/total en puntos. Las casas no publican aperturas individuales: por casa usamos nuestro propio historial. ${note}`});
 }
-const PAL=['#8B7CC7','#2dd4bf','#5A3B8C','#F5B942','#A89DC8','#2dd4bf','#C9C2E3','#F07178','#94a3b8','#8B7CC7','#3EE0C4'];
+const PAL=['#3C85F7','#06AAC4','#FF1179','#F5B942','#7f8b9c','#06AAC4','#e6ebf2','#FF1179','#94a3b8','#3C85F7','#34d399'];
 function mvTab(t){ if(!MV) return; MV.tab=t; document.querySelectorAll('#mvtabs .pill').forEach(p=>p.classList.toggle('on',p.dataset.t===t)); mvDraw(); }
 function mvDraw(){
   const el=document.getElementById('mvchart'); if(!el||!MV) return;

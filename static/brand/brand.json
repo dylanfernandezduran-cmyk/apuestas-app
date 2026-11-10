@@ -2,7 +2,7 @@
   "active": "nrnm_final_blanco_americano",
   "theme": {
     "bg": "#000000",
-    "accent": "#5A3B8C"
+    "accent": "#FF1179"
   },
   "options": {
     "ventaja": {
@@ -429,24 +429,24 @@
       "short": "NRNM",
       "tagline": "Riesgo medido, picks con datos",
       "palette": {
-        "acc": "#5A3B8C",
-        "grn": "#2dd4bf",
-        "red": "#F07178",
+        "acc": "#FF1179",
+        "grn": "#06AAC4",
+        "red": "#FF1179",
         "amb": "#F5B942",
-        "blu": "#8B7CC7",
-        "live": "#8B7CC7",
+        "blu": "#3C85F7",
+        "live": "#3C85F7",
         "bg": "#000000",
-        "panel": "#2A1E4D",
-        "panel2": "#3A2A66",
-        "hair": "#3A3A52",
-        "line": "#3A3A52",
+        "panel": "#0d0d0d",
+        "panel2": "#141414",
+        "hair": "#1f1f1f",
+        "line": "#1f1f1f",
         "ink": "#000000",
-        "tx": "#C9C2E3",
-        "mut": "#A89DC8"
+        "tx": "#e6ebf2",
+        "mut": "#7f8b9c"
       },
       "label": "Blanco · balón americano",
       "desc": "Todo blanco sobre negro puro #000; el iris es un balón americano con cordones en negativo (negros).",
-      "icon_bg": "#5A3B8C"
+      "icon_bg": "#000000"
     }
   }
 }
