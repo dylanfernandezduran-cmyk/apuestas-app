@@ -180,15 +180,20 @@ def test_screens_nav_footer_tokens_and_copy():
     html, css, app = src("static", "index.html"), src("static", "style.css"), src("static", "app.js")
     rec, ch, tk, det = src("static","recdia.js"), src("static","chat.js"), src("static","ticket.js"), src("static","detalle.js")
     blob = html + app + rec + ch + tk + det
-    for label in ("Picks", "Deportes", "Líneas", "Récord", "IA"):
+    for label in ("Inicio", "Picks", "Deportes", "Líneas", "Récord"):
         assert label in html
     assert 'id="bnav"' in html and 'href="#/lineas"' in html
-    assert "juegosysorteos.gob.mx" in html
-    footer = "Estimaciones de un modelo estadístico con datos públicos. No son consejos financieros ni garantizan ganancias. Apuesta con responsabilidad; solo mayores de edad"
-    assert footer in html
-    for hex_ in ("#0b0b0e", "#15151a", "#23232b", "#2a2a31", "#f4f4f5", "#a1a1aa",
-                 "#e11d63", "#ff5c8d", "#2dd4bf", "#fbbf24", "#ff7aa2"):
+    assert "juegosysorteos.gob.mx" not in html and "Línea de la Vida" not in html and 'id="legal"' not in html
+    assert "Paper trading / estimaciones, no garantía." in app
+    assert "nav-ia" not in html and "aria-label" in html
+    for hex_ in ("#000000", "#2A1E4D", "#5A3B8C", "#8B7CC7", "#C9C2E3", "#3A3A52",
+                 "#2dd4bf", "#F5B942", "#F07178", "#A89DC8", "#3A2A66"):
         assert hex_ in css
+    assert "--bg:#000000" in css
+    assert "sp-card" in css and "sp-draw" in css
+    assert 'class="sp-card"' in html and "No Risk No Money" in html and "sp-tag" not in html
+    assert "function marketBlocks" in app and "ob-pk" in app and "mkb-tog" in app
+    assert "height:44px" in css and ".mkb-h" in css
     assert "--r-card:16px" in css and "--r-btn:12px" in css and "--r-chip:999px" in css
     assert "--nav-h:72px" in css or "72px" in css
     assert "Inter:wght@400;600;700;800" in html
@@ -225,8 +230,10 @@ def test_screens_nav_footer_tokens_and_copy():
     for tab in ("Mercados", "Líneas", "Props", "Alineaciones"):
         assert tab in det
     assert "compra el mejor" in det
-    # no FAB tapando
-    assert "#chb,#tkb{display:none" in css.replace(" ", "") or "display:none !important" in css
+    # IA es botón flotante (no vive en el nav); la nav es una píldora flotante
+    assert "display:flex !important" in css and "#chb" in css
+    assert "border-radius:999px" in css and "backdrop-filter" in css
+    assert 'data-n="inicio"' in html and 'aria-label="Inicio"' in html
     # core loaded
     assert "nrnm-core.js" in html
 

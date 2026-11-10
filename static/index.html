@@ -17,47 +17,87 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=26">
+<link rel="stylesheet" href="/static/style.css?v=27">
 <style id="brand-theme">__THEME__</style>
 </head><body data-brand="__BRAND_ID__">
-<div id="splash" role="presentation"><div class="sp-in"><div class="sp-logo">__GLYPH__</div><div class="sp-name">__NAME__</div><div class="sp-tag">__TAGLINE__</div></div><div class="sp-skip">Toca para entrar</div></div>
+<div id="splash" role="presentation"><div class="sp-in"><div class="sp-card"><div class="sp-logo">__GLYPH__</div></div><div class="sp-name">No Risk No Money</div></div></div>
 <header><div class="bar">
   <a href="#/" class="logo"><span class="lg-mark">__GLYPH__</span><b>__SHORT__</b></a>
   <span id="clock" class="mono"></span>
-  <nav class="top-nav" hidden><a href="#/picks" data-n="picks">Picks</a><a href="#/deportes" data-n="sports">Deportes</a><a href="#/lineas" data-n="lineas">Líneas</a><a href="#/record" data-n="record">Récord</a></nav>
+  <nav class="top-nav" hidden><a href="#/" data-n="inicio">Inicio</a><a href="#/picks" data-n="picks">Picks</a><a href="#/deportes" data-n="sports">Deportes</a><a href="#/lineas" data-n="lineas">Líneas</a><a href="#/record" data-n="record">Récord</a></nav>
 </div></header>
 <main id="app"><div class="loading">Cargando…</div></main>
-<footer class="legal" id="legal">Estimaciones de un modelo estadístico con datos públicos. No son consejos financieros ni garantizan ganancias. Apuesta con responsabilidad; solo mayores de edad.
-  <a href="https://juegosysorteos.gob.mx/es/Juegos_y_Sorteos/Preguntas_de_Ludopatia_" target="_blank" rel="noopener">Ayuda juego responsable (Gobierno de México)</a>
-  · Línea de la Vida 800 911 2000</footer>
 <div id="tkbar" hidden></div>
 <nav class="bnav" id="bnav" aria-label="Principal">
-  <a href="#/picks" data-n="picks"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.9 6.6L22 9.3l-5 4.8L18.2 22 12 18.3 5.8 22 7 14.1 2 9.3l7.1-.7L12 2z"/></svg>Picks</a>
-  <a href="#/deportes" data-n="sports"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 17.9V14h4.9A8 8 0 0113 19.9zM6.1 10H11V5.1A8 8 0 016.1 10zM13 5.1V10h4.9A8 8 0 0013 5.1zM5.1 13H11v5.9A8 8 0 015.1 13z"/></svg>Deportes</a>
-  <a href="#/lineas" data-n="lineas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17l6-6 4 4 8-8v3h2V5h-5v2h3l-8 8-4-4-7 7z"/></svg>Líneas</a>
-  <a href="#/record" data-n="record"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v2H5V4zm0 5h14v2H5V9zm0 5h9v2H5v-2zm0 5h14v2H5v-2z"/></svg>Récord</a>
-  <a href="#/ia" data-n="ia" id="nav-ia" aria-label="Abrir chat IA"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v12H7l-3 3V4zm3 5v2h10V9H7z"/></svg>IA</a>
+  <a href="#/" data-n="inicio" aria-label="Inicio" title="Inicio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-3v6H5a1 1 0 0 1-1-1z"/></svg><span class="sr-only">Inicio</span><i class="nav-dot" hidden></i></a>
+  <a href="#/picks" data-n="picks" aria-label="Picks" title="Picks"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 14.4 9l6 .5-4.6 3.9 1.5 5.8L12 16.3 6.7 19.2 8.2 13.4 3.6 9.5 9.6 9z"/></svg><span class="sr-only">Picks</span><i class="nav-dot" hidden></i></a>
+  <a href="#/deportes" data-n="sports" aria-label="Deportes" title="Deportes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 3.8 6 3.8 9s-1.3 6-3.8 9c-2.5-3-3.8-6-3.8-9S9.5 6 12 3z"/></svg><span class="sr-only">Deportes</span><i class="nav-dot" hidden></i></a>
+  <a href="#/lineas" data-n="lineas" aria-label="Líneas" title="Líneas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17 9.5 11.5l3.5 3.5L20 7"/><path d="M14 7h6v6"/></svg><span class="sr-only">Líneas</span><i class="nav-dot" hidden></i></a>
+  <a href="#/record" data-n="record" aria-label="Récord" title="Récord"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h12M8 12h12M8 19h12M4 5h.01M4 12h.01M4 19h.01"/></svg><span class="sr-only">Récord</span><i class="nav-dot" hidden></i></a>
 </nav>
 <script>
-/* splash: breve, saltable, una vez por sesión (o ?splash=1 para forzarlo) */
-(function(){var s=document.getElementById('splash'),force=/[?&]splash=1/.test(location.search);
- var seen=false;try{seen=sessionStorage.getItem('splash_seen')==='1'}catch(e){}
- if(seen&&!force){s.remove();return}
- try{sessionStorage.setItem('splash_seen','1')}catch(e){}
- document.documentElement.classList.add('splashing');
- var done=false;function end(){if(done)return;done=true;s.classList.add('out');document.documentElement.classList.remove('splashing');setTimeout(function(){s.remove()},380)}
- if(/[?&]hold=1/.test(location.search))return;
- s.addEventListener('click',end);s.addEventListener('touchend',end,{passive:true});document.addEventListener('keydown',end);setTimeout(end,matchMedia('(prefers-reduced-motion:reduce)').matches?400:1400);setTimeout(end,2800);})();
+/* splash: trazo ~1.2s, relleno+nombre, espera ~0.8s, sale (~3s). Una vez por sesión (?splash=1 lo fuerza). */
+(function(){
+  var s=document.getElementById('splash'); if(!s) return;
+  var force=/[?&]splash=1/.test(location.search), hold=/[?&]hold=1/.test(location.search);
+  var seen=false; try{seen=sessionStorage.getItem('splash_seen')==='1'}catch(e){}
+  if(seen&&!force){s.remove();return}
+  try{sessionStorage.setItem('splash_seen','1')}catch(e){}
+  document.documentElement.classList.add('splashing');
+  var reduce=false; try{reduce=matchMedia('(prefers-reduced-motion:reduce)').matches}catch(e){}
+  var done=false;
+  function end(){ if(done||!s) return; done=true; s.classList.add('out'); document.documentElement.classList.remove('splashing'); setTimeout(function(){ if(s&&s.parentNode)s.remove(); }, reduce?320:820); }
+  function fill(){
+    s.classList.add('sp-filled','sp-named');
+    var svg=s.querySelector('.sp-logo svg'); if(!svg) return;
+    svg.querySelectorAll('[data-sp="lace"]').forEach(function(el){ el.style.opacity='1'; });
+    svg.querySelectorAll('[data-sp="fill"]').forEach(function(el){
+      el.style.strokeDashoffset='0';
+      if(el.getAttribute('data-sp-fill')==='1') el.style.fill='#fff';
+    });
+  }
+  function prep(){
+    var svg=s.querySelector('.sp-logo svg'); if(!svg) return;
+    svg.querySelectorAll('path,ellipse,circle,polyline,polygon,line').forEach(function(el){
+      var st=(el.getAttribute('stroke')||'').toLowerCase();
+      var fill=(el.getAttribute('fill')||'').toLowerCase();
+      var lace = st==='#000000'||st==='#000'||st==='black'||el.closest('g[stroke="#000000"],g[stroke="#000"]');
+      if(lace){ el.setAttribute('data-sp','lace'); el.style.opacity='0'; return; }
+      var isFilled = fill && fill!=='none' && fill!=='transparent';
+      el.setAttribute('data-sp','fill');
+      if(isFilled) el.setAttribute('data-sp-fill','1');
+      el.style.fill='none';
+      el.style.stroke='#fff';
+      if(!el.getAttribute('stroke-width')) el.setAttribute('stroke-width','22');
+      el.style.strokeLinecap='round'; el.style.strokeLinejoin='round';
+      var len=0; try{ len=el.getTotalLength(); }catch(err){ len=1400; }
+      if(!(len>0)) len=1400;
+      el.style.strokeDasharray=String(len);
+      el.style.strokeDashoffset=reduce?'0':String(len);
+      if(!reduce) el.style.animation='sp-draw 1.2s ease forwards';
+    });
+  }
+  prep();
+  if(reduce) fill();
+  else setTimeout(fill, 1200);
+  if(!hold){
+    s.addEventListener('click',end);
+    s.addEventListener('touchend',end,{passive:true});
+    document.addEventListener('keydown',end);
+    setTimeout(end, reduce?400:2000);
+    setTimeout(end, 3200);
+  }
+})();
 </script>
 <script src="/static/nrnm-core.js?v=1"></script>
-<script src="/static/extras.js?v=18"></script>
-<script src="/static/detalle.js?v=12"></script>
+<script src="/static/extras.js?v=19"></script>
+<script src="/static/detalle.js?v=13"></script>
 <script src="/static/props.js?v=2"></script>
 <script src="/static/lineas.js?v=2"></script>
-<script src="/static/app.js?v=29"></script>
+<script src="/static/app.js?v=30"></script>
 <script src="/static/recdia.js?v=5"></script>
-<script src="/static/ticket.js?v=5"></script>
-<script src="/static/chat.js?v=12"></script>
+<script src="/static/ticket.js?v=6"></script>
+<script src="/static/chat.js?v=13"></script>
 <script>
 /* Boot seguro (iOS / PWA / Pages): si hay SW viejo o caché rota, se limpia. En modo estático NUNCA se registra SW. */
 (function(){

@@ -46,6 +46,6 @@ def test_nrnm_fondo_negro(monkeypatch):
     from server import main
     c = TestClient(main.app)
     m = c.get("/manifest.webmanifest").json()
-    assert m["background_color"] == "#0b0b0e" and m["theme_color"] == "#0b0b0e"
+    assert m["background_color"] == "#000000" and m["theme_color"] == "#000000"
     html = c.get("/").text
-    assert 'name="theme-color" content="#0b0b0e"' in html and "--bg:#0b0b0e" in html and "--panel:#15151a" in html
+    assert 'name="theme-color" content="#000000"' in html and "--bg:#000000" in html and "--panel:#2A1E4D" in html

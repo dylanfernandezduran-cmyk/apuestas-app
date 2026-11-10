@@ -16,13 +16,14 @@ function tkBtn(leg, txt){
   return `<button type="button" class="tkadd ${on?'on':''}" data-tk="${id}" aria-label="Agregar al ticket">${on?'✓ En ticket':(txt||'+ Ticket')}</button>`;
 }
 document.addEventListener('click', e=>{
-  const b=e.target.closest('.tkadd'); if(!b||!b.dataset.tk) return;
+  const b=e.target.closest('.tkadd,[data-tk].ob'); if(!b||!b.dataset.tk) return;
   e.preventDefault(); e.stopPropagation();
   const leg=TK.reg[b.dataset.tk]; if(!leg) return;
   const i=TK.legs.findIndex(x=>tkKey(x)===tkKey(leg));
-  if(i>=0){ TK.legs.splice(i,1); b.classList.remove('on'); b.textContent='+ Ticket'; }
+  const box=b.classList.contains('ob');
+  if(i>=0){ TK.legs.splice(i,1); b.classList.remove('on'); if(!box) b.textContent='+ Ticket'; b.setAttribute('aria-pressed','false'); }
   else { if(leg.start_ts && leg.start_ts*1000<=Date.now()){ tkToast('Ese juego ya empezó: sólo piernas pre-juego.'); return; }
-    TK.legs.push(leg); b.classList.add('on'); b.textContent='✓ En ticket'; tkToast('Agregado al ticket ('+TK.legs.length+')'); }
+    TK.legs.push(leg); b.classList.add('on'); if(!box) b.textContent='✓ En ticket'; b.setAttribute('aria-pressed','true'); tkToast('Agregado al ticket ('+TK.legs.length+')'); }
   tkSave_();
 }, true);
 function tkToast(t){ let el=document.getElementById('tkt'); if(!el){ el=document.createElement('div'); el.id='tkt'; document.body.appendChild(el); } el.textContent=t; el.classList.add('on'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),1800); }

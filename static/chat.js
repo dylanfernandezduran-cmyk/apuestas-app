@@ -19,14 +19,12 @@ function chOpen(on){
   if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); }
 }
 function chSyncNav(){
-  const ia=document.getElementById('nav-ia');
-  if(CH.open){ document.querySelectorAll('#bnav a, #bnav button').forEach(a=>a.classList.toggle('on',a.dataset.n==='ia')); }
-  else if(typeof setNav==='function'){
+  if(CH.open) return; // el FAB lleva el estado; no se marca una pestaña IA
+  if(typeof setNav==='function'){
     const h=location.hash.replace(/^#\/?/,'').split('/')[0];
-    const map={'':'picks',picks:'picks',inicio:'picks',lineas:'lineas',deportes:'sports',deporte:'sports',juego:'sports',prop:'sports',record:'record',tickets:'record',info:'record'};
-    setNav(map[h]||'picks');
+    const map={'':'inicio',picks:'picks',inicio:'inicio',lineas:'lineas',deportes:'sports',deporte:'sports',juego:'sports',prop:'sports',record:'record',tickets:'record',info:'record',metodo:'record',ia:'inicio'};
+    setNav(map[h]||'inicio');
   }
-  if(ia && !CH.open){ /* setNav already cleared */ }
 }
 
 const chNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -343,7 +341,7 @@ async function chSend(q){
   CH.busy=false; chRender(); const i=document.getElementById('chi'); if(i) i.focus();
 }
 (function(){
-  const b=document.createElement('button'); b.id='chb'; b.type='button'; b.setAttribute('aria-label','Abrir chat IA'); b.innerHTML='<span>IA</span>';
+  const b=document.createElement('button'); b.id='chb'; b.type='button'; b.setAttribute('aria-label','Abrir chat IA'); b.innerHTML='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><path d="M5 5h14v10H8l-3 3V5z"/><path d="M8 9h8M8 13h5"/></svg>';
   document.body.appendChild(b);
   b.addEventListener('click',()=>{ CH.open=!CH.open; chRender(); if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); } });
 
@@ -363,7 +361,7 @@ async function chSend(q){
   function banner(){ if(document.getElementById(BAN)) return;
     const b=document.createElement('button'); b.id=BAN; b.type='button';
     b.textContent='Hay una versión nueva — toca para actualizar';
-    b.setAttribute('style','position:fixed;left:12px;right:12px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:99999;padding:14px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#FF1179,#3C85F7);color:#fff;font:600 15px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)');
+    b.setAttribute('style','position:fixed;left:12px;right:12px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:99999;padding:14px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#5A3B8C,#8B7CC7);color:#fff;font:600 15px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)');
     b.onclick=()=>{ try{sessionStorage.removeItem(KEY);}catch(e){} location.href=location.pathname+(location.search?location.search+'&':'?')+'_='+Date.now()+location.hash; };
     document.body.appendChild(b); }
   async function chk(){ try{

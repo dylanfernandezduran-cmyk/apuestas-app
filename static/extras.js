@@ -221,6 +221,7 @@ async function viewHome(){
       if(h.live.length){ const nc=lb.querySelector('.hm-none'); if(nc) nc.remove(); carPatch(lb,h.live.slice(0,12)); }
       else lb.innerHTML=`<div class="card mut hm-none">No hay juegos en vivo en este momento.</div>`;
       h.sports.forEach(x=>{ const a=document.querySelector(`.snav a[data-sp="${x.key}"]`); if(a){ a.classList.toggle('lv',!!x.live); a.title = x.live?`${x.live} en vivo`:(x.today?`${x.today} juego${x.today===1?'':'s'} hoy`:'Sin juegos hoy'); } });
+      if(typeof setNavDot==='function') setNavDot('sports', !!(h.live&&h.live.length));
       if(h.live.length && !timer) { Live.start(()=>fillHome(false),25000); timer=1; }
       if(!h.live.length && timer){ Live.stop(); timer=null; }
     }catch(e){ const l=document.getElementById('hm-live'); if(l&&first) l.innerHTML=`<h3>En vivo ahora</h3><div class="card mut">${SD}: ${esc(e.message)}</div>`; }

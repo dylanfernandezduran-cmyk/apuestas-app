@@ -477,8 +477,8 @@ def _theme_css(pal):
     if not pal: return ""
     def rgb(h):
         h = h.lstrip("#"); return ",".join(str(int(h[i:i + 2], 16)) for i in (0, 2, 4))
-    names = dict(acc="acc", grn="grn", red="red", amb="amb", blu="blu", live="live", ink="ink", bg="bg", panel="panel", panel2="panel2", hair="hair", line="line")
-    norgb = ("ink", "panel", "panel2", "hair", "line")
+    names = dict(acc="acc", grn="grn", red="red", amb="amb", blu="blu", live="live", ink="ink", bg="bg", panel="panel", panel2="panel2", hair="hair", line="line", tx="tx", mut="mut")
+    norgb = ("ink", "panel", "panel2", "hair", "line", "tx", "mut")
     out = []
     for k, v in pal.items():
         if k in names and isinstance(v, str) and len(v) == 7 and v.startswith("#"):

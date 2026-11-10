@@ -144,6 +144,21 @@ const recFor = (market, side, line) => { const r = REC_MAP[market+'.'+side]; ret
 const units = u => u==null ? '—' : (u>0?'+':'')+Number(u).toFixed(2)+'u';
 const oddsTxt = r => r.odds==null ? 'sin cuota' : am(r.odds)+(r.book?' · '+esc(r.book):'');
 const SPORT_EM = {mlb:'⚾',nfl:'🏈',nba:'🏀',nhl:'🏒',tenis:'🎾',futbol:'⚽'};
+
+function setNavDot(name, on){
+  const a=document.querySelector('#bnav [data-n="'+name+'"]'); if(!a) return;
+  let d=a.querySelector('.nav-dot'); if(!d){ d=document.createElement('i'); d.className='nav-dot'; a.appendChild(d); }
+  d.hidden=!on;
+}
+let _navDotsT=0;
+async function refreshNavDots(){
+  if(Date.now()-_navDotsT<20000) return; _navDotsT=Date.now();
+  try{
+    const h=await api('/api/home');
+    setNavDot('sports', !!(h&&h.live&&h.live.length));
+  }catch(e){}
+}
+
 function setNav(n){ document.querySelectorAll('#bnav a, #bnav button, header nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on && a.parentElement){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
 
 // ------------------------------------------------------------ rutas
@@ -154,10 +169,10 @@ async function route(){
   const h = location.hash.replace(/^#\/?/,'').split('/').map(decodeURIComponent);
   window.scrollTo(0,0); $app.classList.remove('gd');
   try{
-    if(!h[0]||h[0]===''||h[0]==='picks'){ setNav('picks'); return await viewPicks(h[0]==='picks'?(h[1]||'hoy'):'hoy'); }
-    if(h[0]==='inicio'){ setNav('picks'); return await viewHome(); }
+    if(!h[0]||h[0]===''||h[0]==='inicio'){ setNav('inicio'); refreshNavDots(); return await viewHome(); }
+    if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'hoy'); }
     if(h[0]==='lineas'){ setNav('lineas'); return await viewLineas(h[1]||'todos'); }
-    if(h[0]==='ia'){ setNav('ia'); if(typeof chOpen==='function') chOpen(true); return await viewPicks('hoy'); }
+    if(h[0]==='ia'){ /* ruta #/ia: abre el chat del FAB */ if(typeof chOpen==='function') chOpen(true); setNav('inicio'); refreshNavDots(); return await viewHome(); }
     if(h[0]==='deportes'){ setNav('sports'); return await viewSports(); }
     if(h[0]==='deporte'){ setNav('sports'); return await viewSport(h[1], h[2]); }
     if(h[0]==='juego'){ setNav('sports'); return await viewGame(h[1], h[2]); }
@@ -168,7 +183,7 @@ async function route(){
       return await viewRecordDay(h[1]==='dia'?h[2]:null); }
     if(h[0]==='tickets'){ setNav('record'); return await viewTickets(h[1]||null); }
     if(h[0]==='info'||h[0]==='metodo'){ setNav('record'); return await viewInfo(); }
-    setNav('picks'); await viewPicks('hoy');
+    setNav('inicio'); await viewHome();
   }catch(e){ if(seq!==ROUTE_SEQ) return; $app.innerHTML = errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); }
 }
 window.addEventListener('hashchange', route);
@@ -341,23 +356,63 @@ function heroMid(g,d){
   if(ten) return `<div class="hm-s ${live?'lv-clock':''}">${live?'● EN VIVO':'FINAL'}</div><div class="sub">${esc(clock)}</div>`;
   return `<div class="hm-sc mono">${esc(g[sd[0]].score??'')} <span class="mut">–</span> ${esc(g[sd[1]].score??'')}</div><div class="hm-s ${live?'lv-clock':''}">${live?'● '+esc(clock):'FINAL'}</div>`;
 }
-const MK_ORDER={ml:0,total:1,spread:2,dc:3};
+const MK_ORDER={ml:0,total:1,spread:2,dc:3,btts:4,corners:5};
 function mkTitle(m,g){
   const sp=g.sport, k=m.key;
   if(k==='ml') return isSoc(g)?'Resultado final':sp==='tenis'?'Ganador del partido':'Ganador';
   if(k==='total') return sp==='tenis'?'Total':'Total de '+(sp==='futbol'?'goles':sp==='mlb'||sp==='nhl'?'carreras/goles':'puntos');
   if(k==='spread') return sp==='mlb'?'Run line':sp==='futbol'?'Hándicap asiático':sp==='tenis'?'Hándicap de juegos':'Hándicap (spread)';
   if(k==='dc') return 'Doble oportunidad';
+  if(k==='btts') return 'Ambos anotan';
+  if(k==='corners'||k==='corner') return 'Córners';
   return (m.title||k).replace(/\s*\(.*\)\s*$/,'');
 }
-const obLabel = (o,g) => String(o.label||'').replace(/\s*\((local|visitante)\)/i,'').replace(/^Over\b/,'Más de').replace(/^Under\b/,'Menos de').replace(/\s*\(sin empate\)/i,'');
+const obLabel = (o,g) => String(o.label||'').replace(/\s*\((local|visitante)\)/i,'').replace(/^Over\b/,'Más de').replace(/^Under\b/,'Menos de').replace(/^Yes\b/i,'Sí').replace(/^No\b/i,'No').replace(/\s*\(sin empate\)/i,'');
 function mkFromOdds(d){
   const o=d.odds, g=d.game; if(!o) return [];
-  const out=[], bt=(label,price,market,side,line)=>({label,market,side,line,p_final:null,best:price!=null?{price_txt:am(price)}:null});
+  const out=[], bt=(label,price,market,side,line)=>({label,market,side,line,p_final:null,best:price!=null?{price,price_txt:am(price)}:null});
   if(o.ml){ const th=o.ml.draw!=null; out.push({key:'ml',outcomes:mlSides(g,th).filter(sd=>o.ml[sd]!=null).map(sd=>bt(sd==='draw'?'Empate':g[sd].name,o.ml[sd],'ml',sd))}); }
   const T=o.total; if(T&&T.over&&T.under) out.push({key:'total',outcomes:[bt('Más de '+T.over.line,T.over.price,'total','over',T.over.line),bt('Menos de '+T.under.line,T.under.price,'total','under',T.under.line)]});
   const S=o.spread; if(S&&S.home&&S.away) out.push({key:'spread',outcomes:sides(g).map(sd=>bt(g[sd].name+' '+(S[sd].line>0?'+':'')+S[sd].line,S[sd].price,'spread',sd,S[sd].line))});
+  const B=o.btts; if(B&&(B.yes!=null||B.no!=null)) out.push({key:'btts',outcomes:[bt('Sí',B.yes,'btts','yes'),bt('No',B.no,'btts','no')].filter(x=>x.best)});
   return out.filter(m=>m.outcomes.length);
+}
+function mkDec(a){ return a==null?null:(a>0?1+a/100:1+100/(-a)); }
+function mkAltLines(d, key){
+  const books=(d.market&&d.market.books)||[];
+  const map=new Map();
+  const put=(line,side,price,book,label)=>{
+    if(line==null||price==null||side==null) return;
+    const k=Number(line); if(!Number.isFinite(k)) return;
+    const rec=map.get(k)||{line:k, by:{}};
+    const cur=rec.by[side];
+    if(!cur||price>cur.price) rec.by[side]={price, book, label};
+    map.set(k, rec);
+  };
+  const sidePrice=(blk,sd)=>{
+    if(!blk) return null;
+    if(typeof blk[sd]==='number') return {price:blk[sd], line:blk.line};
+    const o=blk[sd]; if(!o) return null;
+    return {price:o.price, line:o.line!=null?o.line:blk.line};
+  };
+  for(const b of books){
+    const blk=b[key]||(b.odds&&b.odds[key]); if(!blk) continue;
+    const name=b.name||b.book||'';
+    if(key==='total'||key==='corners'||key==='stotal'){
+      for(const sd of ['over','under']){ const x=sidePrice(blk,sd); if(x) put(x.line,sd,x.price,name,(sd==='over'?'Más de ':'Menos de ')+x.line); }
+    } else if(key==='spread'||key==='sspread'){
+      for(const sd of sides(d.game)){ const x=sidePrice(blk,sd); if(x) put(x.line,sd,x.price,name,d.game[sd].name+' '+(x.line>0?'+':'')+x.line); }
+    }
+  }
+  return [...map.values()].sort((a,b)=>a.line-b.line);
+}
+function mkLeg(g,o,official){
+  const pr=o.best&&o.best.price!=null?o.best.price:o.price;
+  if(pr==null) return null;
+  return {kind:'game', league:g.league, eid:String(g.id), sport:g.sport, start_ts:Math.round(Date.parse(g.date)/1000),
+    home:g.home.name, away:g.away.name, home_id:String(g.home.id||''), away_id:String(g.away.id||''),
+    market:String(o.market||'').toLowerCase(), selection:o.side, line:o.line??null, odds:pr,
+    label:obLabel(o,g), p:o.p_final??null, official:!!official};
 }
 function marketBlocks(d){
   const g=d.game, P=d.probs, l=d.picks&&d.picks.lean;
@@ -366,12 +421,105 @@ function marketBlocks(d){
   if(!mk.length) return '';
   mk=mk.slice().sort((a,b)=>(MK_ORDER[a.key]??9)-(MK_ORDER[b.key]??9));
   const isPick=o=>l&&String(o.market||'').toLowerCase()===String(mktKey(l)).toLowerCase()&&o.side===l.side&&(l.line==null||o.line==null||Number(o.line)===Number(l.line));
-  const order = (m)=>{ if(m.key==='ml'||m.key==='spread'){ const th=m.outcomes.length===3; const ord=mlSides(g,th); return m.outcomes.slice().sort((a,b)=>ord.indexOf(a.side)-ord.indexOf(b.side)); } if(m.key==='total') return m.outcomes.slice().sort((a,b)=>(a.side==='over'?0:1)-(b.side==='over'?0:1)); return m.outcomes; };
-  const btn=o=>{ const pk=isPick(o), v=o.edge!=null&&o.edge>=3, rr=recFor(String(o.market||'').toLowerCase(),o.side,o.line);
+  const order = (arr, key)=>{
+    if(key==='ml'||key==='spread'||key==='sspread'){ const th=arr.length===3; const ord=mlSides(g,th); return arr.slice().sort((a,b)=>ord.indexOf(a.side)-ord.indexOf(b.side)); }
+    if(key==='total'||key==='corners'||key==='stotal') return arr.slice().sort((a,b)=>(a.side==='over'?0:1)-(b.side==='over'?0:1));
+    if(key==='btts') return arr.slice().sort((a,b)=>(a.side==='yes'||a.side==='si'?0:1)-(b.side==='yes'||b.side==='si'?0:1));
+    return arr;
+  };
+  const evOf=o=>{
+    if(o.ev!=null) return o.ev;
+    const pr=o.best&&o.best.price!=null?o.best.price:o.price, dec=mkDec(pr);
+    return (o.p_final!=null&&dec)?(o.p_final*dec-1):null;
+  };
+  const btn=o=>{
+    const pk=isPick(o), v=o.edge!=null&&o.edge>=3, rr=recFor(String(o.market||'').toLowerCase(),o.side,o.line);
     const pr=o.best&&(o.best.price_txt||(o.best.price!=null?am(o.best.price):null));
-    return `<div class="ob ${pk?'pick':''} ${v?'val':''}"><span class="ol">${esc(obLabel(o,g))}</span><span class="oq mono">${esc(pr||'—')}</span><span class="op">${o.p_final!=null?pct(o.p_final,0)+(pk&&o.edge!=null?` · <b class="${o.edge>0?'pos':'neg'}">${sg(o.edge)}pp</b>`:''):'&nbsp;'}</span>${rr&&rr.status!=='PENDIENTE'?`<span class="og">${gradeBadge(rr,false)}</span>`:''}</div>`; };
-  const blocks=mk.map(m=>{ const os=order(m); return `<div class="mkb"><div class="mkb-h">${esc(mkTitle(m,g))}</div><div class="ob-g n${Math.min(os.length,3)}">${os.map(btn).join('')}</div></div>`; }).join('');
-  return `<div class="card mkc"><h2>Mercados</h2>${blocks}<div class="sub mkn">${fb?'Cuotas de ESPN. ':''}Cuota = mejor precio disponible · % = probabilidad final${P&&P.markets&&P.markets.length?' (modelo + mercado)':''}.</div></div>`;
+    const ev=evOf(o);
+    const bits=[];
+    if(o.p_final!=null) bits.push(pct(o.p_final,0));
+    if(ev!=null) bits.push((ev>=0?'+':'')+(ev*100).toFixed(0)+'% EV');
+    else if(pk&&o.edge!=null) bits.push(sg(o.edge)+' pp');
+    const book=o.best&&(o.best.book||'');
+    const title=[pr?('Mejor cuota '+pr):'', book?('en '+book):'', o.best&&o.best.n_books>1?(o.best.n_books+' casas'):''].filter(Boolean).join(' · ');
+    const leg=mkLeg(g,o,pk);
+    let id='';
+    if(leg&&typeof tkBtn==='function'){ id='t'+(++TK.n); TK.reg[id]=leg; }
+    const on=leg&&TK.legs&&TK.legs.some(x=>tkKey(x)===tkKey(leg));
+    const aria=`${obLabel(o,g)}${pr?' '+pr:''}${pk?' (pick NRNM)':''}${book?' · '+book:''}`;
+    return `<button type="button" class="ob ${pk?'pick':''} ${v?'val':''} ${on?'on':''}" ${id?`data-tk="${id}"`:''} ${id?'':'disabled'} aria-label="${esc(aria)}" aria-pressed="${on?'true':'false'}" ${title?`title="${esc(title)}"`:''}><span class="ol">${esc(obLabel(o,g))}</span>${pk?'<span class="ob-pk">PICK</span>':''}<span class="or"><span class="oq mono">${esc(pr||'—')}</span>${bits.length?`<span class="op">${bits.join(' · ')}</span>`:''}</span></button>`;
+  };
+  const grid=(os,key)=>{
+    const n = key==='ml'&&os.length===3 ? 3 : (os.length===1?1:2);
+    return `<div class="ob-g n${n}">${os.map(btn).join('')}</div>`;
+  };
+  const lineKey=o=>o.line==null?'':String(o.line);
+  const blocks=mk.map(m=>{
+    let os=order(m.outcomes, m.key);
+    const alts=(m.key==='total'||m.key==='spread'||m.key==='corners')?mkAltLines(d,m.key):[];
+    const groups=new Map();
+    os.forEach(o=>{ const k=lineKey(o); if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(o); });
+    if(alts.length>1){
+      alts.forEach(al=>{
+        const k=String(al.line);
+        if(groups.has(k)) return;
+        const outs=Object.keys(al.by).map(sd=>{
+          const x=al.by[sd];
+          return {label:x.label, market:m.key, side:sd, line:al.line, p_final:null, best:{price:x.price, price_txt:am(x.price), book:x.book}};
+        });
+        groups.set(k, order(outs, m.key));
+      });
+    }
+    const keys=[...groups.keys()];
+    const stacked = m.key==='corners' || m.key==='corner' || (keys.length>1 && m.key!=='total');
+    const slider = m.key==='total' && keys.filter(k=>k!=='').length>1;
+    let body='';
+    if(slider){
+      const lines=keys.filter(k=>k!=='').sort((a,b)=>Number(a)-Number(b));
+      const main=os[0]&&os[0].line!=null?String(os[0].line):lines[0];
+      body=`<div class="mk-sl" data-lines="${esc(lines.join(','))}"><button type="button" data-dir="-1" aria-label="Línea anterior">‹</button><span class="mk-sl-val">${esc(main)}</span><button type="button" data-dir="1" aria-label="Línea siguiente">›</button></div>`+
+        lines.map(k=>`<div class="ob-g n2" data-line="${esc(k)}" ${k===main?'':'hidden'}>${groups.get(k).map(btn).join('')}</div>`).join('');
+    } else if(stacked && keys.length>1){
+      body=keys.sort((a,b)=>Number(a)-Number(b)).map(k=>grid(groups.get(k), m.key)).join('');
+    } else {
+      body=grid(os, m.key);
+    }
+    const sid='mk-'+m.key;
+    return `<div class="mkb" data-k="${esc(m.key)}"><div class="mkb-h"><button type="button" class="mkb-tog" aria-expanded="true" aria-controls="${sid}"><span class="mkb-t">${esc(mkTitle(m,g))}</span><i class="mkb-ch" aria-hidden="true"></i></button><button type="button" class="mkb-star" aria-label="Marcar mercado favorito" aria-pressed="false">★</button></div><div class="mkb-b" id="${sid}">${body}</div></div>`;
+  }).join('');
+  return `<div class="card mkc"><h2>Mercados</h2>${blocks}<div class="sub mkn">${fb?'Cuotas de ESPN. ':''}Cuota = mejor precio disponible (toca una casilla para ver la casa y agregar al ticket). % = probabilidad final${P&&P.markets&&P.markets.length?' (modelo + mercado)':''}; EV cuando hay precio y prob.</div></div>`;
+}
+function mkBind(){
+  const root=document.getElementById('app'); if(!root) return;
+  root.querySelectorAll('.mkb-tog').forEach(b=>{
+    b.onclick=()=>{ const box=b.closest('.mkb'); const off=box.classList.toggle('off'); b.setAttribute('aria-expanded', off?'false':'true'); };
+  });
+  root.querySelectorAll('.mkb-star').forEach(b=>{
+    const key=(b.closest('.mkb')||{}).dataset&&b.closest('.mkb').dataset.k;
+    let favs=[]; try{ favs=JSON.parse(localStorage.getItem('nrnm_mk_star')||'[]'); }catch(e){}
+    if(key&&favs.includes(key)) b.setAttribute('aria-pressed','true');
+    b.onclick=e=>{
+      e.stopPropagation();
+      const on=b.getAttribute('aria-pressed')!=='true';
+      b.setAttribute('aria-pressed', on?'true':'false');
+      try{
+        let s=JSON.parse(localStorage.getItem('nrnm_mk_star')||'[]');
+        if(on){ if(key&&!s.includes(key)) s.push(key); } else s=s.filter(x=>x!==key);
+        localStorage.setItem('nrnm_mk_star', JSON.stringify(s));
+      }catch(err){}
+    };
+  });
+  root.querySelectorAll('.mk-sl').forEach(sl=>{
+    const rows=[...sl.parentElement.querySelectorAll('.ob-g[data-line]')];
+    if(!rows.length) return;
+    let i=rows.findIndex(r=>!r.hidden); if(i<0) i=0;
+    const val=sl.querySelector('.mk-sl-val');
+    const show=()=>{ rows.forEach((r,j)=>r.hidden=j!==i); if(val) val.textContent=rows[i].dataset.line; };
+    sl.querySelectorAll('button[data-dir]').forEach(btn=>{
+      btn.onclick=()=>{ i=(i+Number(btn.dataset.dir)+rows.length)%rows.length; show(); };
+    });
+    show();
+  });
 }
 
 function injHeroTags(d){
@@ -413,7 +561,7 @@ async function viewGame(league, id, silent){
   const st = silent ? {y:window.scrollY, open:[...document.querySelectorAll('#app > .fold')].map(c=>[keyOf(c), !c.classList.contains('closed')])} : null;
   $app.classList.add('gd');
   $app.innerHTML = html;
-  mvDraw(); foldCards(); if(typeof propsInit==='function') propsInit();
+  mvDraw(); foldCards(); if(typeof mkBind==='function') mkBind(); if(typeof propsInit==='function') propsInit();
   if(st){ const m=new Map(st.open); document.querySelectorAll('#app > .fold').forEach(c=>{ const k=keyOf(c); if(m.has(k)) c.classList.toggle('closed',!m.get(k)); }); window.scrollTo(0,st.y); }
   Live.start(async()=>{ if(!location.hash.startsWith('#/juego/')) return; try{ await viewGame(league,id,true); }catch(e){} }, 25000);
   if(!live) Live.stop();
@@ -701,7 +849,7 @@ function movementSection(d){
    ${byBook.length?`<details class="dd"><summary>Por casa</summary><div class="tbl"><table><thead><tr><th>Casa</th><th>ML local</th><th>Spread</th><th>Total</th></tr></thead><tbody>${byBook.join('')}</tbody></table></div></details>`:''}`;
   return ds('move','Movimiento de líneas',body,{right:`<span class="tg2">${mk.movement_src?'Apertura real':'Sin apertura'}</span>`,info:`Apertura vs consenso actual${mk.movement_src?' · fuente: '+esc(mk.movement_src):''}. El cambio de ML se mide en prob. sin vig; spread/total en puntos. Las casas no publican aperturas individuales: por casa usamos nuestro propio historial. ${note}`});
 }
-const PAL=['#3C85F7','#06AAC4','#FF1179','#F5B942','#a78bfa','#2dd4bf','#f472b6','#fb923c','#94a3b8','#e879f9','#84cc16'];
+const PAL=['#8B7CC7','#2dd4bf','#5A3B8C','#F5B942','#A89DC8','#2dd4bf','#C9C2E3','#F07178','#94a3b8','#8B7CC7','#3EE0C4'];
 function mvTab(t){ if(!MV) return; MV.tab=t; document.querySelectorAll('#mvtabs .pill').forEach(p=>p.classList.toggle('on',p.dataset.t===t)); mvDraw(); }
 function mvDraw(){
   const el=document.getElementById('mvchart'); if(!el||!MV) return;
@@ -752,7 +900,8 @@ function viewInfo(){
     <p>STEAM: el consenso se mueve ≥ 3 pp, al menos 3 casas en la misma dirección (≥ 2 pp) en una ventana de 180 min. RLM: el consenso de ese lado sube ≥ 3 pp y el % de tickets de ese lado es ≤ 45% (el público está del otro lado). Si no hay % de tickets, no se etiqueta RLM. CASA REZAGADA: una casa queda ≥ 2 pp de implícita peor/mejor que la mediana (precio mejor que el consenso). Solo se listan movimientos de 3 pp o más.</p></details>
   <details class="card kv"><summary>Confianza</summary>
     <p>La confianza (Alta / Media / Baja) combina tamaño de muestra, divergencia frente al mercado, lesiones clave y si hay abridores confirmados. Stake: ¼ Kelly, tope 2% del bankroll por pick y 8% de exposición diaria; si EV ≤ 0, «no apostar». 1u = 1% del bankroll (configurable). Evitar piernas correlacionadas del mismo juego. Los tickets se califican solos con el marcador final.</p></details>
-  <div class="card" style="border-color:var(--amb);margin-top:12px"><b>Límite del modelo.</b> El modelo no ve lesiones de último minuto ni descansos. Un pick en REVISAR no se promociona: hay que esperar o no apostar.</div>`;
+  <div class="card" style="border-color:var(--amb);margin-top:12px"><b>Límite del modelo.</b> El modelo no ve lesiones de último minuto ni descansos. Un pick en REVISAR no se promociona: hay que esperar o no apostar.</div>
+  <p class="fine ctr metodo-note">Paper trading / estimaciones, no garantía.</p>`;
 }
 
 
