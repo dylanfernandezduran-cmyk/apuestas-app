@@ -25,7 +25,7 @@ async def main():
         await pg.route("**/api/home*", home)
         await pg.route("**/api/picks*", lambda r: r.fulfill(status=200, content_type="application/json", body='{"items":[]}'))
         await pg.route("**/api/img*", lambda r: r.fulfill(status=404, body="x"))      # imagen rota -> iniciales
-        await pg.goto(f"http://localhost:{PORT}/#/")
+        await pg.goto(f"http://localhost:{PORT}/#/inicio")
         await pg.wait_for_selector(".car-slide")
         st = "({n:document.querySelectorAll('.car-slide').length,dots:document.querySelectorAll('.car-dots button').length,txt:document.querySelector('.car-n').textContent,on:[...document.querySelectorAll('.car-dots button')].findIndex(x=>x.classList.contains('on')),w:document.querySelector('.car-track').clientWidth,vis:getComputedStyle(document.querySelector('.car-track')).scrollSnapType})"
         out["inicio"] = await pg.evaluate(st)

@@ -3,7 +3,7 @@
 const fmtHMS = t => new Intl.DateTimeFormat('es-MX',{timeZone:'America/Mexico_City',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).format(new Date(t*1000));
 const fmtDM = t => new Intl.DateTimeFormat('es-MX',{timeZone:'America/Mexico_City',day:'numeric',month:'short'}).format(new Date(typeof t==='number'?t*1000:t));
 const fmtDMH = t => new Intl.DateTimeFormat('es-MX',{timeZone:'America/Mexico_City',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(typeof t==='number'?t*1000:t));
-const updTag = (ts,live) => ts ? `<span class="upd sub mono" id="upd" title="Hora de la última consulta a las fuentes">${live?'<i class="dot"></i>':''}Actualizado ${fmtHMS(ts)} CDMX${live?' · auto cada 25 s':''}</span>` : '';
+const updTag = (ts,live) => ts ? `<span class="upd sub mono" id="upd" title="Hora de la última consulta a las fuentes">${live?'<i class="dot"></i>':''}${esc(typeof agoTxt==='function'?agoTxt(ts):('Actualizado '+fmtHMS(ts)+' CDMX'))}${live?' · auto cada 25 s':''}</span>` : '';
 
 // ---------- auto-actualización (pausa si la pestaña está oculta)
 const Live = {t:null, fn:null,

@@ -42,7 +42,7 @@ async def main():
             await pg.route("**/api/img*", lambda r: r.fulfill(status=404, body="x"))
             probs = []
             for i, (lg, gid, d) in enumerate(CASES):
-                await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_timeout(100)
+                await pg.goto(f"http://localhost:{PORT}/#/inicio"); await pg.wait_for_timeout(100)
                 await pg.route(f"**/api/game/{lg}/{gid}*", (lambda body: (lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(body))))(d))
                 await pg.goto(f"http://localhost:{PORT}/#/juego/{lg}/{gid}"); await pg.wait_for_selector(".ds, .cvw", timeout=15000); await pg.wait_for_timeout(500)
                 # desplegar todas las notas ⓘ para auditarlas también
@@ -50,7 +50,7 @@ async def main():
                 for x in await pg.evaluate(AUDIT): probs.append(f"[{i}:{lg}] {x}")
             for rl in sys.argv[3:]:                                         # juegos REALES del servidor (sin simular), p. ej. mex.1/401876910
                 lg, gid = rl.split("/")
-                await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_timeout(100)
+                await pg.goto(f"http://localhost:{PORT}/#/inicio"); await pg.wait_for_timeout(100)
                 await pg.goto(f"http://localhost:{PORT}/#/juego/{lg}/{gid}"); await pg.wait_for_selector(".ds", timeout=90000); await pg.wait_for_timeout(1500)
                 try: await pg.wait_for_function("!document.querySelector('.pp-host') || !document.querySelector('.pp-host').innerText.includes('Cargando')", timeout=60000)   # props de jugadores (carga asíncrona)
                 except Exception: pass

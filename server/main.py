@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS, chat as CHAT, tickets as TK
+from . import imgproxy, search as SEARCH, data, ratings, market as MK, history, record as REC, prediction as PRED, grading, enrich, injuries as INJ, weather as WX, live as LV, props as PROPS, chat as CHAT, tickets as TK, lineas as LN, stake as ST
 from .cache import get_json
 from .config import SPORTS, LEAGUES
 from .cache import STATS
@@ -294,7 +294,44 @@ async def chat_status():
 async def chat(body: dict):
     q = str((body or {}).get("q") or "").strip()
     if not q: raise HTTPException(400, "Pregunta vacía")
-    return await CHAT.answer(q, (body or {}).get("league"), (body or {}).get("eid"))
+    br = (body or {}).get("bankroll")
+    try: br = float(br) if br is not None and br != "" else None
+    except (TypeError, ValueError): br = None
+    up = (body or {}).get("unit_pct")
+    try: up = float(up) if up is not None and up != "" else None
+    except (TypeError, ValueError): up = None
+    du = (body or {}).get("daily_used_frac") or 0
+    try: du = float(du)
+    except (TypeError, ValueError): du = 0
+    return await CHAT.answer(q, (body or {}).get("league"), (body or {}).get("eid"), bankroll=br, unit_pct=up, daily_used_frac=du)
+
+@app.post("/api/stake")
+async def stake_calc(body: dict):
+    """1/4 Kelly con topes. body: p, price (americano o decimal), bankroll, unit_pct, daily_used_frac."""
+    b = body or {}
+    r = ST.quarter_kelly(b.get("p"), b.get("price"), b.get("bankroll"),
+                         unit_pct=b.get("unit_pct"), daily_used_frac=b.get("daily_used_frac") or 0)
+    if r is None: raise HTTPException(400, "Faltan p, price o bankroll válidos")
+    return r
+
+@app.get("/api/lineas")
+async def lineas(hours: int = 36):
+    """Alertas STEAM / RLM / REZAGADA a partir del historial real de líneas. Sólo movimientos ≥ 3 pp."""
+    hours = max(1, min(int(hours or 36), 96))
+    items = LN.scan_since(time.time() - hours * 3600, min_pp=LN.MIN_MOVE_PP)
+    leagues = sorted({it["league"] for it in items})
+    games = {}
+    if leagues:
+        lists = await asyncio.gather(*[data.list_games(l) for l in leagues], return_exceptions=True)
+        for l, r in zip(leagues, lists):
+            if isinstance(r, Exception): continue
+            for g in (r[0] or []):
+                games[(l, str(g["id"]))] = dict(home=g.get("home"), away=g.get("away"), date=g.get("date"),
+                                                state=g.get("state"), league=l, league_name=g.get("league_name"),
+                                                sport=g.get("sport"), id=g.get("id"))
+    for it in items:
+        it["game"] = games.get((it["league"], str(it["eid"])))
+    return dict(hours=hours, min_pp=LN.MIN_MOVE_PP, n=len(items), items=items, now=time.time())
 
 @app.get("/api/record")
 async def record(sport: str | None = None, type: str | None = None, days: int | None = None, limit: int = 60, basis: str | None = None):

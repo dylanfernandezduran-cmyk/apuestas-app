@@ -27,10 +27,21 @@ document.addEventListener('click', e=>{
 }, true);
 function tkToast(t){ let el=document.getElementById('tkt'); if(!el){ el=document.createElement('div'); el.id='tkt'; document.body.appendChild(el); } el.textContent=t; el.classList.add('on'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),1800); }
 function tkFab(){
-  let b=document.getElementById('tkb');
-  if(!TK.legs.length){ if(b) b.remove(); return; }
-  if(!b){ b=document.createElement('button'); b.id='tkb'; b.type='button'; b.onclick=tkOpen; document.body.appendChild(b); }
-  b.innerHTML=`🎟️<span>${TK.legs.length}</span>`; b.setAttribute('aria-label','Ver ticket ('+TK.legs.length+' piernas)');
+  const bar=document.getElementById('tkbar');
+  if(!bar){
+    let b=document.getElementById('tkb');
+    if(!TK.legs.length){ if(b) b.remove(); document.body.classList&&document.body.classList.remove('has-tk'); return; }
+    if(!b){ b=document.createElement('button'); b.id='tkb'; b.type='button'; b.onclick=tkOpen; document.body.appendChild(b); }
+    b.innerHTML=`🎟️<span>${TK.legs.length}</span>`; b.setAttribute('aria-label','Ver ticket ('+TK.legs.length+' piernas)');
+    document.body.classList&&document.body.classList.add('has-tk');
+    return;
+  }
+  if(!TK.legs.length){ bar.hidden=true; bar.innerHTML=''; document.body.classList&&document.body.classList.remove('has-tk'); return; }
+  document.body.classList&&document.body.classList.add('has-tk');
+  bar.hidden=false;
+  const n=TK.legs.length;
+  bar.innerHTML=`<div class="tkb-info">🎟️ Ticket · <b>${n}</b> ${n===1?'pierna':'piernas'}</div><button type="button" id="tkbar-open">Ver ticket</button>`;
+  const o=document.getElementById('tkbar-open'); if(o) o.onclick=tkOpen;
 }
 // mismas reglas que server/tickets.py check()
 function tkCheck(legs){
@@ -42,7 +53,7 @@ function tkCheck(legs){
       else if((l.kind||'game')==='game'&&(m.kind||'game')==='game'&&[m.market,l.market].sort().join()==='ml,spread') warn.push(m.selection===l.selection?`Correlacionadas: «${m.label}» + «${l.label}» (mismo lado)`:`Se contradicen en parte: «${m.label}» y «${l.label}»`);
       else warn.push(`Mismo juego: «${m.label}» + «${l.label}» (correlacionadas; el EV mostrado es estimado, con descuento mayor)`); });
     (seen[g]=seen[g]||[]).push(i); });
-  if(legs.some(l=>l.official===false)) warn.push('Incluye piernas que NO son pick oficial (no pasaron el filtro estricto).');
+  if(legs.some(l=>l.official===false)) warn.push('Incluye piernas que no son pick oficial.');
   return {err:[...new Set(err)], warn:[...new Set(warn)]};
 }
 function tkSheet(html){ let s=document.getElementById('tks'); if(!s){ s=document.createElement('div'); s.id='tks'; document.body.appendChild(s);
@@ -62,14 +73,14 @@ function tkCombine(L){
 function tkOpen(){
   const L=TK.legs, cb=tkCombine(L), d=cb.d, p=cb.p, ev=cb.ev, ck=tkCheck(L);
   const row=(l,i)=>`<div class="tkl"><div class="tkl-t"><b>${esc(l.label)}</b><span class="sub">${esc(l.kind==='prop'?(l.player||'Prop'):l.home+' vs '+l.away)} · ${fmtShort(new Date(l.start_ts*1000).toISOString())} ${fmtTime(new Date(l.start_ts*1000).toISOString())}</span>
-      <span class="sub">${l.p!=null?'modelo '+Math.round(l.p*100)+'% · ':''}${l.official?'<span class="k-t">pick oficial</span>':l.kind==='prop'?'prop (sin prob. de modelo)':'<span class="k-a">no oficial</span>'}</span></div>
+      <span class="sub">${l.p!=null?'modelo '+Math.round(l.p*100)+'% · ':''}${l.official?'<span class="k-t">Pick oficial</span>':l.kind==='prop'?'prop (sin prob. de modelo)':'<span class="k-a">No es pick oficial</span>'}</span></div>
       <b class="mono">${l.odds>0?'+'+l.odds:l.odds}</b><button type="button" class="tkx" onclick="tkDel(${i})" aria-label="Quitar">✕</button></div>`;
   tkSheet(`<div class="tks-h"><b>🎟️ Ticket (papel)</b><button type="button" class="tkx" onclick="tkClose()" aria-label="Cerrar">✕</button></div>
     ${L.length?L.map(row).join(''):'<div class="sub">Ticket vacío.</div>'}
     <div class="kpis s tkk"><div class="kpi"><div class="sub">Momio combinado</div><div class="v mono">${tkAm(d)}</div></div><div class="kpi"><div class="sub">Prob. modelo${cb.estimated?' (est.)':''}</div><div class="v mono">${p==null?'—':(p*100).toFixed(1)+'%'}</div></div>
-      <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub"${typeof tip==='function'?tip('EV'):''}>EV por 1u${cb.estimated?' (estimado)':''}</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
+      <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub"${typeof tip==='function'?tip('EV'):''}>EV por 1u${cb.estimated?' (estimado, tope)':''}</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
     ${ck.err.map(x=>`<div class="tkw err">⛔ ${esc(x)}</div>`).join('')}${ck.warn.map(x=>`<div class="tkw">⚠️ ${esc(x)}</div>`).join('')}
-    <div class="sub" style="margin:6px 0">Paper trading: no se apuesta dinero. ${cb.estimated?`EV y prob. combinada son <b>estimados</b> (descuento ${(cb.h*100).toFixed(0)}% por correlación / error de modelo${cb.same?' · mismo juego':''}; no se asume independencia).`:'Prob. de una sola pierna sin descuento de correlación.'} ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
+    <div class="sub" style="margin:6px 0">Paper trading: no se apuesta dinero. ${cb.estimated?`EV y prob. combinada son un <b>tope/estimado</b> (descuento ${(cb.h*100).toFixed(0)}% por correlación / error de modelo${cb.same?' · mismo juego':''}; no se asume independencia).`:'Prob. de una sola pierna sin descuento de correlación.'} ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
     <input id="tkn" class="tkin" maxlength="60" placeholder="Nombre del ticket (opcional)">
     <div class="tkbtns"><button type="button" class="btn" onclick="TK.legs=[];tkSave_();tkClose();route()">Vaciar</button><button type="button" class="btn pri" ${ck.err.length||!L.length?'disabled':''} onclick="tkSubmit(this)">Guardar ticket</button></div>`);
 }

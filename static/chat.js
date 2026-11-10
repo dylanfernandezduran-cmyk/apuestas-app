@@ -2,6 +2,33 @@
    Si el servidor tiene un LLM configurado (llave en variable de entorno) lo usa; si no (o en la versión de GitHub Pages), responde el motor local con reglas
    sobre los mismos datos. Nunca inventa cifras: si un dato no está, lo dice. */
 const CH = {open:false, msgs:[], busy:false, llm:null, picks:null, picksT:0};
+const CH_DISC='Son estimaciones de un modelo, no una garantía. Apuesta con responsabilidad.';
+const CH_CHASE='No persigas las pérdidas: subir la apuesta para recuperar no mejora el valor esperado y aumenta el riesgo de ruina.';
+const CH_BAN=/\b(seguro|segura|seguros|seguras|garantizado|garantizada|garantizados|garantizadas)\b/gi;
+const CH_CHASE_RE=/recuper(ar|o|ando)|perdid|cazar|perseguir|aument(ar|o|ando) la apuesta|doblar (la )?apuesta|all-?in/i;
+const CH_SECTIONS=['Mi pick','Cuánto meterle','Lesiones y alineaciones','Localía y props'];
+function chPolish(html, q){
+  html=String(html||'').replace(CH_BAN,'estimado');
+  if(CH_CHASE_RE.test(q||'') && !/no persigas las pérdidas/i.test(html)) html+='<p>'+CH_CHASE+'</p>';
+  if(!/no una garantía|no es una garantía/i.test(html)) html+='<p class="ch-disc">'+CH_DISC+'</p>';
+  return html;
+}
+function chOpen(on){
+  CH.open = on==null?true:!!on;
+  chRender();
+  if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); }
+}
+function chSyncNav(){
+  const ia=document.getElementById('nav-ia');
+  if(CH.open){ document.querySelectorAll('#bnav a, #bnav button').forEach(a=>a.classList.toggle('on',a.dataset.n==='ia')); }
+  else if(typeof setNav==='function'){
+    const h=location.hash.replace(/^#\/?/,'').split('/')[0];
+    const map={'':'picks',picks:'picks',inicio:'picks',lineas:'lineas',deportes:'sports',deporte:'sports',juego:'sports',prop:'sports',record:'record',tickets:'record',info:'record'};
+    setNav(map[h]||'picks');
+  }
+  if(ia && !CH.open){ /* setNav already cleared */ }
+}
+
 const chNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const chPct = p => p==null ? '—' : Math.round(p*100)+'%';
 const chEdge = e => e==null ? '' : ` · edge ${e>0?'+':''}${e.toFixed(1)} pp`;
@@ -271,9 +298,9 @@ async function chAsk(q){
   if(CH.llm && !STATIC && !/parlay|parley|combinad|ticket|arma/.test(chNorm(q))){
     try{
       const c=chCurGame();
-      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q, league:c&&c.league, eid:c&&c.eid})});
+      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({q, league:c&&c.league, eid:c&&c.eid}, (typeof BK==='function'?BK():{})))});
       const d=await r.json();
-      if(d.llm&&d.text) return {html:esc(d.text).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>'), src:'IA ('+esc(d.model||'LLM')+') con datos de la app'};
+      if(d.llm&&d.text) return {html:chPolish(esc(d.text).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>'), q), src:'IA ('+esc(d.model||'LLM')+') con datos de la app'};
     }catch(e){}
   }
   return {html: await chLocal(q), src: 'Respuesta con datos de la app (motor local'+(STATIC?', versión en línea':'')+')'};
@@ -281,19 +308,25 @@ async function chAsk(q){
 function chRender(){
   let p=document.getElementById('chp');
   if(!p){ p=document.createElement('div'); p.id='chp'; p.setAttribute('role','dialog'); p.setAttribute('aria-label','Chat IA'); document.body.appendChild(p); }
-  p.hidden=!CH.open; document.getElementById('chb').classList.toggle('on',CH.open);
+  p.hidden=!CH.open; const fab=document.getElementById('chb'); if(fab) fab.classList.toggle('on',CH.open); chSyncNav();
   if(!CH.open) return;
+  const _bk=typeof BK==='function'?BK():{bankroll:'',unit_pct:1};
   const sug=['Arma un parlay de 3 con mayor confianza del modelo','Mejores picks de hoy','Picks NBA','Ambos anotan','¿Cómo vamos en el récord?'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
   p.innerHTML=`<div class="ch-h"><b>Chat NRNM</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
     <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):'<div class="ch-a">Hola, pregúntame por picks, un equipo, lesiones, props o el récord. Uso sólo los datos de la app.</div>'}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
     <div class="ch-s">${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>
+    <div class="ch-bk"><label>Bankroll <input id="ch-bk" type="number" min="0" step="1" value="${_bk.bankroll||''}" placeholder="opcional"></label>
+    <label>1u % <input id="ch-u" type="number" min="0.1" max="5" step="0.1" value="${_bk.unit_pct}"></label></div>
     <form class="ch-f"><input id="chi" type="text" autocomplete="off" placeholder="Escribe tu pregunta…" maxlength="400"><button type="submit" aria-label="Enviar">➤</button></form>`;
+  const bki=document.getElementById('ch-bk'), bku=document.getElementById('ch-u');
+  const sav=()=>{ if(typeof BKSet==='function') BKSet(bki&&bki.value, bku&&bku.value); };
+  if(bki) bki.addEventListener('change',sav); if(bku) bku.addEventListener('change',sav);
   const m=document.getElementById('chm'); m.scrollTop=m.scrollHeight;
 }
 async function chSend(q){
   q=String(q||'').trim(); if(!q||CH.busy) return;
   CH.msgs.push({r:'u',h:esc(q)}); CH.busy=true; chRender();
-  try{ const a=await chAsk(q); CH.msgs.push({r:'a',h:a.html,s:a.src}); }
+  try{ const a=await chAsk(q); CH.msgs.push({r:'a',h:chPolish(a.html,q),s:a.src}); }
   catch(e){ CH.msgs.push({r:'a',h:'No pude consultar los datos: '+esc(e.message)}); }
   CH.busy=false; chRender(); const i=document.getElementById('chi'); if(i) i.focus();
 }
@@ -301,6 +334,7 @@ async function chSend(q){
   const b=document.createElement('button'); b.id='chb'; b.type='button'; b.setAttribute('aria-label','Abrir chat IA'); b.innerHTML='<span>IA</span>';
   document.body.appendChild(b);
   b.addEventListener('click',()=>{ CH.open=!CH.open; chRender(); if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); } });
+  document.addEventListener('click',e=>{ const n=e.target.closest('#nav-ia'); if(!n) return; e.preventDefault(); CH.open=!CH.open; chRender(); if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); } });
   document.addEventListener('click',e=>{
     if(e.target.closest('#chp .ch-x')){ CH.open=false; chRender(); }
     const s=e.target.closest('#chp .ch-sg'); if(s) chSend(s.textContent);

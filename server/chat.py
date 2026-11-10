@@ -2,7 +2,7 @@
 LLM opcional por variable de entorno (nunca en el repo): API compatible con OpenAI.
   NRNM_LLM_API_KEY (o GROQ_API_KEY / OPENAI_API_KEY)  · NRNM_LLM_BASE_URL (por defecto Groq) · NRNM_LLM_MODEL
 Sin llave -> {"llm": false}: el frontend responde con su motor local (reglas sobre los mismos datos), que también funciona en GitHub Pages."""
-import json, os, time
+import json, os, re, time
 import httpx
 
 def _cfg():
@@ -17,9 +17,29 @@ def status():
     key, base, model = _cfg()
     return dict(llm=bool(key), provider=("groq" if "groq" in base else "openai-compatible") if key else None, model=model if key else None)
 
+DISCLAIMER = "Son estimaciones de un modelo, no una garantía. Apuesta con responsabilidad."
+CHASE_WARN = "No persigas las pérdidas: subir la apuesta para recuperar no mejora el valor esperado y aumenta el riesgo de ruina."
+BANNED_RE = re.compile(r"\b(seguro|segura|seguros|seguras|garantizado|garantizada|garantizados|garantizadas)\b", re.I)
+CHASE_RE = re.compile(r"recuper(ar|o|ando)|perdid|cazar|perseguir|aument(ar|o|ando) la apuesta|doblar (la )?apuesta|all-?in", re.I)
+SECTIONS = ("Mi pick", "Cuánto meterle", "Lesiones y alineaciones", "Localía y props")
+
 SYSTEM = ("Eres el asistente de NRNM, una app de análisis deportivo (paper trading, sin dinero real). Responde en español de México, breve y claro. "
-          "Usa EXCLUSIVAMENTE los datos JSON del contexto (picks, probabilidades, líneas, predicciones, lesiones, props). Si algo no está en el contexto, di que no lo tienes; "
-          "nunca inventes cuotas, líneas, porcentajes ni lesiones. Recomienda primero los picks con estado PICK y luego LEAN, ordenados por edge (PASS/SIN_LINEA no son recomendación). Nunca contradigas la predicción ni el pick registrado del juego; si no coinciden, dilo. No menciones ningún «filtro estricto». Cita la línea y la cuota tal como vienen. Recuerda que son estimaciones, no garantías. Sin emojis excesivos.")
+          "Usa EXCLUSIVAMENTE los datos JSON del contexto (picks, probabilidades, líneas, predicciones, lesiones, props, bankroll). Si algo no está en el contexto, di que no lo tienes; "
+          "nunca inventes cuotas, líneas, porcentajes ni lesiones. Recomienda primero los picks con estado PICK y luego LEAN; REVISAR no se promociona como pick (es una divergencia alta a revisar). PASS/SIN_LINEA no son recomendación. Nunca contradigas la predicción ni el pick registrado del juego; si no coinciden, dilo. No menciones ningún «filtro estricto». Cita la línea y la cuota tal como vienen. "
+          "Nunca uses las palabras «seguro», «garantizado» ni equivalentes. "
+          "Cuando hables de un juego o un pick, organiza la respuesta en estas secciones, en este orden: Mi pick; Cuánto meterle; Lesiones y alineaciones; Localía y props. "
+          "Si hay bankroll en el contexto, en «Cuánto meterle» usa 1/4 Kelly con tope del 2% de la bankroll por pick y 8% de exposición diaria; 1u = 1% de la bankroll salvo que el contexto diga otro unit_pct. Si no hay bankroll, pide la cifra y no inventes un stake. "
+          "Si el usuario habla de recuperar pérdidas, aumentar la apuesta después de perder o cazar resultados, incluye esta advertencia: " + CHASE_WARN + " "
+          "Cierra SIEMPRE con: " + DISCLAIMER)
+
+def polish(text, question=""):
+    """Quita claims de certeza, añade aviso de perseguir pérdidas si aplica, y cierra con el disclaimer."""
+    text = BANNED_RE.sub("estimado", text or "")
+    if CHASE_RE.search(question or "") and "no persigas las pérdidas" not in text.lower():
+        text = text.rstrip() + "\n\n" + CHASE_WARN
+    if "no una garantía" not in text.lower() and "no es una garantía" not in text.lower():
+        text = text.rstrip() + "\n\n" + DISCLAIMER
+    return text
 
 def _pick_short(it):
     g = it.get("game") or {}; l = it.get("lean") or {}
@@ -44,11 +64,16 @@ def _game_short(a):
                 prediccion=dict(marcador=p.get("score"), ganador=p.get("winner"), total=p.get("total"), handicap=p.get("spread"), ambos_anotan=p.get("btts")),
                 lean=((a.get("picks") or {}).get("lean") or {}).get("label"), picks_registrados=rec, probabilidades=probs[:24], lesiones=inj)
 
-async def answer(q, league=None, eid=None):
+async def answer(q, league=None, eid=None, bankroll=None, unit_pct=None, daily_used_frac=0):
     key, base, model = _cfg()
     if not key: return dict(llm=False)
     from . import data
     ctx = {}
+    if bankroll is not None:
+        ctx["bankroll"] = bankroll
+        ctx["unit_pct"] = unit_pct if unit_pct is not None else 1.0
+        ctx["daily_used_frac"] = daily_used_frac or 0
+        ctx["stake_rule"] = "1/4 Kelly, tope 2% por pick y 8% de exposición diaria; 1u = unit_pct % de la bankroll"
     try:
         pk = await data.picks("24h"); ctx["picks_24h"] = [_pick_short(it) for it in (pk.get("items") or [])[:30]]
     except Exception: ctx["picks_24h"] = None
@@ -60,7 +85,7 @@ async def answer(q, league=None, eid=None):
         async with httpx.AsyncClient(timeout=45) as c:
             r = await c.post(f"{base}/chat/completions", headers={"Authorization": f"Bearer {key}"}, json=dict(model=model, messages=msgs, temperature=0.2, max_tokens=700))
         if r.status_code != 200: return dict(llm=False, error=f"LLM HTTP {r.status_code}")
-        txt = r.json()["choices"][0]["message"]["content"]
-        return dict(llm=True, text=txt, model=model, ts=time.time())
+        txt = polish(r.json()["choices"][0]["message"]["content"], q)
+        return dict(llm=True, text=txt, model=model, ts=time.time(), sections=list(SECTIONS), disclaimer=DISCLAIMER)
     except Exception as e:
         return dict(llm=False, error=type(e).__name__)

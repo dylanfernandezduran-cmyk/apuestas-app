@@ -365,14 +365,22 @@ function dFoot(d){
 
 function detailSections(d){
   const tn_=d.kind==='tennis';
-  return [dPred(d), dRec(d), dPicks(d), dProps(d), dProb(d), dSplits(d), dRlm(d),
-    movementSection(d), (marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')),
-    dPlayers(d), dCmp(d), dPitch(d), dTrends(d), dRecent(d),
-    tn_?'':lineupsSection(d), dInj(d), dWx(d), dH2h(d), dKey(d), dModel(d), dFoot(d)].join('');
+  const mercados=[dPicks(d), dProb(d), (marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')), dCmp(d), dPitch(d), dTrends(d), dRecent(d), dH2h(d), dKey(d), dModel(d)].join('');
+  const lineas=[dSplits(d), dRlm(d), movementSection(d)].join('')||'<div class="card mut">Sin movimientos de línea publicados para este juego.</div>';
+  const props=dProps(d)||'<div class="card mut">Sin props para este juego.</div>';
+  const alin=[tn_?'':lineupsSection(d), dInj(d), dWx(d), dPlayers(d)].join('')||'<div class="card mut">Sin alineaciones ni lesiones publicadas.</div>';
+  const tabs=[['mercados','Mercados'],['lineas','Líneas'],['props','Props'],['alin','Alineaciones']];
+  const panes={mercados, lineas, props, alin};
+  return [dPred(d), dRec(d),
+    `<div id="d-tabs"><div class="ds-tabs" role="tablist">${tabs.map((x,i)=>`<button type="button" role="tab" data-dt="${x[0]}" class="${i?'':'on'}" aria-selected="${i? 'false':'true'}">${x[1]}</button>`).join('')}</div>`,
+    tabs.map((x,i)=>`<div class="ds-pane" data-dt="${x[0]}" ${i?'hidden':''}>${panes[x[0]]}</div>`).join(''),
+    `</div>`, dFoot(d)].join('');
 }
 
 // ---- interacción (delegada, fase de captura para convivir con foldCards)
 document.addEventListener('click',e=>{
+  const tb=e.target.closest('#d-tabs .ds-tabs button');
+  if(tb){ const wrap=tb.closest('#d-tabs'); wrap.querySelectorAll('.ds-tabs button').forEach(b=>{ const on=b===tb; b.classList.toggle('on',on); b.setAttribute('aria-selected', on?'true':'false'); }); wrap.querySelectorAll('.ds-pane').forEach(p=>{ p.hidden=p.dataset.dt!==tb.dataset.dt; }); e.preventDefault(); return; }
   const ib=e.target.closest('.ds .ib');
   if(ib){ const s=ib.closest('.ds'), k=s.dataset.k, di=s.querySelector(':scope > .di'); if(di){ di.hidden=!di.hidden; DST.info[k]=!di.hidden; ib.classList.toggle('on',!di.hidden); } e.preventDefault(); e.stopPropagation(); return; }
   const tt=e.target.closest('.ds .ttl');

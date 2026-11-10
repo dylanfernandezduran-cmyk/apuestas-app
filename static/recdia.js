@@ -18,7 +18,7 @@ function rdAgg(rows){ let W=0,L=0,P=0,u=0,np=0,pend=0,vd=0;
 const rdN = n => Number.isInteger(n)?n:n.toFixed(1);
 const rdWL = a => a.W+a.L+a.P ? `${rdN(a.W)}-${rdN(a.L)}${a.P?'-'+rdN(a.P):''}` : (a.pending?`${a.pending}⏳`:'—');
 const rdCls = a => a.W>a.L?'up':a.L>a.W?'dn':(a.W+a.L?'eq':'nn');
-function rdTabs(on){ return `<div class="pills rtabs">${[['dia','📅 Día','#/record'],['cal','🗓️ Mes','#/record/cal'],['tk','🎟️ Tickets','#/tickets'],['total','Σ Total','#/record/total']].map(([k,l,h])=>`<a class="pill ${k===on?'on':''}" href="${h}">${l}</a>`).join('')}</div>`; }
+function rdTabs(on){ return `<div class="pills rtabs">${[['dia','📅 Día','#/record'],['cal','🗓️ Mes','#/record/cal'],['tk','🎟️ Tickets','#/tickets'],['total','Σ Total','#/record/total'],['info','📚 Método','#/info']].map(([k,l,h])=>`<a class="pill ${k===on?'on':''}" href="${h}">${l}</a>`).join('')}</div>`; }
 function rdKeep(r){
   if(RD.type && r.type!==RD.type) return false;
   if(RD.sport && r.sport!==RD.sport) return false;
@@ -65,7 +65,7 @@ async function viewRecordDay(date){
   const kpi=(l,v,c='')=>`<div class="kpi"><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
   const spK = Object.keys(d.by_sport);
   const spOrder = (SPORTS||[]).map(s=>s.key).filter(k=>spK.includes(k));
-  let html = `<h1>📒 Récord</h1>${rdTabs('dia')}${rdCumBlock(rdCumPick(d))}
+  let html = `<h1>📒 Récord</h1>${rdTabs('dia')}${typeof bkBox==='function'?bkBox():''}${rdCumBlock(rdCumPick(d))}
    <div class="rdnav"><a class="rdar" href="#/record/dia/${rdAdd(date,-1)}" aria-label="Día anterior">‹</a>
      <div class="rdt"><b>${rdName(date,today)}</b><span class="sub">${RD_MES[rdD(date).getUTCMonth()]} ${rdD(date).getUTCFullYear()} · hora CDMX</span></div>
      <a class="rdar" href="#/record/dia/${rdAdd(date,1)}" aria-label="Día siguiente">›</a></div>

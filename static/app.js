@@ -12,6 +12,72 @@ const am = v => v==null ? SD : (v>0?'+'+v:''+v);
 const sg = (v,d=1) => v==null ? SD : (v>0?'+':'')+v.toFixed(d);
 const num = (v,d=1) => v==null||isNaN(v) ? SD : Number(v).toFixed(d);
 
+const BK_KEY='nrnm_bankroll', BK_UNIT_KEY='nrnm_unit_pct', BK_DAILY_KEY='nrnm_daily_used';
+function todayISO(){ return new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date()); }
+function BK(){
+  const bankroll=Math.max(0, parseFloat(localStorage.getItem(BK_KEY)||'')||0);
+  const unit_pct=Math.max(0.1, Math.min(5, parseFloat(localStorage.getItem(BK_UNIT_KEY)||'')||1));
+  let daily=0; try{ const d=JSON.parse(localStorage.getItem(BK_DAILY_KEY)||'{}'); if(d.day===todayISO()) daily=+d.used||0; }catch(e){}
+  return {bankroll, unit_pct, daily_used_frac:daily};
+}
+function BKSet(bankroll, unit_pct){
+  if(bankroll!=null && bankroll!=='') localStorage.setItem(BK_KEY, String(Math.max(0,+bankroll||0)));
+  if(unit_pct!=null && unit_pct!=='') localStorage.setItem(BK_UNIT_KEY, String(Math.max(0.1, Math.min(5,+unit_pct||1))));
+}
+function BKAddDaily(frac){
+  const used=(BK().daily_used_frac||0)+Math.max(0,+frac||0);
+  localStorage.setItem(BK_DAILY_KEY, JSON.stringify({day:todayISO(), used}));
+}
+function agoTxt(ts){
+  if(!ts) return '';
+  const m=Math.max(0, Math.round((Date.now()/1000 - +ts)/60));
+  if(m<1) return 'Actualizado hace menos de 1 min';
+  if(m===1) return 'Actualizado hace 1 min';
+  if(m<60) return 'Actualizado hace '+m+' min';
+  const h=Math.floor(m/60), r=m%60;
+  return 'Actualizado hace '+h+' h'+(r?(' '+r+' min'):'');
+}
+function toDecPrice(x){
+  x=+x; if(!isFinite(x)) return null;
+  if(x<=-100 || x>=100) return x>0?1+x/100:1+100/Math.abs(x);
+  if(x>1) return x;
+  return null;
+}
+function quarterKelly(p, price, bankroll, unit_pct, daily_used_frac){
+  const dec=toDecPrice(price);
+  if(!(p>0&&p<1) || !dec || dec<=1 || !(bankroll>0)) return null;
+  unit_pct=unit_pct==null?1:+unit_pct;
+  daily_used_frac=+daily_used_frac||0;
+  const b=dec-1, q=1-p, fFull=(b*p-q)/b, fQ=fFull*0.25;
+  const remaining=Math.max(0, 0.08-daily_used_frac);
+  if(fQ<=0) return {frac:0,stake:0,units:0,capped:false,kelly_full:fFull,kelly_quarter:fQ,reason:'EV no positivo: no se sugiere stake'};
+  let f=fQ; const reasons=[];
+  if(f>0.02){ f=0.02; reasons.push('tope 2% por pick'); }
+  if(f>remaining){ f=remaining; reasons.push('tope 8% de exposición diaria'); }
+  const unit_size=bankroll*(unit_pct/100), stake=bankroll*f, units=unit_size?stake/unit_size:0;
+  return {frac:f,stake:stake,units:units,unit_size:unit_size,capped:!!reasons.length,kelly_full:fFull,kelly_quarter:fQ,remaining_daily:remaining,reason:reasons.join('; ')||null};
+}
+function fmtStake(s){
+  if(!s||s.frac==null) return '';
+  const u=s.units!=null?s.units.toFixed(2)+'u':'';
+  const mon=s.stake!=null?'$'+Number(s.stake).toFixed(2):'';
+  return [u,mon].filter(Boolean).join(' · ')+(s.capped?' (tope)':'');
+}
+function bkBox(){
+  const b=BK();
+  return `<div class="card bk-box" id="bkbox"><label>Bankroll <input type="number" id="bk-amt" min="0" step="1" value="${b.bankroll||''}" placeholder="0" inputmode="decimal"></label>
+    <label>1u = <input type="number" id="bk-u" min="0.1" max="5" step="0.1" value="${b.unit_pct}"> %</label>
+    <button type="button" class="btn" id="bk-save">Guardar</button>
+    <span class="sub">Stake paper trading: 1/4 Kelly, tope 2% por pick y 8% de exposición diaria.</span></div>`;
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#bk-save')) return;
+  const amt=document.getElementById('bk-amt'), u=document.getElementById('bk-u');
+  BKSet(amt&&amt.value, u&&u.value);
+  if(typeof route==='function') route();
+});
+
+
 setInterval(()=>{document.getElementById('clock').textContent = new Intl.DateTimeFormat('es-MX',{timeZone:TZ,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date())+' · CDMX (UTC-6)'},1000);
 
 // fetch con tope de tiempo: nunca se queda girando; el error sube a route() que muestra el mensaje + «Reintentar»
@@ -62,7 +128,7 @@ const todayKey = () => dayKey(new Date().toISOString());
 function dayLabel(iso){ const k=dayKey(iso); const t=todayKey(); const tm=dayKey(new Date(Date.now()+864e5).toISOString());
   const base = fmtDay(iso); return k===t?`Hoy · ${base}`:k===tm?`Mañana · ${base}`:base; }
 
-const STATUS = {PICK:['🔥','PICK','b-pick'],LEAN:['🟡','LEAN LIGERO','b-lean'],PASS:['⛔','PASS','b-pass'],SIN_LINEA:['🔍','SIN LÍNEA','b-sl']};
+const STATUS = {PICK:['🔥','PICK','b-pick'],LEAN:['🟡','LEAN LIGERO','b-lean'],REVISAR:['⚠️','REVISAR','b-rev'],PASS:['⛔','PASS','b-pass'],SIN_LINEA:['🔍','SIN LÍNEA','b-sl']};
 const badgeSt = s => { const x=STATUS[s]||STATUS.PASS; return `<span class="badge ${x[2]}">${x[0]} ${x[1]}</span>` };
 const confBadge = c => c ? `<span class="badge b-conf">${c.emoji} Confianza ${c.level}</span>` : '';
 
@@ -78,7 +144,7 @@ const recFor = (market, side, line) => { const r = REC_MAP[market+'.'+side]; ret
 const units = u => u==null ? '—' : (u>0?'+':'')+Number(u).toFixed(2)+'u';
 const oddsTxt = r => r.odds==null ? 'sin cuota' : am(r.odds)+(r.book?' · '+esc(r.book):'');
 const SPORT_EM = {mlb:'⚾',nfl:'🏈',nba:'🏀',nhl:'🏒',tenis:'🎾',futbol:'⚽'};
-function setNav(n){ document.querySelectorAll('nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
+function setNav(n){ document.querySelectorAll('#bnav a, #bnav button, header nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on && a.parentElement){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
 
 // ------------------------------------------------------------ rutas
 let ROUTE_SEQ = 0;
@@ -88,19 +154,21 @@ async function route(){
   const h = location.hash.replace(/^#\/?/,'').split('/').map(decodeURIComponent);
   window.scrollTo(0,0); $app.classList.remove('gd');
   try{
-    if(!h[0]||h[0]==='') { setNav('home'); return await viewHome(); }
+    if(!h[0]||h[0]===''||h[0]==='picks'){ setNav('picks'); return await viewPicks(h[0]==='picks'?(h[1]||'24h'):'24h'); }
+    if(h[0]==='inicio'){ setNav('picks'); return await viewHome(); }
+    if(h[0]==='lineas'){ setNav('lineas'); return await viewLineas(); }
+    if(h[0]==='ia'){ setNav('ia'); if(typeof chOpen==='function') chOpen(true); return await viewPicks('24h'); }
     if(h[0]==='deportes'){ setNav('sports'); return await viewSports(); }
     if(h[0]==='deporte'){ setNav('sports'); return await viewSport(h[1], h[2]); }
     if(h[0]==='juego'){ setNav('sports'); return await viewGame(h[1], h[2]); }
     if(h[0]==='prop'){ setNav('sports'); return await viewProp(h[1], h[2], h[3], h[4]); }
-    if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'24h'); }
     if(h[0]==='record'){ setNav('record');
       if(h[1]==='total') return await viewRecord();
       if(h[1]==='cal') return await viewRecordCal(h[2]);
       return await viewRecordDay(h[1]==='dia'?h[2]:null); }
     if(h[0]==='tickets'){ setNav('record'); return await viewTickets(h[1]||null); }
-    if(h[0]==='info'){ setNav('info'); return await viewInfo(); }
-    await viewHome();
+    if(h[0]==='info'){ setNav('record'); return await viewInfo(); }
+    setNav('picks'); await viewPicks('24h');
   }catch(e){ if(seq!==ROUTE_SEQ) return; $app.innerHTML = errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); }
 }
 window.addEventListener('hashchange', route);
@@ -357,7 +425,7 @@ async function viewRecord(){
   const f=n=>Number.isInteger(n)?n:n.toFixed(1);
   const since = S.since ? tsFmt(S.since) : SD;
   const kpi=(l,v,c='')=>`<div class="kpi"><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
-  let html=`<h1>📒 Récord</h1>${rdTabs('total')}<div class="day" style="margin-top:4px">Total de la temporada (todo el historial)</div>
+  let html=`<h1>📒 Récord</h1>${rdTabs('total')}${bkBox()}<div class="day" style="margin-top:4px">Total de la temporada (todo el historial)</div>
    <div class="sub" style="margin-bottom:8px">¿Se ganaron el pick principal y las sugerencias? Se registran al generarse (antes del juego) y se califican con el marcador final real. Historial desde <b>${since}</b> (no hay datos anteriores: nunca se reconstruyen picks de juegos pasados).</div>
    ${S.backfilled?`<div class="card" style="border-color:var(--amb);margin-bottom:8px">⚠️ Incluye <b>${S.backfilled}</b> picks que NO son del modelo en vivo (source ≠ live: demostración/retroactivos). Los picks reales sólo se registran antes del juego.</div>`:''}
    ${pills('sport',[['','Todos'],...SPORTS.map(s=>[s.key,s.emoji+' '+s.name])])}
@@ -382,9 +450,12 @@ async function gradeNow(btn){ btn.disabled=true; btn.textContent='Calificando…
 // ------------------------------------------------------------ picks del día
 const PICK_GROUPS = ['mlb','nfl','futbol','nba','nhl','tenis'];
 async function viewPicks(scope){
+  const seq=ROUTE_SEQ;
   SPORTS = SPORTS || await api('/api/sports');
+  if(seq!==ROUTE_SEQ) return;
   loading('Calculando picks de todos los deportes (primera vez puede tardar ~20 s)…');
   const d = await api('/api/picks?scope='+scope);
+  if(seq!==ROUTE_SEQ) return;
   const tabs=[['24h','Próx. 24 h'],['hoy','Hoy'],['manana','Mañana'],['72h','72 h']];
   const t=`<div class="pills">${tabs.map(([k,l])=>`<a class="pill ${k===scope?'on':''}" href="#/picks/${k}">${l}</a>`).join('')}</div>`;
   const withOdds=d.items.filter(r=>r.has_odds&&r.status!=='PASS'), pass=d.items.filter(r=>r.has_odds&&r.status==='PASS'), noodds=d.items.filter(r=>!r.has_odds);
@@ -398,8 +469,9 @@ async function viewPicks(scope){
     return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div class="pkt">${st[0]} ${esc(l.label)} <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span></div>
     <div class="pke mono">${edgeBit}<span class="${evCls}">${l.ev==null?SD:sg(l.ev)+'%'}</span><small${tip('EV')}>EV</small></div></div>
     <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}${l.divergence_high?' <span class="divf">Divergencia alta</span>':''}<span class="sub">${esc(g.league_name)} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
-    <div class="stat mono">Modelo ${pct(l.p_model)} · ${tipAbbr('s/vig')} ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}${det}</a>`; };
-  let html=`<h1>🔥 Top picks · todos los deportes</h1>${t}<div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por ${tipAbbr('EV')}, confianza y estado (la divergencia alta no se promociona como edge). <b>Estimaciones del modelo</b>, no garantías.</div>`;
+    <div class="stat mono">Modelo ${pct(l.p_model)} · ${tipAbbr('s/vig')} ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}${(()=>{ const b=BK(); const p=l.p||l.p_final||l.p_model; if(!b.bankroll||p==null||l.price==null) return ''; const s=quarterKelly(p,l.price,b.bankroll,b.unit_pct,b.daily_used_frac); return s&&s.frac>0?`<div class="sub">Cuánto meterle: ${fmtStake(s)}</div>`:''; })()}${det}</a>`; };
+  const compact=`<section class="hm" id="pk-live" hidden></section><section class="hm" id="pk-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
+  let html=`${compact}<h1>🔥 Top picks · todos los deportes</h1>${t}<p class="ago">${esc(agoTxt(d.generated||d.ts||d.now))}</p><div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por ${tipAbbr('EV')}, confianza y estado (la divergencia alta no se promociona como edge). <b>Estimaciones del modelo</b>, no garantías.</div>`;
   if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
   // agrupado por deporte (orden: MLB, NFL, Fútbol, NBA, NHL, Tenis; grupos vacíos ocultos). Dentro de cada grupo: con ventaja, PASS y sin línea (orden del servidor)
   const rank=r=>r.has_odds?(r.status==='PASS'?1:0):2;
@@ -409,7 +481,19 @@ async function viewPicks(scope){
     const sp=(SPORTS||[]).find(x=>x.key===k)||{name:k,emoji:''}, nPick=its.filter(r=>r.has_odds&&r.status!=='PASS').length;
     html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${sp.emoji}</span> ${esc(sp.name)} <span class="n mono">${its.length}${nPick?` · ${nPick} con ventaja`:''}</span></h2>`+its.slice(0,30).map(card).join('');
   });
+  if(seq!==ROUTE_SEQ) return;
   $app.innerHTML=html;
+  if(typeof srchInit==='function'){ const s=document.getElementById('pk-search'); if(s) srchInit(s); }
+  api('/api/home').then(h=>{
+    const el=document.getElementById('pk-live'); if(!el||!h||!h.live||!h.live.length) return;
+    el.hidden=false;
+    const row=g=>{
+      if(typeof liveRowHtml==='function') return liveRowHtml(g);
+      const href=`#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id||g.eid)}`;
+      return `<a class="card" href="${href}">${esc((g.away&&(g.away.abbr||g.away.name))||'')} vs ${esc((g.home&&(g.home.abbr||g.home.name))||'')}</a>`;
+    };
+    el.innerHTML=`<h3>En vivo ahora <span class="badge b-live">${h.live.length}</span> <a class="more" href="#/inicio">Ver resumen →</a></h3>`+h.live.slice(0,8).map(row).join('');
+  }).catch(()=>{});
 }
 
 

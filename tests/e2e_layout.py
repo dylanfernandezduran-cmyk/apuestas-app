@@ -24,7 +24,7 @@ async def main():
         mixed = [item(10,"tenis"), item(11,"nhl"), item(12,"futbol"), item(13,"nba"), item(14,"mlb"), item(15,"nfl"), item(16,"futbol"), item(17,"mlb")]
         await pg.route("**/api/picks*", jf(dict(items=mixed, n_games=8)))
         await pg.route("**/api/img*", lambda r: r.fulfill(status=404, body="x"))
-        await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_selector(".snav a"); await pg.wait_for_selector("#hm-rec")
+        await pg.goto(f"http://localhost:{PORT}/#/inicio"); await pg.wait_for_selector(".snav a"); await pg.wait_for_selector("#hm-rec")
         await pg.wait_for_function("() => (document.querySelector('#hm-rec')||{}).textContent && /R[eé]cord/i.test(document.querySelector('#hm-rec').textContent)")
         out["secciones"] = await pg.evaluate("[...document.querySelectorAll('main section.hm, main div.snav')].map(e=>e.id)")
         out["hm_rec_text"] = await pg.evaluate("document.querySelector('#hm-rec') ? document.querySelector('#hm-rec').textContent : ''")

@@ -555,7 +555,7 @@ async def picks(scope="24h"):
                     official=p.get("official") or [], considered=p.get("considered") or [], strict=("official" in p), pred=_pred_brief(a.get("pred")),
                     top=[c for c in p["candidates"][:3]], model=a.get("model"), brief=PR.brief(a.get("probs")))
     rs = [r for r in await asyncio.gather(*[one(g) for g in games]) if r]
-    pri = {"PICK": 0, "LEAN": 1, "PASS": 2, "SIN_LINEA": 3}
+    pri = {"PICK": 0, "LEAN": 1, "REVISAR": 2, "PASS": 3, "SIN_LINEA": 4}
     if ST.ENABLED: rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("score")) or 0)))
     else:
         cw = {"Alta": 2, "Media": 1, "Baja": 0}

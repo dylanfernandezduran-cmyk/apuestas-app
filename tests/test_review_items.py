@@ -47,7 +47,7 @@ def test_cand_marks_high_divergence_and_apply_demotes_pick():
     assert c["divergence_high"] is True and c["divergence"] > 10
     c["status"] = "PICK"
     M.apply_confidence([c], dict(level="Alta"))
-    assert c["status"] == "LEAN" and c.get("downgraded") and c.get("flag") == "Divergencia alta"
+    assert c["status"] == "REVISAR" and c.get("downgraded") and c.get("flag") == "Divergencia alta"
     assert c["edge_display"] is None
     # no se promociona a PICK aunque la confianza sea Alta
     assert c["status"] != "PICK"

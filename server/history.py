@@ -98,3 +98,13 @@ def stats():
         if not c: return dict(path=None)
         return dict(path=os.path.abspath(PATH), lines=c.execute("SELECT COUNT(*) FROM lines").fetchone()[0],
                     splits=c.execute("SELECT COUNT(*) FROM splits").fetchone()[0], games=c.execute("SELECT COUNT(DISTINCT league||eid) FROM lines").fetchone()[0])
+
+def changed_since(since_ts):
+    """Claves (league, eid) con al menos un cambio de línea o split desde `since_ts`."""
+    since_ts = int(since_ts)
+    with _lock:
+        c = _open()
+        if not c: return []
+        rows = c.execute("SELECT DISTINCT league, eid FROM lines WHERE ts>=? UNION SELECT DISTINCT league, eid FROM splits WHERE ts>=?",
+                         (since_ts, since_ts)).fetchall()
+        return [(r[0], r[1]) for r in rows]

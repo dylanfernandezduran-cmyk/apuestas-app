@@ -1,8 +1,8 @@
 {
   "active": "nrnm_final_blanco_americano",
   "theme": {
-    "bg": "#0b0e13",
-    "accent": "#FF1179"
+    "bg": "#0b0b0e",
+    "accent": "#e11d63"
   },
   "options": {
     "ventaja": {
@@ -45,18 +45,18 @@
       "short": "NRNM",
       "tagline": "Riesgo medido, picks con datos",
       "palette": {
-        "acc": "#FF1179",
-        "grn": "#06AAC4",
-        "red": "#FF1179",
+        "acc": "#e11d63",
+        "grn": "#2dd4bf",
+        "red": "#e11d63",
         "amb": "#fbbf24",
-        "blu": "#3C85F7",
-        "live": "#3C85F7",
-        "bg": "#000000",
-        "panel": "#0d0d0d",
-        "panel2": "#141414",
-        "hair": "#1f1f1f",
-        "line": "#1f1f1f",
-        "ink": "#000000"
+        "blu": "#2dd4bf",
+        "live": "#ff7aa2",
+        "bg": "#0b0b0e",
+        "panel": "#15151a",
+        "panel2": "#23232b",
+        "hair": "#2a2a31",
+        "line": "#2a2a31",
+        "ink": "#0b0b0e"
       },
       "label": "Rosa neón (recomendada)",
       "desc": "Triángulo rosa, ojo blanco, pupila-pelota teal y línea de cancha rosa. Paleta: rosa = marca/CTA, teal = ganado/positivo, azul = en vivo/info, naranja-rojo = pérdida."
@@ -429,18 +429,18 @@
       "short": "NRNM",
       "tagline": "Riesgo medido, picks con datos",
       "palette": {
-        "acc": "#FF1179",
-        "grn": "#06AAC4",
-        "red": "#FF1179",
+        "acc": "#e11d63",
+        "grn": "#2dd4bf",
+        "red": "#e11d63",
         "amb": "#fbbf24",
-        "blu": "#3C85F7",
-        "live": "#3C85F7",
-        "bg": "#000000",
-        "panel": "#0d0d0d",
-        "panel2": "#141414",
-        "hair": "#1f1f1f",
-        "line": "#1f1f1f",
-        "ink": "#000000"
+        "blu": "#2dd4bf",
+        "live": "#ff7aa2",
+        "bg": "#0b0b0e",
+        "panel": "#15151a",
+        "panel2": "#23232b",
+        "hair": "#2a2a31",
+        "line": "#2a2a31",
+        "ink": "#0b0b0e"
       },
       "label": "Blanco · balón americano",
       "desc": "Todo blanco sobre negro puro #000; el iris es un balón americano con cordones en negativo (negros).",

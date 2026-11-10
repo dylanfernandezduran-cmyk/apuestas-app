@@ -237,15 +237,17 @@ def decide(cands, model, home_name, away_name):
 
 
 def apply_confidence(cands, conf):
-    """PICK sólo con confianza Media/Alta; Baja o divergencia alta se degradan a LEAN (nunca estrella/top)."""
+    """PICK sólo con confianza Media/Alta. Divergencia alta => REVISAR (no PICK/estrella). Confianza Baja degrada PICK a LEAN."""
     for c in cands:
         c["conf_level"] = conf.get("level")
         if c.get("divergence_high"):
             c["flag"] = "Divergencia alta"
-            # no se presenta el hueco bruto como «edge» promocionable
             c["edge_display"] = None
+            if c.get("status") in ("PICK", "LEAN"):
+                c["status"] = "REVISAR"
+                c["downgraded"] = True
+                c["downgraded_reason"] = "Divergencia alta"
         else:
             c["edge_display"] = c.get("edge")
-        if c["status"] == "PICK" and (conf["level"] == "Baja" or c.get("divergence_high")):
-            c["status"] = "LEAN"; c["downgraded"] = True
-            if c.get("divergence_high"): c["downgraded_reason"] = "Divergencia alta"
+            if c["status"] == "PICK" and conf["level"] == "Baja":
+                c["status"] = "LEAN"; c["downgraded"] = True

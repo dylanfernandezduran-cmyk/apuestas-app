@@ -94,6 +94,8 @@ async def main_():
         for dd in [x["date"] for x in REC.days()][:120]: await get(f"/api/record/day?date={dd}")
         await get("/api/record/day")
         await get("/api/chat/status")
+        await get("/api/lineas")
+        await get("/api/lineas?hours=36")
     meta = dict(built=built, seconds=round(time.time() - t0, 1), games=len(jobs), ok=STATS["ok"], err=STATS["err"], errors=STATS["errors"][:40])
     json.dump(meta, open(os.path.join(OUT, "data", "build.json"), "w"), indent=1)
     open(os.path.join(OUT, ".nojekyll"), "w").close()

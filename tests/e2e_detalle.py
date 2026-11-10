@@ -29,7 +29,7 @@ async def main():
         await pg.route("**/api/picks*", jf(dict(items=[], n_games=0)))
         await pg.route("**/api/games*", jf(dict(ok=True,games=[],name="Liga MX",now=1.0,league="mex.1"))); await pg.route("**/api/img*", lambda r: r.fulfill(status=404, body="x"))
         # ---- buscador
-        await pg.goto(f"http://localhost:{PORT}/#/"); await pg.wait_for_selector("#hm-search input")
+        await pg.goto(f"http://localhost:{PORT}/#/inicio"); await pg.wait_for_selector("#hm-search input")
         out["orden"] = await pg.evaluate("[...document.querySelectorAll('main section.hm, main div.snav')].map(e=>e.id)")
         out["input_font"] = await pg.evaluate("parseFloat(getComputedStyle(document.querySelector('#hm-search input')).fontSize)")
         out["oculto_al_inicio"] = await pg.evaluate("document.querySelector('.srch-r').hidden")
@@ -54,7 +54,7 @@ async def main():
               nombres:[...document.querySelectorAll('.gh2 .hs .n')].map(n=>n.innerText), bloques:[...document.querySelectorAll('.mkb-h')].map(h=>h.innerText),
               bordes:S.filter(s=>parseFloat(getComputedStyle(s).borderTopWidth)>0).length, h:document.documentElement.scrollHeight,
               heads:S.slice(0,3).map(s=>[getComputedStyle(s.querySelector('.ttl')).textTransform, parseFloat(getComputedStyle(s.querySelector('.ttl')).letterSpacing)>0])}})()""")
-        ORDER = ["pred","rec","picks","prob","splits","rlm","move","odds","mkt","players","cmp","pitch","trd","rcn","lin","inj","wx","h2h","key","mdl"]
+        ORDER = ["pred","rec","picks","prob","odds","mkt","cmp","pitch","trd","rcn","h2h","key","mdl","splits","rlm","move","lin","inj","wx","players"]
         out["soc"] = await detalle(M.with_pred(SOC), "mex.1", "401876909")
         out["nfl"] = await detalle(M.with_pred(NFL), "nfl", "401873036")
         out["tenis"] = await detalle(M.with_pred(M.tennis(state="pre")), "atp", "1")
