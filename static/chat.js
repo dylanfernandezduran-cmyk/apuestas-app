@@ -2,7 +2,7 @@
    Si el servidor tiene un LLM configurado (llave en variable de entorno) lo usa; si no (o en la versión de GitHub Pages), responde el motor local con reglas
    sobre los mismos datos. Nunca inventa cifras: si un dato no está, lo dice. */
 const CH = {open:false, msgs:[], busy:false, llm:null, picks:null, picksT:0};
-const CH_DISC='Son estimaciones de un modelo, no una garantía. Apuesta con responsabilidad.';
+const CH_DISC='Estimación del modelo, no garantía de ganancia.';
 const CH_CHASE='No persigas las pérdidas: subir la apuesta para recuperar no mejora el valor esperado y aumenta el riesgo de ruina.';
 const CH_BAN=/\b(seguro|segura|seguros|seguras|garantizado|garantizada|garantizados|garantizadas)\b/gi;
 const CH_CHASE_RE=/recuper(ar|o|ando)|perdid|cazar|perseguir|aument(ar|o|ando) la apuesta|doblar (la )?apuesta|all-?in/i;
@@ -311,8 +311,8 @@ function chRender(){
   p.hidden=!CH.open; const fab=document.getElementById('chb'); if(fab) fab.classList.toggle('on',CH.open); chSyncNav();
   if(!CH.open) return;
   const _bk=typeof BK==='function'?BK():{bankroll:'',unit_pct:1};
-  const sug=['Arma un parlay de 3 con mayor confianza del modelo','Mejores picks de hoy','Picks NBA','Ambos anotan','¿Cómo vamos en el récord?'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
-  p.innerHTML=`<div class="ch-h"><b>Chat NRNM</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
+  const sug=['Props NBA','Alineaciones','Armar ticket'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
+  p.innerHTML=`<div class="ch-h"><b>Analista NRNM · datos reales</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
     <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):'<div class="ch-a">Hola, pregúntame por picks, un equipo, lesiones, props o el récord. Uso sólo los datos de la app.</div>'}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
     <div class="ch-s">${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>
     <div class="ch-bk"><label>Bankroll <input id="ch-bk" type="number" min="0" step="1" value="${_bk.bankroll||''}" placeholder="opcional"></label>
@@ -334,7 +334,7 @@ async function chSend(q){
   const b=document.createElement('button'); b.id='chb'; b.type='button'; b.setAttribute('aria-label','Abrir chat IA'); b.innerHTML='<span>IA</span>';
   document.body.appendChild(b);
   b.addEventListener('click',()=>{ CH.open=!CH.open; chRender(); if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); } });
-  document.addEventListener('click',e=>{ const n=e.target.closest('#nav-ia'); if(!n) return; e.preventDefault(); CH.open=!CH.open; chRender(); if(CH.open){ const i=document.getElementById('chi'); if(i) i.focus(); } });
+
   document.addEventListener('click',e=>{
     if(e.target.closest('#chp .ch-x')){ CH.open=false; chRender(); }
     const s=e.target.closest('#chp .ch-sg'); if(s) chSend(s.textContent);

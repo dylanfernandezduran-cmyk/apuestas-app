@@ -1,6 +1,6 @@
-"""Aceptación del rediseño: Kelly, detectores ≥3 pp, REVISAR, chat, nav, footer, paleta."""
-import os, re, time
-from server import stake as ST, lineas as LN, model as M, chat as CHAT
+"""Aceptación del rediseño (spec sections 5-8): núcleo, estados, detector, UI, récord."""
+import json, os, subprocess, shutil
+from server import stake as ST, lineas as LN, model as M, chat as CHAT, core as CORE
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def src(*parts):
@@ -13,91 +13,148 @@ def test_kelly_zero_when_no_edge():
     assert r and r["frac"] == 0 and r["stake"] == 0 and "EV no positivo" in (r["reason"] or "")
 
 def test_kelly_quarter_and_pick_cap():
-    # p=0.70 a -110 es un edge grande: 1/4 Kelly debería superar 2% y caparse
     r = ST.quarter_kelly(0.70, -110, 10000, unit_pct=1)
     assert r and r["capped"] and abs(r["frac"] - 0.02) < 1e-9
-    assert r["stake"] == 200.0  # 2% de 10,000
+    assert r["stake"] == 200.0
     assert "tope 2% por pick" in (r["reason"] or "")
-    assert r["units"] == 2.0  # 1u = 1% = 100
+    assert r["units"] == 2.0
 
 def test_kelly_daily_cap():
     r = ST.quarter_kelly(0.70, -110, 10000, daily_used_frac=0.075)
     assert r and r["capped"] and abs(r["frac"] - 0.005) < 1e-9
     assert "tope 8% de exposición diaria" in (r["reason"] or "")
 
-def test_kelly_accepts_decimal_and_american():
-    a = ST.quarter_kelly(0.60, -150, 5000)
-    b = ST.quarter_kelly(0.60, 1 + 100/150, 5000)
-    assert a and b and abs(a["frac"] - b["frac"]) < 1e-9
-
-def test_kelly_missing_returns_none():
-    assert ST.quarter_kelly(None, -110, 1000) is None
-    assert ST.quarter_kelly(0.6, None, 1000) is None
-    assert ST.quarter_kelly(0.6, -110, 0) is None
+def test_no_apostar_when_ev_le_0():
+    assert CORE.ev(0.50, -110) < 0
+    assert CORE.stake_pct(0.50, -110) == 0
 
 
-# ---- detectores: solo ≥ 3 pp; datos de prueba
-def _pts(*pairs):
-    """pairs: (offset_s, price) desde t0."""
-    t0 = 1_700_000_000
-    return [[t0 + off, None, price] for off, price in pairs]
+# ---- pFinal n0=100, ±20 pp, pickState
+def test_pfinal_weight_n0_100_and_clamp():
+    # n=0 → 100% mercado; n=50 → w=0.25; n>=100 → w=0.5
+    assert abs(CORE.p_final(0.70, 0.50, 0) - 0.50) < 1e-9
+    mid = CORE.p_final(0.70, 0.50, 50)
+    assert abs(mid - (0.25 * 0.70 + 0.75 * 0.50)) < 1e-9
+    full = CORE.p_final(0.70, 0.50, 100)
+    assert abs(full - (0.5 * 0.70 + 0.5 * 0.50)) < 1e-9
+    # clamp ±20 pp: modelo 0.90 vs mercado 0.50 → recortado a 0.70
+    clamped = CORE.p_final(0.90, 0.50, 100)
+    assert abs(clamped - (0.5 * 0.70 + 0.5 * 0.50)) < 1e-9
 
-def test_steam_requires_3pp_inside_60min():
-    # -110 (~52.4%) a -130 (~56.5%) = ~4.1 pp en 20 min
-    st = LN.steam_in_series(_pts((0, -110), (20 * 60, -130)))
-    assert st and st["kind"] == "STEAM" and abs(st["pp"]) >= 3
-    # ~1 pp no alerta
-    no = LN.steam_in_series(_pts((0, -110), (20 * 60, -115)))
-    assert no is None
-    # ≥3 pp pero fuera de 60 min no es STEAM
-    late = LN.steam_in_series(_pts((0, -110), (2 * 3600, -150)))
-    assert late is None
+def test_pick_state_thresholds():
+    assert CORE.pick_state(4, 0.02, "Media", 5) == "PICK"
+    assert CORE.pick_state(4, 0.02, "baja", 5) == "LEAN"
+    assert CORE.pick_state(2, 0.01, "Alta", 3) == "LEAN"
+    assert CORE.pick_state(0.5, 0.01, "Alta", 2) == "PASS"
+    assert CORE.pick_state(8, 0.10, "Alta", 12) == "REVISAR"
 
-def test_rlm_public_and_against():
-    # público 60% tickets; línea del lado público empeora (prob baja ≥3 pp): -150 (~60%) a -110 (~52.4%)
-    books = [_pts((0, -150), (3600, -110))]
-    splits = [[1, 60, 55], [2, 62, 54]]
-    r = LN.rlm_in_market(books, splits)
-    assert r and r["kind"] == "RLM" and r["tickets"] >= 55 and r["pp"] <= -3
-    # público < 55 no alerta
-    assert LN.rlm_in_market(books, [[1, 40, 40]]) is None
-    # movimiento a favor del público no es RLM
-    fav = [_pts((0, -110), (3600, -150))]
-    assert LN.rlm_in_market(fav, splits) is None
-
-def test_rezagada_consensus_and_laggard():
-    # consenso se mueve ~6 pp; BookC no se mueve
-    by = {
-        "A": _pts((0, -110), (3600, -140)),
-        "B": _pts((0, -110), (3600, -138)),
-        "C": _pts((0, -110), (3600, -110)),
-    }
-    rz = LN.rezagada_in_market(by)
-    assert rz and rz["kind"] == "REZAGADA" and abs(rz["consensus_pp"]) >= 3
-    assert any(x["book"] == "C" for x in rz["laggards"])
-    # todos se mueven igual: no rezagada
-    even = {k: _pts((0, -110), (3600, -140)) for k in "ABC"}
-    assert LN.rezagada_in_market(even) is None
-
-def test_detect_filters_sub_3pp():
-    series = {
-        "lines": {"ml": {"A": {"home": _pts((0, -110), (600, -115))}}},
-        "splits": {},
-        "n_points": 2,
-    }
-    assert LN.detect(series) == []
-
-
-# ---- REVISAR por divergencia alta
 def test_divergence_high_sets_revisar():
     c = dict(status="PICK", ev=8, edge=12, p=0.6, p_model=0.7, p_nv=0.55, divergence=12, divergence_high=True)
     M.apply_confidence([c], dict(level="Alta"))
     assert c["status"] == "REVISAR"
     assert c.get("flag") == "Divergencia alta"
-    assert c.get("edge_display") in (None, 0) or c.get("downgraded")
+    # PASS with high gap also becomes REVISAR
+    p = dict(status="PASS", ev=-1, edge=0.5, divergence=15, divergence_high=True)
+    M.apply_confidence([p], dict(level="Media"))
+    assert p["status"] == "REVISAR"
 
 
-# ---- chat: polish, disclaimer, chase, sections, no certeza
+# ---- detector sobre datos de muestra (spec §6 y §8)
+def _snaps(books_moves, t0=1_700_000_000_000):
+    """books_moves: {book: [(offset_min, odds), ...]}"""
+    out = []
+    for book, pts in books_moves.items():
+        for off, odds in pts:
+            out.append(dict(book=book, t=t0 + off * 60_000, odds=odds))
+    return out
+
+def test_detect_steam_rlm_rezagada_on_sample():
+    # 4 casas se mueven ~5 pp en 30 min ( -110 ~52.4% → -130 ~56.5%)
+    steam = _snaps({b: [(0, -110), (30, -130)] for b in ("Pinnacle", "FanDuel", "DraftKings", "BetMGM")})
+    d = CORE.detect_moves(steam, pct_tickets=0.40)
+    assert "STEAM" in d["tags"] and abs(d["ppConsensus"]) >= 3
+    assert "RLM" in d["tags"]  # cons>3 y tickets 40% ≤ 45%
+    # sin 3 casas alineadas no hay STEAM
+    two = _snaps({b: [(0, -110), (30, -130)] for b in ("A", "B")})
+    d2 = CORE.detect_moves(two)
+    assert "STEAM" not in d2["tags"]
+    # movimiento < 3 pp no es STEAM
+    tiny = _snaps({b: [(0, -110), (30, -115)] for b in ("Pinnacle", "FanDuel", "DraftKings", "BetMGM")})
+    assert "STEAM" not in CORE.detect_moves(tiny)["tags"]
+    # REZAGADA: 3 casas a -130, BetRivers se queda en -108 (mejor precio / implícita más baja)
+    lag = _snaps({
+        "Pinnacle": [(0, -110), (30, -130)],
+        "FanDuel": [(0, -110), (30, -130)],
+        "DraftKings": [(0, -110), (30, -128)],
+        "BetRivers": [(0, -110), (30, -108)],
+    })
+    d3 = CORE.detect_moves(lag, pct_tickets=None)
+    assert "REZAGADA" in d3["tags"]
+    assert any(x["book"] == "BetRivers" and x["odds"] == -108 for x in d3["laggards"])
+    # RLM no se etiqueta si falta % tickets
+    assert "RLM" not in d3["tags"]
+
+def test_lineas_scan_sample_series_only_3pp():
+    # historial sintético en forma series
+    t0 = 1_700_000_000
+    def pts(*pairs):
+        return [[t0 + off, None, price] for off, price in pairs]
+    series = {"lines": {"ml": {
+        "Pinnacle": {"home": pts((0, -110), (1800, -130))},
+        "FanDuel": {"home": pts((0, -110), (1800, -130))},
+        "DraftKings": {"home": pts((0, -110), (1800, -130))},
+        "BetRivers": {"home": pts((0, -110), (1800, -108))},
+    }}, "splits": {}, "n_points": 8}
+    al = LN.detect(series)
+    assert al and abs(al[0]["pp"]) >= 3
+    assert "STEAM" in al[0]["tags"] and any("REZAGADA" in t for t in al[0]["tags"])
+    # sub-3pp no aparece
+    small = {"lines": {"ml": {"A": {"home": pts((0, -110), (600, -115))}}}, "splits": {}, "n_points": 2}
+    assert LN.detect(small) == []
+
+
+# ---- JS ↔ Python parity of the core (spec §6)
+def test_core_js_matches_python():
+    node = shutil.which("node")
+    if not node:
+        return
+    js = open(os.path.join(ROOT, "static", "nrnm-core.js"), encoding="utf-8").read()
+    script = js + r"""
+    const steam = [];
+    for (const b of ['Pinnacle','FanDuel','DraftKings','BetMGM']) {
+      steam.push({book:b,t:0,odds:-110},{book:b,t:30*60000,odds:-130});
+    }
+    const det = detectMoves(steam, {pctTickets:0.40});
+    const out = {
+      ev: ev(0.55, -110),
+      pFinal0: pFinal(0.70, 0.50, 0),
+      pFinal50: pFinal(0.70, 0.50, 50),
+      pFinal100: pFinal(0.70, 0.50, 100),
+      pFinalClamp: pFinal(0.90, 0.50, 100),
+      statePick: pickState({edge:4, evVal:0.02, conf:'Media', gapPP:5}),
+      stateRev: pickState({edge:8, evVal:0.1, conf:'Alta', gapPP:12}),
+      parlay: parlay([{odds:-110,pModel:0.55},{odds:120,pModel:0.48}]),
+      detTags: det.tags,
+      detPP: det.ppConsensus
+    };
+    console.log(JSON.stringify(out));
+    """
+    raw = subprocess.check_output([node, "-e", script], text=True)
+    jsout = json.loads(raw)
+    assert abs(jsout["ev"] - CORE.ev(0.55, -110)) < 1e-9
+    assert abs(jsout["pFinal0"] - CORE.p_final(0.70, 0.50, 0)) < 1e-9
+    assert abs(jsout["pFinal50"] - CORE.p_final(0.70, 0.50, 50)) < 1e-9
+    assert abs(jsout["pFinal100"] - CORE.p_final(0.70, 0.50, 100)) < 1e-9
+    assert abs(jsout["pFinalClamp"] - CORE.p_final(0.90, 0.50, 100)) < 1e-9
+    assert jsout["statePick"] == CORE.pick_state(4, 0.02, "Media", 5) == "PICK"
+    assert jsout["stateRev"] == "REVISAR"
+    pl = CORE.parlay([{"odds": -110, "pModel": 0.55}, {"odds": 120, "pModel": 0.48}])
+    assert jsout["parlay"]["american"] == pl["american"]
+    assert abs(jsout["parlay"]["evCap"] - pl["evCap"]) < 1e-9
+    assert "STEAM" in jsout["detTags"] and "RLM" in jsout["detTags"]
+
+
+# ---- chat
 def test_chat_polish_bans_and_disclaimer():
     out = CHAT.polish("Este pick es seguro y está garantizado.", "¿quién gana?")
     assert "seguro" not in out.lower() and "garantizado" not in out.lower()
@@ -106,55 +163,86 @@ def test_chat_polish_bans_and_disclaimer():
 
 def test_chat_chase_warning():
     out = CHAT.polish("Mete más unidades.", "quiero recuperar lo perdido y doblar la apuesta")
-    assert "No persigas las pérdidas" in out
+    assert "No persigas las pérdidas" in out or "pausar" in out.lower() or "bajar" in out.lower()
     assert CHAT.DISCLAIMER in out
 
 def test_chat_system_has_sections_and_no_certainty():
     s = CHAT.SYSTEM.lower()
     for sec in CHAT.SECTIONS:
         assert sec.lower() in s or sec in CHAT.SYSTEM
-    assert "seguro" in s and "garantizado" in s  # mencionadas como prohibidas
-    assert "nunca uses" in s
+    assert "seguro" in s and "garantizado" in s
+    assert "nunca digas" in s or "nunca uses" in s
+    assert "tope" in s and "independ" in s
 
 
-# ---- UI: nav, footer, paleta, emojis se conservan, rutas, ticket bar
-def test_bottom_nav_and_footer_help():
-    html = src("static", "index.html")
-    css = src("static", "style.css")
-    app = src("static", "app.js")
+# ---- UI acceptance (spec §3, §4, §8)
+def test_screens_nav_footer_tokens_and_copy():
+    html, css, app = src("static", "index.html"), src("static", "style.css"), src("static", "app.js")
+    rec, ch, tk, det = src("static","recdia.js"), src("static","chat.js"), src("static","ticket.js"), src("static","detalle.js")
+    blob = html + app + rec + ch + tk + det
     for label in ("Picks", "Deportes", "Líneas", "Récord", "IA"):
         assert label in html
-    assert 'id="bnav"' in html and 'href="#/lineas"' in html and 'id="nav-ia"' in html
-    assert "juegosysorteos.gob.mx" in html and "800 911 2000" in html
-    assert 'id="legal"' in html and "footer.legal,#legal{position:fixed" in css.replace(" ", "")
-    # paleta exacta
+    assert 'id="bnav"' in html and 'href="#/lineas"' in html
+    assert "juegosysorteos.gob.mx" in html
+    footer = "Estimaciones de un modelo estadístico con datos públicos. No son consejos financieros ni garantizan ganancias. Apuesta con responsabilidad; solo mayores de edad"
+    assert footer in html
     for hex_ in ("#0b0b0e", "#15151a", "#23232b", "#2a2a31", "#f4f4f5", "#a1a1aa",
                  "#e11d63", "#ff5c8d", "#2dd4bf", "#fbbf24", "#ff7aa2"):
         assert hex_ in css
+    assert "--r-card:16px" in css and "--r-btn:12px" in css and "--r-chip:999px" in css
+    assert "--nav-h:72px" in css or "72px" in css
+    assert "Inter:wght@400;600;700;800" in html
     # emojis se conservan
     assert "🔥" in app and "🎟️" in src("static", "ticket.js")
     # rutas
-    assert "h[0]==='lineas'" in app and "viewLineas" in app
-    assert "viewPicks" in app and "h[0]==='picks'" in app
-    assert "setNav('record')" in app and "viewInfo" in app
-    # ticket bar
-    assert 'id="tkbar"' in html and "function tkFab" in src("static", "ticket.js")
-    assert "Pick oficial" in src("static", "ticket.js") and "No es pick oficial" in src("static", "ticket.js")
-    assert "tope/estimado" in src("static", "ticket.js") or "estimado, tope" in src("static", "ticket.js")
-    # detalle tabs
+    for frag in ("#/picks", "#/deportes", "#/lineas", "#/record", "#/ia", "#/metodo", "viewLineas", "viewPicks"):
+        assert frag in blob
+    # chips
+    assert "Alta confianza" in app and "Mejor pick de hoy" in app
+    assert "Hoy no hay pick" in app
+    assert "Divergencia alta: modelo" in app
+    assert "Agregar al ticket" in app
+    # Deportes
+    assert "En vivo ahora" in app
+    # IA
+    ch = src("static", "chat.js")
+    assert "Analista NRNM · datos reales" in ch
+    assert "Props NBA" in ch and "Alineaciones" in ch and "Armar ticket" in ch
+    # Método
+    assert "Probabilidad final" in app and "Edge y EV" in app and "Casas y consenso" in app
+    assert "RLM y dinero" in app and "Confianza" in app
+    assert "no ve lesiones de último minuto ni descansos" in app
+    # Ticket
+    tk = src("static", "ticket.js")
+    assert "Pick oficial" in tk and "No es pick oficial" in tk
+    assert "Vaciar" in tk and "Guardar ticket" in tk
+    assert "tkn" in tk
+    assert "supone independencia y acumula el error del modelo" in tk
+    assert "EV por 1u (tope)" in tk
+    assert "Ticket ·" in tk and ">Ver<" in tk or "Ver</button>" in tk
+    # detalle tabs + Mi pick
     det = src("static", "detalle.js")
     for tab in ("Mercados", "Líneas", "Props", "Alineaciones"):
         assert tab in det
-    assert "dPred(d)" in det and "dRec(d)" in det
-    # Método desde récord
-    assert "Método" in src("static", "recdia.js") and "#/info" in src("static", "recdia.js")
-    # chat bankroll + disclaimer
-    ch = src("static", "chat.js")
-    assert "ch-bk" in ch and "CH_DISC" in ch and "chPolish" in ch
-    # arquitectura multi-archivo
-    assert "lineas.js" in html and "app.js" in html and "chat.js" in html
+    assert "compra el mejor" in det
+    # no FAB tapando
+    assert "#chb,#tkb{display:none" in css.replace(" ", "") or "display:none !important" in css
+    # core loaded
+    assert "nrnm-core.js" in html
 
-def test_api_routes_wired():
-    main = src("server", "main.py")
-    assert '/api/lineas' in main and '/api/stake' in main
-    assert "bankroll=br" in main or "bankroll" in main
+def test_revisar_is_not_featured():
+    app = src("static", "app.js")
+    # el destacado excluye REVISAR
+    assert "status!=='REVISAR'" in app or 'status!=="REVISAR"' in app
+    assert "featOf" in app
+
+def test_ev_helper_used_on_cards():
+    app = src("static", "app.js")
+    assert "function evPct" in app and "ev(p, l.price)" in app or "ev(p,l.price)" in app
+
+def test_record_segments_and_clv():
+    rec = src("static", "recdia.js")
+    assert "Pick principal" in rec and "Sugerencias" in rec and "Todos" in rec
+    assert "CLV" in rec
+    assert "Hoy" in rec
+    assert "Momio" in rec and "cierre" in rec

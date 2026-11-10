@@ -42,6 +42,27 @@ function dRec(d){
 }
 
 // ---- 2. Mejores picks
+
+function dMiPickBooks(d){
+  const l=d.picks&&d.picks.lean, mk=d.market, g=d.game;
+  if(!l||!mk||!mk.books||!mk.books.length||l.p_final==null) return '';
+  const key=({ML:'ml',Spread:'spread',Total:'total',BTTS:'btts'})[l.market]||String(l.market||'').toLowerCase();
+  const side=l.side;
+  const rows=[];
+  for(const b of mk.books){
+    const block=b[key]; if(!block) continue;
+    let price=null, line=null;
+    if(block[side]!=null && typeof block[side]==='object'){ price=block[side].price!=null?block[side].price:block[side]; line=block[side].line; }
+    else if(block[side]!=null) price=block[side];
+    if(price==null||isNaN(price)) continue;
+    const evv=typeof ev==='function'?ev(l.p_final, price)*100:null;
+    rows.push({name:b.name||b.id||'Casa', price, ev:evv, line});
+  }
+  if(!rows.length) return '<div class="sub">Comparación por casa: sin dato</div>';
+  rows.sort((a,b)=>(b.ev==null?-999:b.ev)-(a.ev==null?-999:a.ev));
+  const best=rows[0];
+  return `<div class="mp-books"><div class="sub">Precio por casa (compra el mejor)</div>${rows.map(r=>`<div class="book-row ${r===best?'best':''}"><span>${esc(r.name)}</span><span class="mono">${r.price>0?'+':''}${r.price}${r.ev!=null?` · EV ${(r.ev>0?'+':'')+r.ev.toFixed(1)}%`:''}</span>${r===best?'<span class="tag-best">compra el mejor</span>':''}</div>`).join('')}</div>`;
+}
 function dPicks(d){
   const p=d.picks, g=d.game; if(!p) return '';
   if(p.strict) return dPicksStrict(d);
@@ -56,7 +77,7 @@ function dPicks(d){
     : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',SD),cell('Confianza',c?esc(c.level):SD)];
   const sig=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[l.signals.verdict]||'mut'}">●</span> ${esc((VERD[l.signals.verdict]||[])[1]||'')}${l.signals.best?` · mejor precio <b class="mono">${esc(l.signals.best.price_txt)}</b> en ${esc(l.signals.best.book)}`:''}</div>` : '';
   const main = `<div class="mp2 ${p.status==='PICK'?'hot':''}"><div class="mph"><span class="mpk ${p.status==='PICK'?'k-p':p.status==='LEAN'?'k-a':'mut'}">${esc(st[1])}</span>${gb}</div>
-    <div class="mpl">${esc(l.label)}</div><div class="pcs">${cells.join('')}</div>${sig}${g.state==='pre'&&l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:p.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}</div>`;
+    <div class="mpl">${esc(l.label)}</div><div class="pcs">${cells.join('')}</div>${sig}${g.state==='pre'&&l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:p.status==='PICK'},l)),'Agregar al ticket')}</div>`:''}${dMiPickBooks(d)}</div>`;
   const cs=(p.candidates||[]).filter(x=>x.p_model!=null||x.p_nv!=null).slice().sort((a,b)=>{
     const da=a.divergence_high?1:0, db=b.divergence_high?1:0; if(da!==db) return da-db;
     const ea=a.ev??-999, eb=b.ev??-999; if(eb!==ea) return eb-ea;

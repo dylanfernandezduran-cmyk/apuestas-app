@@ -2,6 +2,7 @@
 import math
 from .config import FAMILY, SOCCER, EDGE_PICK, EDGE_LEAN, MIN_EV_MARGIN
 from .odds import am_to_dec, am_to_prob, prob_to_am, fmt_am, norm_cdf
+from . import core as CORE
 
 # ---------- helpers de probabilidad ----------
 def pois_pmf(l, kmax=12):
@@ -107,9 +108,14 @@ def tennis_model(pa, pb, p_mkt_home=None):
                 sample=0.25 if imputed else 0.5, hfa=None, n_home=None, n_away=None, imputed=imputed)
 
 # ---------- candidatos ----------
-def blend_weight(model):
-    """Peso del modelo en la mezcla final (resto = mercado sin vig). Máx 0.5; menor con muestra chica."""
-    return 0.5 * model["sample"]
+def blend_weight(model, max_w=CORE.MAX_W, n0=CORE.N0):
+    """Peso del modelo en pFinal: crece con n juegos, máx. 50%, n0=100."""
+    n_h, n_a = model.get("n_home"), model.get("n_away")
+    if n_h is not None and n_a is not None:
+        n_games = min(int(n_h), int(n_a))
+    else:
+        n_games = (model.get("sample") or 0) * n0
+    return max_w * min(1.0, n_games / n0)
 
 MAX_GAP = 0.20   # el modelo no puede alejarse más de 20 pp del mercado (recorte de seguridad)
 
@@ -237,17 +243,23 @@ def decide(cands, model, home_name, away_name):
 
 
 def apply_confidence(cands, conf):
-    """PICK sólo con confianza Media/Alta. Divergencia alta => REVISAR (no PICK/estrella). Confianza Baja degrada PICK a LEAN."""
+    """Aplica confianza y divergencia. El umbral PICK/LEAN/PASS ya lo fijó status_for (edge/EV).
+    gap>10 pp → REVISAR; confianza Baja degrada PICK a LEAN."""
+    lvl = (conf or {}).get("level")
     for c in cands:
-        c["conf_level"] = conf.get("level")
-        if c.get("divergence_high"):
+        c["conf_level"] = lvl
+        if c.get("status") == "SIN_LINEA" or c.get("edge") is None:
+            continue
+        ev_frac = (c["ev"] / 100.0) if c.get("ev") is not None else None
+        st = CORE.pick_state(c.get("edge"), ev_frac, lvl, c.get("divergence"))
+        if st == "REVISAR":
             c["flag"] = "Divergencia alta"
             c["edge_display"] = None
-            if c.get("status") in ("PICK", "LEAN"):
-                c["status"] = "REVISAR"
-                c["downgraded"] = True
-                c["downgraded_reason"] = "Divergencia alta"
+            c["status"] = "REVISAR"
+            c["downgraded"] = True
+            c["downgraded_reason"] = "Divergencia alta"
         else:
             c["edge_display"] = c.get("edge")
-            if c["status"] == "PICK" and conf["level"] == "Baja":
-                c["status"] = "LEAN"; c["downgraded"] = True
+            if c.get("status") == "PICK" and (lvl or "").lower() == "baja":
+                c["status"] = "LEAN"
+                c["downgraded"] = True

@@ -17,27 +17,33 @@ def status():
     key, base, model = _cfg()
     return dict(llm=bool(key), provider=("groq" if "groq" in base else "openai-compatible") if key else None, model=model if key else None)
 
-DISCLAIMER = "Son estimaciones de un modelo, no una garantía. Apuesta con responsabilidad."
+DISCLAIMER = "Estimación del modelo, no garantía de ganancia."
 CHASE_WARN = "No persigas las pérdidas: subir la apuesta para recuperar no mejora el valor esperado y aumenta el riesgo de ruina."
 BANNED_RE = re.compile(r"\b(seguro|segura|seguros|seguras|garantizado|garantizada|garantizados|garantizadas)\b", re.I)
 CHASE_RE = re.compile(r"recuper(ar|o|ando)|perdid|cazar|perseguir|aument(ar|o|ando) la apuesta|doblar (la )?apuesta|all-?in", re.I)
 SECTIONS = ("Mi pick", "Cuánto meterle", "Lesiones y alineaciones", "Localía y props")
 
-SYSTEM = ("Eres el asistente de NRNM, una app de análisis deportivo (paper trading, sin dinero real). Responde en español de México, breve y claro. "
-          "Usa EXCLUSIVAMENTE los datos JSON del contexto (picks, probabilidades, líneas, predicciones, lesiones, props, bankroll). Si algo no está en el contexto, di que no lo tienes; "
-          "nunca inventes cuotas, líneas, porcentajes ni lesiones. Recomienda primero los picks con estado PICK y luego LEAN; REVISAR no se promociona como pick (es una divergencia alta a revisar). PASS/SIN_LINEA no son recomendación. Nunca contradigas la predicción ni el pick registrado del juego; si no coinciden, dilo. No menciones ningún «filtro estricto». Cita la línea y la cuota tal como vienen. "
-          "Nunca uses las palabras «seguro», «garantizado» ni equivalentes. "
-          "Cuando hables de un juego o un pick, organiza la respuesta en estas secciones, en este orden: Mi pick; Cuánto meterle; Lesiones y alineaciones; Localía y props. "
-          "Si hay bankroll en el contexto, en «Cuánto meterle» usa 1/4 Kelly con tope del 2% de la bankroll por pick y 8% de exposición diaria; 1u = 1% de la bankroll salvo que el contexto diga otro unit_pct. Si no hay bankroll, pide la cifra y no inventes un stake. "
-          "Si el usuario habla de recuperar pérdidas, aumentar la apuesta después de perder o cazar resultados, incluye esta advertencia: " + CHASE_WARN + " "
-          "Cierra SIEMPRE con: " + DISCLAIMER)
+SYSTEM = (
+    "Eres el analista de NRNM. Responde en español, directo y con detalle. "
+    "Recibes un JSON con los datos del juego (o del recorte de la app). Reglas:\n"
+    "1. Usa solo cifras del JSON. Si falta un dato, dilo. Nunca inventes cuotas, líneas, porcentajes ni lesiones.\n"
+    "2. Cada recomendación incluye: pick, cuota y casa, probabilidad del modelo, EV, "
+    "cuota mínima aceptable, stake en unidades y en % del bankroll (1/4 Kelly, tope 2%) "
+    "y en dinero si hay bankroll.\n"
+    "3. Si EV <= 0, hay divergencia alta con el mercado o la alineación no está confirmada, di \"no apostar\" o \"esperar\" y explica por qué. REVISAR no se promociona como pick.\n"
+    "4. Cubre siempre, en este orden de secciones: Mi pick; Cuánto meterle; Lesiones y alineaciones; Localía y props. Incluye localía y sede, clima si aplica, movimiento de línea y props con valor.\n"
+    "5. Nunca digas \"seguro\", \"garantizado\" ni \"100%\". Cierra con: \"Estimación del modelo, no garantía de ganancia.\" No eres asesor financiero.\n"
+    "6. En parlays avisa que el EV es un tope y que las piernas no son independientes.\n"
+    "7. Si la persona parece perseguir pérdidas o subir el stake por encima de lo planeado, sugiere pausar y bajar el monto.\n"
+    "Nunca contradigas la predicción ni el pick registrado del juego. Recomienda primero PICK y luego LEAN. PASS/SIN_LINEA no son recomendación. No menciones ningún «filtro estricto»."
+)
 
 def polish(text, question=""):
     """Quita claims de certeza, añade aviso de perseguir pérdidas si aplica, y cierra con el disclaimer."""
     text = BANNED_RE.sub("estimado", text or "")
     if CHASE_RE.search(question or "") and "no persigas las pérdidas" not in text.lower():
         text = text.rstrip() + "\n\n" + CHASE_WARN
-    if "no una garantía" not in text.lower() and "no es una garantía" not in text.lower():
+    if "no una garantía" not in text.lower() and "no es una garantía" not in text.lower() and "no garantía de ganancia" not in text.lower():
         text = text.rstrip() + "\n\n" + DISCLAIMER
     return text
 

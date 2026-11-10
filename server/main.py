@@ -179,17 +179,25 @@ async def home():
     leagues = list(LEAGUES.keys())
     lists = await asyncio.gather(*[data.list_games(l) for l in leagues], return_exceptions=True)
     today = data.now_cdmx().strftime("%Y-%m-%d")
-    live_g, sports = [], {s["key"]: dict(key=s["key"], name=s["name"], emoji=s["emoji"], today=0, live=0) for s in SPORTS}
+    live_g, today_g, sports = [], [], {s["key"]: dict(key=s["key"], name=s["name"], emoji=s["emoji"], today=0, live=0) for s in SPORTS}
     inj_targets = {}
     for l, r in zip(leagues, lists):
         if isinstance(r, Exception): continue
         fam = LEAGUES[l]["family"]
         for g in r[0]:
             sp = sports[LEAGUES[l]["sport"]]
+            is_today = (data.local_date_str(g["date"]) or "") == today
+            brief = dict(id=g.get("id"), league=l, league_name=g.get("league_name"), sport=g.get("sport") or LEAGUES[l]["sport"],
+                         home=g.get("home"), away=g.get("away"), date=g.get("date"), state=g.get("state"), status=g.get("status"))
             if g["state"] == "in":
-                sp["live"] += 1; sp["today"] += 1; live_g.append(g)
-            elif g["state"] == "pre" and (data.local_date_str(g["date"]) or "") == today:
+                sp["live"] += 1
+                if is_today or True:
+                    sp["today"] += 1
+                live_g.append(g)
+                today_g.append(brief)
+            elif g["state"] == "pre" and is_today:
                 sp["today"] += 1
+                today_g.append(brief)
                 if fam not in ("tennis", "soccer"): inj_targets.setdefault(l, []).append(g)
     for g in live_g:
         rr = REC.games_rows(g["league"], [g["id"]]).get(g["id"], [])
@@ -209,7 +217,8 @@ async def home():
                 for e in outs[:1]:
                     inj.append(dict(league=l, id=g["id"], team=g[sd]["short"], name=e["name"], pos=e["pos"], status=e["status_es"], detail=e["detail"], n_out=len([x for x in tm["entries"] if x["bucket"] == "out"])))
     inj.sort(key=lambda e: (e["pos"] != "QB", -e["n_out"]))
-    res = dict(live=live_g, record=REC.summary(days=30), record_all=REC.summary(), record_main=REC.summary(typ="main"), injuries=inj[:6], sports=list(sports.values()), now=time.time())
+    today_g.sort(key=lambda x: x.get("date") or "")
+    res = dict(live=live_g, today=today_g, record=REC.summary(days=30), record_all=REC.summary(), record_main=REC.summary(typ="main"), injuries=inj[:6], sports=list(sports.values()), now=time.time())
     _home_cache["h"] = (time.time(), res)
     return res
 

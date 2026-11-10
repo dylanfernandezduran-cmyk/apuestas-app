@@ -154,10 +154,10 @@ async function route(){
   const h = location.hash.replace(/^#\/?/,'').split('/').map(decodeURIComponent);
   window.scrollTo(0,0); $app.classList.remove('gd');
   try{
-    if(!h[0]||h[0]===''||h[0]==='picks'){ setNav('picks'); return await viewPicks(h[0]==='picks'?(h[1]||'24h'):'24h'); }
+    if(!h[0]||h[0]===''||h[0]==='picks'){ setNav('picks'); return await viewPicks(h[0]==='picks'?(h[1]||'hoy'):'hoy'); }
     if(h[0]==='inicio'){ setNav('picks'); return await viewHome(); }
-    if(h[0]==='lineas'){ setNav('lineas'); return await viewLineas(); }
-    if(h[0]==='ia'){ setNav('ia'); if(typeof chOpen==='function') chOpen(true); return await viewPicks('24h'); }
+    if(h[0]==='lineas'){ setNav('lineas'); return await viewLineas(h[1]||'todos'); }
+    if(h[0]==='ia'){ setNav('ia'); if(typeof chOpen==='function') chOpen(true); return await viewPicks('hoy'); }
     if(h[0]==='deportes'){ setNav('sports'); return await viewSports(); }
     if(h[0]==='deporte'){ setNav('sports'); return await viewSport(h[1], h[2]); }
     if(h[0]==='juego'){ setNav('sports'); return await viewGame(h[1], h[2]); }
@@ -167,8 +167,8 @@ async function route(){
       if(h[1]==='cal') return await viewRecordCal(h[2]);
       return await viewRecordDay(h[1]==='dia'?h[2]:null); }
     if(h[0]==='tickets'){ setNav('record'); return await viewTickets(h[1]||null); }
-    if(h[0]==='info'){ setNav('record'); return await viewInfo(); }
-    setNav('picks'); await viewPicks('24h');
+    if(h[0]==='info'||h[0]==='metodo'){ setNav('record'); return await viewInfo(); }
+    setNav('picks'); await viewPicks('hoy');
   }catch(e){ if(seq!==ROUTE_SEQ) return; $app.innerHTML = errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); }
 }
 window.addEventListener('hashchange', route);
@@ -176,13 +176,37 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 
 // ------------------------------------------------------------ home
 async function viewSports(){
+  const seq=ROUTE_SEQ;
   SPORTS = SPORTS || await api('/api/sports');
-  $app.innerHTML = `<h1>Elige un deporte</h1>
-  <div class="grid g3">${SPORTS.map(s=>`<a class="card sport" href="#/deporte/${s.key}"><span class="em">${s.emoji}</span>${esc(s.name)}<span class="sub">${s.leagues.map(l=>esc(l.name)).join(' · ')}</span></a>`).join('')}</div>
-  <div style="height:14px"></div>
-  <a class="card sport" href="#/picks" style="border-color:#1b6b4a"><span class="em">🔥</span>Top picks del día (todos los deportes)<span class="sub">Ranking de los mejores spots según el modelo vs. el mercado</span></a>
-  <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo (sin llaves). Si algo no está disponible se muestra <b>${SD}</b>. Todas las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
+  loading('Cargando deportes…');
+  let home=null;
+  try{ home=await api('/api/home'); }catch(e){ $app.innerHTML=errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); return; }
+  if(seq!==ROUTE_SEQ) return;
+  const chips=`<div class="pills">${(SPORTS||[]).map(s=>`<a class="pill" href="#/deporte/${s.key}"><span class="em">${s.emoji||''}</span> ${esc(s.name)}</a>`).join('')}</div>`;
+  const search=`<section class="hm" id="sp-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
+  const live=(home.live&&home.live.length)?`<div class="card" id="sp-live"><h2>En vivo ahora <span class="badge b-live">${home.live.length}</span></h2>${home.live.slice(0,8).map(g=>{
+    const href=`#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id||g.eid)}`;
+    return typeof liveRowHtml==='function'?liveRowHtml(g):`<a class="card" href="${href}">${esc((g.away&&(g.away.abbr||g.away.name))||'')} vs ${esc((g.home&&(g.home.abbr||g.home.name))||'')}</a>`;
+  }).join('')}</div>`:'';
+  const games=home.today||[];
+  const list=games.length?`<h2>Juegos de hoy</h2><div id="sp-today">${games.map(g=>{
+    const href=`#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id)}`;
+    return `<a class="card" data-gid="${esc(g.league+'/'+g.id)}" href="${href}"><div class="sub mono">${fmtTime(g.date)} · ${esc(g.league_name||g.league)}</div><div class="pkt">${esc((g.away&&(g.away.short||g.away.name))||'')} vs ${esc((g.home&&(g.home.short||g.home.name))||'')}</div><div class="pick-tag sub"></div></a>`;
+  }).join('')}</div>`:`<div class="card mut">No hay juegos programados hoy.</div>`;
+  $app.innerHTML=`<h1>Deportes</h1><p class="ago">${esc(agoTxt(home.now))}</p>${search}${chips}${live}${list}`;
+  if(typeof srchInit==='function'){ const s=document.getElementById('sp-search'); if(s) srchInit(s); }
+  api('/api/picks?scope=hoy').then(pk=>{
+    const map={};
+    (pk.items||[]).forEach(r=>{ map[r.game.league+'/'+r.game.id]=r; });
+    document.querySelectorAll('#sp-today [data-gid]').forEach(el=>{
+      const r=map[el.dataset.gid]; if(!r) return;
+      const tag=el.querySelector('.pick-tag'); if(!tag) return;
+      if(r.status==='REVISAR'||(r.lean&&r.lean.divergence_high)) tag.innerHTML='<span class="divf">Divergencia alta</span>';
+      else if(r.status==='PICK'||r.status==='LEAN') tag.innerHTML=badgeSt(r.status)+' '+esc((r.lean&&r.lean.label)||'');
+    });
+  }).catch(()=>{});
 }
+
 
 // ------------------------------------------------------------ deporte
 async function viewSport(sport, league){
@@ -349,6 +373,18 @@ function marketBlocks(d){
   const blocks=mk.map(m=>{ const os=order(m); return `<div class="mkb"><div class="mkb-h">${esc(mkTitle(m,g))}</div><div class="ob-g n${Math.min(os.length,3)}">${os.map(btn).join('')}</div></div>`; }).join('');
   return `<div class="card mkc"><h2>Mercados</h2>${blocks}<div class="sub mkn">${fb?'Cuotas de ESPN. ':''}Cuota = mejor precio disponible · % = probabilidad final${P&&P.markets&&P.markets.length?' (modelo + mercado)':''}.</div></div>`;
 }
+
+function injHeroTags(d){
+  const f=d.injuries_full, g=d.game; if(!f||f.tennis||!f.sides) return '';
+  const tags=[];
+  for(const s of ['away','home']){
+    const entries=(f.sides[s]&&f.sides[s].entries)||[];
+    const outs=entries.filter(e=>e.bucket==='out'||e.key);
+    const n=outs.length, T=g[s]||{};
+    if(n) tags.push(`<span class="cchip c-warn">${esc(T.abbr||T.short||T.name||s)}: ${n} baja${n>1?'s':''}${outs[0]&&outs[0].name?' · '+esc(outs[0].name):''}</span>`);
+  }
+  return tags.join(' ');
+}
 async function viewGame(league, id, silent){
   if(!silent) $app.innerHTML = gameSkel();
   let d;
@@ -369,7 +405,7 @@ async function viewGame(league, id, silent){
   const hero = `<div class="card gh2"><div class="gh2-t"><span>${esc(g.league_name)}</span>${stBadge(g)}</div>
     <div class="hero">${heroSide(g,d,sides(g)[0])}<div class="hmid">${heroMid(g,d)}</div>${heroSide(g,d,sides(g)[1])}</div>
     ${sub?`<div class="sub hsub">${sub}</div>`:''}${g.wd?`<div class="sub hsub">⚠️ ${esc(g.wd)}</div>`:''}
-    ${restTags(d)?`<div class="hsub">${restTags(d)}</div>`:''}<div class="hsub">${updTag(d.updated,live)}</div></div>`;
+    ${(restTags(d)||injHeroTags(d))?`<div class="hsub">${restTags(d)||''} ${injHeroTags(d)||''}</div>`:''}<div class="hsub">${updTag(d.updated,live)}</div></div>`;
   REC_MAP = {}; (d.record||[]).forEach(r=>{ const k=r.market+'.'+r.selection; if(!REC_MAP[k]||REC_MAP[k].status==='ANULADO') REC_MAP[k]=r; }); PROV = d.prov||{};
   let html = back + hero + courtLive(d) + liveSection(d) + marketBlocks(d) + detailSections(d);
   // conserva scroll y acordeón de «En vivo» al refrescar en vivo; el estado de secciones/ⓘ/pestañas vive en DST
@@ -449,30 +485,106 @@ async function gradeNow(btn){ btn.disabled=true; btn.textContent='Calificando…
 
 // ------------------------------------------------------------ picks del día
 const PICK_GROUPS = ['mlb','nfl','futbol','nba','nhl','tenis'];
+
+function capasOf(r){
+  const l=r.lean||{}, conf=(r.confidence&&r.confidence.level)||l.conf_level||r.conf_level;
+  const p=l.p_final!=null?l.p_final:(l.p||l.p_model);
+  let evOk=false;
+  if(p!=null && l.price!=null && typeof ev==='function') evOk = ev(p,l.price)>0;
+  else if(l.ev!=null) evOk = l.ev>0;
+  const confOk = conf==='Alta'||conf==='Media';
+  let stab=null;
+  const sig=l.signals||{};
+  if(sig.verdict && sig.verdict!=='sin_dato'){
+    stab = sig.verdict!=='en_contra';
+  } else if(l.line_stable!=null) stab=!!l.line_stable;
+  const items=[
+    {ok:evOk, label:'EV'},
+    {ok:confOk, label:conf?('Confianza '+conf):'Confianza'},
+    {ok:stab, label: stab==null?'Estabilidad de línea: sin dato':'Estabilidad de línea'}
+  ];
+  const n=items.filter(i=>i.ok===true).length;
+  return {n, of:3, items, txt:n+'/3'};
+}
+function evPct(l){
+  const p=l.p_final!=null?l.p_final:(l.p||l.p_model);
+  if(p!=null && l.price!=null && typeof ev==='function') return ev(p, l.price)*100;
+  return l.ev;
+}
+function stakeLabel(l, bank){
+  const p=l.p_final!=null?l.p_final:(l.p||l.p_model);
+  const evv=evPct(l);
+  if(evv==null) return 'Stake: sin dato';
+  if(evv<=0) return 'no apostar';
+  if(!bank||!bank.bankroll) return 'Stake: 1/4 Kelly';
+  if(typeof stakePct==='function' && p!=null && l.price!=null){
+    const remaining=Math.max(0, 0.08-(bank.daily_used_frac||0));
+    const frac=Math.min(stakePct(p,l.price), remaining);
+    if(frac<=0) return 'no apostar';
+    const unit_size=bank.bankroll*((bank.unit_pct||1)/100);
+    const units=unit_size? (bank.bankroll*frac)/unit_size : 0;
+    return units.toFixed(2)+'u';
+  }
+  return 'Stake: 1/4 Kelly';
+}
+function capasChips(c){
+  return `<div class="capas"><span class="capa on">${c.txt}</span>${c.items.map(i=>`<span class="capa ${i.ok===true?'on':''}">${esc(i.label)}</span>`).join('')}</div>`;
+}
+
 async function viewPicks(scope){
   const seq=ROUTE_SEQ;
   SPORTS = SPORTS || await api('/api/sports');
   if(seq!==ROUTE_SEQ) return;
+  const alta=scope==='alta';
+  const apiScope=alta?'72h':(scope||'hoy');
   loading('Calculando picks de todos los deportes (primera vez puede tardar ~20 s)…');
-  const d = await api('/api/picks?scope='+scope);
+  const d = await api('/api/picks?scope='+apiScope);
   if(seq!==ROUTE_SEQ) return;
-  const tabs=[['24h','Próx. 24 h'],['hoy','Hoy'],['manana','Mañana'],['72h','72 h']];
+  if(alta) d.items=(d.items||[]).filter(r=>(r.confidence&&r.confidence.level)==='Alta'||r.conf_level==='Alta'||(r.lean&&r.lean.conf_level==='Alta'));
+  const tabs=[['hoy','Hoy'],['manana','Mañana'],['72h','72 h'],['alta','Alta confianza']];
   const t=`<div class="pills">${tabs.map(([k,l])=>`<a class="pill ${k===scope?'on':''}" href="#/picks/${k}">${l}</a>`).join('')}</div>`;
-  const withOdds=d.items.filter(r=>r.has_odds&&r.status!=='PASS'), pass=d.items.filter(r=>r.has_odds&&r.status==='PASS'), noodds=d.items.filter(r=>!r.has_odds);
-  const card=r=>{ const l=r.lean, g=r.game, st=STATUS[r.status];
-    const sg_=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato';
-    const sigH=sg_?`<div class="sub" style="margin:8px 0 4px">${(VERD[l.signals.verdict]||[])[0]||''} ${(VERD[l.signals.verdict]||[])[1]||''}${l.signals.tickets!=null?` · ${l.signals.tickets}% tickets / ${l.signals.money!=null?l.signals.money+'% dinero':'dinero '+SD}`:''}${l.signals.best?` · mejor ${esc(l.signals.best.price_txt)} en ${esc(l.signals.best.book)}`:''}</div>${tagChips(l.signals)}`:'';
-    const nb=(r.brief||[]).length;
-    const det=(sg_||nb)?`<div class="gp"><div class="tg" role="button" tabindex="0">Señales y mercados${nb?` (${nb})`:''}</div><div class="sg">${sigH}${nb?briefRows(r.brief,g,[]):''}</div></div>`:'';
-    const evCls = l.ev>0?'pos':l.ev<0?'neg':'mut';
-    const edgeBit = l.divergence_high ? `<span class="divf"${tip('edge')}>Divergencia alta</span>` : `<span class="${l.edge>0?'pos':'mut'}">${l.edge==null?SD:sg(l.edge)+'pp'}</span><small${tip('edge')}>edge s/vig</small>`;
-    return `<a class="card pk" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk1"><div class="pkt">${st[0]} ${esc(l.label)} <span class="mono">${l.price_txt?'('+esc(l.price_txt)+')':''}</span></div>
-    <div class="pke mono">${edgeBit}<span class="${evCls}">${l.ev==null?SD:sg(l.ev)+'%'}</span><small${tip('EV')}>EV</small></div></div>
-    <div class="meta">${badgeSt(r.status)} ${confBadge(r.confidence)}${l.divergence_high?' <span class="divf">Divergencia alta</span>':''}<span class="sub">${esc(g.league_name)} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</span></div>
-    <div class="stat mono">Modelo ${pct(l.p_model)} · ${tipAbbr('s/vig')} ${pct(l.p_nv)} · Justa ${esc(l.fair_txt||SD)} · Máx. ${esc(l.max_txt||SD)}</div>${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'+ Agregar al ticket')}</div>`:''}${(()=>{ const b=BK(); const p=l.p||l.p_final||l.p_model; if(!b.bankroll||p==null||l.price==null) return ''; const s=quarterKelly(p,l.price,b.bankroll,b.unit_pct,b.daily_used_frac); return s&&s.frac>0?`<div class="sub">Cuánto meterle: ${fmtStake(s)}</div>`:''; })()}${det}</a>`; };
-  const compact=`<section class="hm" id="pk-live" hidden></section><section class="hm" id="pk-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
-  let html=`${compact}<h1>🔥 Top picks · todos los deportes</h1>${t}<p class="ago">${esc(agoTxt(d.generated||d.ts||d.now))}</p><div class="sub" style="margin-bottom:8px">Ventana: ${d.n_games} juegos próximos analizados · ordenados por ${tipAbbr('EV')}, confianza y estado (la divergencia alta no se promociona como edge). <b>Estimaciones del modelo</b>, no garantías.</div>`;
-  if(!d.items.length) html+=`<div class="card mut">No hay juegos pre-juego en esta ventana. Prueba otra pestaña.</div>`;
+  const withOdds=d.items.filter(r=>r.has_odds&&r.status!=='PASS'&&r.status!=='REVISAR');
+  const card=r=>{ const l=r.lean||{}, g=r.game, rev=r.status==='REVISAR'||l.divergence_high;
+    const cap=capasOf(r), evv=evPct(l), stak=stakeLabel(l,BK());
+    const conf=(r.confidence&&r.confidence.level)||l.conf_level;
+    const href=`#/juego/${encodeURIComponent(g.league)}/${g.id}`;
+    if(rev){
+      const xm=l.p_model_raw!=null?l.p_model_raw:l.p_model, ym=l.p_nv;
+      const note=(xm!=null&&ym!=null)?`Divergencia alta: modelo ${pct(xm)} vs mercado ${pct(ym)}`:'Divergencia alta: modelo vs mercado';
+      return `<a class="card pk pk-card revisar" href="${href}"><div class="pk-l"><div class="pkt">Revisar · ${esc(l.label||'')}</div>
+        <div class="sub">${esc(g.league_name||'')} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
+        ${capasChips(cap)}<div class="div-note">${esc(note)}</div></div></a>`;
+    }
+    const evTxt=evv==null?SD:((evv>0?'+':'')+evv.toFixed(1)+'%');
+    return `<a class="card pk pk-card" href="${href}"><div class="pk-l"><div class="pkt">${esc(l.label||'')} <span class="mono">${l.price_txt?esc(l.price_txt):''}</span></div>
+      <div class="sub">${esc(g.league_name||'')} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
+      ${capasChips(cap)}<div class="sub">${esc(conf?('Confianza '+conf):'')} · ${esc(stak)}</div>
+      ${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'Agregar al ticket')}</div>`:''}</div>
+      <div class="pk-ev ${evv>0?'pos':evv<0?'neg':'mut'}">${evTxt}</div></a>`; };
+  const featOf=()=>{
+    const pool=d.items.filter(r=>r.has_odds&&r.status!=='REVISAR'&&r.status!=='PASS'&&r.status!=='SIN_LINEA'&&!(r.lean&&r.lean.divergence_high));
+    if(!pool.length) return '';
+    const r=pool[0]; // ya vienen ordenados por EV y confianza
+    const l=r.lean||{}, g=r.game, cap=capasOf(r), evv=evPct(l), stak=stakeLabel(l,BK());
+    const conf=(r.confidence&&r.confidence.level)||l.conf_level;
+    const title=(scope==='hoy'||!scope)?'Mejor pick de hoy':'Mejor pick';
+    const evTxt=evv==null?SD:((evv>0?'+':'')+evv.toFixed(1)+'%');
+    const edgeTxt=l.edge==null?SD:(sg(l.edge)+' pp');
+    return `<div class="card pk-feat"><div class="feat-k">${title}</div>
+      <p class="feat-title">${esc(l.label||'')} <span class="mono">${l.price_txt?esc(l.price_txt):''}</span></p>
+      <div class="sub">${esc(g.league_name||'')} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
+      <div class="pk-nums"><div class="pc"><small>Edge pp</small><b class="mono">${esc(edgeTxt)}</b></div>
+        <div class="pc"><small>EV %</small><b class="mono ${evv>0?'pos':evv<0?'neg':''}">${evTxt}</b></div>
+        <div class="pc"><small>Stake u</small><b class="mono">${esc(stak)}</b></div></div>
+      ${capasChips(cap)}<div class="sub">${esc(conf?('Confianza '+conf):'Confianza: sin dato')} · ${cap.items[2].ok==null?'Estabilidad de línea: sin dato':(cap.items[2].ok?'Línea estable':'Línea inestable')}</div>
+      ${l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'Agregar al ticket')}</div>`:''}
+      <div class="sub"><a href="#/juego/${encodeURIComponent(g.league)}/${g.id}">Ver juego →</a></div></div>`;
+  };
+  const compact=`<section class="hm" id="pk-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
+  let html=`${compact}<h1>Picks</h1>${t}<p class="ago">${esc(agoTxt(d.generated||d.ts||d.now))}</p>`;
+  html+=featOf();
+  if(!d.items.length) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick':'No hay pick en esta ventana.'}</div>`;
+  else if(!withOdds.length && !d.items.some(r=>r.status==='REVISAR')) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick':'No hay pick en esta ventana.'}</div>`;
   // agrupado por deporte (orden: MLB, NFL, Fútbol, NBA, NHL, Tenis; grupos vacíos ocultos). Dentro de cada grupo: con ventaja, PASS y sin línea (orden del servidor)
   const rank=r=>r.has_odds?(r.status==='PASS'?1:0):2;
   PICK_GROUPS.forEach(k=>{
@@ -619,25 +731,22 @@ function mvDraw(){
 
 // ------------------------------------------------------------ info
 function viewInfo(){
-  $app.innerHTML=`<h1>ℹ️ Metodología y fuentes</h1>
-  <div class="card"><p>NRNM estima probabilidades con un modelo simple (${tipAbbr('SRS')} o Poisson) mezclado con el mercado ${tipAbbr('s/vig')}, usando sólo datos públicos. El ${tipAbbr('edge','edge')} es la diferencia en ${tipAbbr('pp')} frente a ese mercado; el ${tipAbbr('EV')} se calcula al precio pagado. Si un dato no está, se muestra «Sin dato»: nunca se inventa.</p></div>
-  <details class="card kv"><summary>Fuentes (públicas, sin llave)</summary><ul class="t"><li>ESPN site API: marcadores, resúmenes, calendarios y resultados, lesiones, líderes, tablas, rankings de tenis y cuotas de DraftKings (cuando existen).</li><li><b>Action Network</b> (API pública sin llave): cuotas de DraftKings, FanDuel, BetMGM, Caesars, BetRivers, bet365, Fanatics y Unibet, consenso, apertura y <b>% tickets / % dinero</b>. Cubre NBA, NFL, NHL, MLB, NCAA y fútbol de las grandes ligas; no cubre Liga MX ni tenis.</li><li><b>Pinnacle</b> (API de invitado, línea “sharp”): cuotas de todos los deportes incluidos Liga MX y tenis, sin % apuestas.</li><li><b>Historial propio</b>: el servidor guarda en SQLite un snapshot de líneas y % cada ~10 min (sólo cuando algo cambia) para construir nuestra propia curva de movimiento.</li><li>MLB StatsAPI: lanzadores abridores probables y sus estadísticas.</li><li>Todo se cachea (marcadores 90 s, resúmenes 150 s, calendarios 1 h). Si un dato no existe se muestra <b>${SD}</b>; nunca se inventa.</li></ul></details>
-  <details class="card kv" style="margin-top:10px"><summary>Modelo (transparente y simple)</summary><ul class="t">
-  <li><b>NFL / NBA / NHL / MLB:</b> rating ${tipAbbr('SRS')} (margen promedio ajustado por rival y localía) calculado con todos los resultados reales de la liga, suavizado hacia 0 según juegos jugados, + ajuste por forma (últimos 5). Probabilidad = normal(margen esperado, σ). En MLB se añade un ajuste pequeño por ERA de abridores probables. En NFL, si el QB titular (líder de pases) está confirmado fuera, se resta ~4.5 pts de margen a ese equipo y ~2 pts al total.</li>
-  <li><b>Fútbol:</b> Poisson con fuerza de ataque/defensa suavizada y ventaja de local de la liga → 1X2, hándicap y totales.</li>
-  <li><b>Tenis:</b> logística sobre ln(puntos de ranking) sólo para el ganador. Hándicap y total son de <b>JUEGOS</b> (p. ej. Sinner -3.5 juegos, Over 22.5 juegos) y además hay hándicap/total de <b>SETS</b>, todos sólo mercado (Pinnacle). No hay empate ni 1X2 en tenis.</li><li><b>Filtro estricto (APAGADO; se enciende con NRNM_STRICT=1):</b> máx. 1 por juego (2 sólo si son de otro mercado y ambos ≥ 75/100). Debe tener edge ≥ 2 pp, prob. final ≥ 55 %, señales de mercado (RLM / dinero vs tickets) que no vayan en contra, ningún jugador clave en duda, abridores MLB confirmados, puntaje ≥ 60, y coincidir con la Predicción NRNM. Puntaje 0-100 = edge 35 + prob. 25 + señales 15 + confianza 15 + contexto 10 (clima/datos críticos). Umbrales elegidos con el récord real calificado (backtest: 694 picks 369-317, −51.6u → 33 picks 26-7, +9.3u; muestra chica, no es garantía). Lo demás sólo aparece como «También considerado».</li><li><b>Tickets / parlays (papel):</b> agrega piernas con «+ Ticket»; momio combinado = producto de momios decimales, La prob. y el ${tipAbbr('EV')} combinados se muestran <b>estimados</b>: se aplica un descuento por correlación / error de modelo (mayor si hay piernas del mismo juego); no se asume independencia plena. Se califican solos pierna por pierna; push/anulada se quita del momio.</li><li><b>Récord (¿se ganó?):</b> cada pick principal y sugerencia se guarda al generarse (antes del juego) con la primera línea y cuota; se califica con el marcador final real de ESPN (tenis: juegos y sets del marcador por sets). Ganado / Perdido / Push / medio ganado-perdido (líneas de cuarto) / Anulado; pendiente hasta que haya final confirmado. Unidades a 1u plano con la cuota registrada. El ${tipAbbr('CLV')} promedio usa la cuota de apertura vs. la de cierre guardada. El historial empieza cuando el servidor empezó a registrar.</li>
-  <li><b>Prob. final</b> = mezcla del modelo y el mercado sin vig; el peso del modelo (máx. 50%) crece con la muestra. El modelo se recorta a ±20 pp del mercado.</li>
-  <li><b>Edge</b> = prob. final − prob. implícita ${tipAbbr('s/vig')} (${tipAbbr('pp')}). <b>${tipAbbr('EV')}</b> = prob. final × momio decimal − 1, al precio pagado. Si |modelo crudo − mercado s/vig| &gt; 10 pp se marca <b>Divergencia alta</b>: no se promociona como edge, no sube a PICK/estrella y baja la confianza. Los listados se ordenan por EV y confianza, no por edge crudo. <b>Línea justa</b> = momio de la prob. final. <b>Precio máx.</b> = momio con EV = +2%.</li>
-  <li><b>Estados:</b> 🔥 PICK (edge ≥ 3 pp, EV ≥ 0 y confianza Media/Alta) · 🟡 LEAN (edge ≥ 1 pp) · ⛔ PASS (sin edge; igual se muestra el lean) · 🔍 SIN LÍNEA (no hay precio).</li>
-  <li><b>Probabilidades por resultado:</b> en cada juego se listan ganador/1X2, doble oportunidad (fútbol), hándicap y over/under con el nombre real del equipo o jugador. Hándicap y totales del modelo salen de la normal del margen/total esperado (NBA, NFL, NHL, MLB) o de la matriz Poisson de goles (fútbol); en tenis el modelo sólo cubre al ganador (el resto: “Modelo: Sin dato”). Líneas de cuarto (asiáticas, p. ej. -0.75 o 2.75) sólo muestran mercado.</li>
-  <li><b>Casas y consenso:</b> mejor precio = el momio más alto en la misma línea; consenso s/vig = promedio de las probabilidades sin vig de las casas en la línea de referencia.</li>
-  <li><b>${tipAbbr('RLM')}:</b> lado público (≥55% de tickets) y la línea/precio se mueve en su contra entre la apertura y ahora. <b>Dinero &gt; tickets:</b> % dinero − % tickets ≥ 10 ${tipAbbr('pp')}. Se muestran junto al pick como etiquetas (a favor / en contra / mixto) <b>sin cambiar la probabilidad del modelo</b>: son indicadores, no garantías. Sin % de apuestas ⇒ “Sin dato”.</li>
-  <li><b>Confianza:</b> muestra de juegos, acuerdo con el mercado, líderes lesionados, abridores (MLB). Divergencia alta también baja la confianza.</li></ul></details>
-  <div class="note">El modelo no sabe de lesiones de último minuto, descansos, clima ni alineaciones. El mercado suele ser más informado que un modelo simple: trátalo como una segunda opinión. Sin promesas de rentabilidad.</div>`;
+  $app.innerHTML=`<h1>Método</h1>
+  <div class="card"><p>NRNM mezcla el modelo con el mercado sin vig (peso del modelo hasta 50%, recorte ±20 pp). El edge es la diferencia en puntos porcentuales; el EV se calcula con el precio real y es lo que se muestra. Si un dato no está, se indica «Sin dato»: nunca se inventa.</p></div>
+  <details class="card kv" open><summary>Probabilidad final</summary>
+    <p>pFinal = w · modelo recortado + (1−w) · mercado s/vig. El peso w crece con los juegos de muestra (n0 = 100) y no supera el 50%. El modelo se recorta a ±20 pp del mercado. Se publica el pick con alineación confirmada, 60 a 90 minutos antes, y se guarda la cuota de publicación y la de cierre para el CLV.</p></details>
+  <details class="card kv"><summary>Edge y EV</summary>
+    <p>Edge = probabilidad final − probabilidad sin vig, en pp. El EV se calcula con el precio real (p · momio decimal − 1) y es lo que aparece en las tarjetas. Los picks se ordenan por EV y confianza, no por edge. Estados: PICK (edge ≥ 3 pp, EV ≥ 0, confianza media o alta), LEAN (edge ≥ 1 pp), PASS, REVISAR (divergencia de más de 10 pp entre modelo y mercado).</p></details>
+  <details class="card kv"><summary>Casas y consenso</summary>
+    <p>Se muestra el mejor precio disponible y el EV en cada casa («compra el mejor»). Fuentes públicas: ESPN, Action Network, Pinnacle, MLB StatsAPI y Open-Meteo, más el historial propio de líneas. Sin llave de API de pago. Si una casa no cotiza, se indica que no hay dato.</p></details>
+  <details class="card kv"><summary>RLM y dinero</summary>
+    <p>STEAM: el consenso se mueve ≥ 3 pp, al menos 3 casas en la misma dirección (≥ 2 pp) en una ventana de 180 min. RLM: el consenso de ese lado sube ≥ 3 pp y el % de tickets de ese lado es ≤ 45% (el público está del otro lado). Si no hay % de tickets, no se etiqueta RLM. CASA REZAGADA: una casa queda ≥ 2 pp de implícita peor/mejor que la mediana (precio mejor que el consenso). Solo se listan movimientos de 3 pp o más.</p></details>
+  <details class="card kv"><summary>Confianza</summary>
+    <p>La confianza (Alta / Media / Baja) combina tamaño de muestra, divergencia frente al mercado, lesiones clave y si hay abridores confirmados. Stake: ¼ Kelly, tope 2% del bankroll por pick y 8% de exposición diaria; si EV ≤ 0, «no apostar». 1u = 1% del bankroll (configurable). Evitar piernas correlacionadas del mismo juego. Los tickets se califican solos con el marcador final.</p></details>
+  <div class="card" style="border-color:var(--amb);margin-top:12px"><b>Límite del modelo.</b> El modelo no ve lesiones de último minuto ni descansos. Un pick en REVISAR no se promociona: hay que esperar o no apostar.</div>`;
 }
 
 
-// ------------------------------------------------------------ interacción (móvil): sugerencias y tarjetas plegables
 function foldCards(){
   const keep=/En vivo/i;   // sólo el marcador en vivo arranca abierto; todo lo demás va en acordeones cerrados
   document.querySelectorAll('#app > .card').forEach(c=>{

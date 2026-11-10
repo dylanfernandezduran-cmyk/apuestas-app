@@ -40,7 +40,8 @@ function tkFab(){
   document.body.classList&&document.body.classList.add('has-tk');
   bar.hidden=false;
   const n=TK.legs.length;
-  bar.innerHTML=`<div class="tkb-info">🎟️ Ticket · <b>${n}</b> ${n===1?'pierna':'piernas'}</div><button type="button" id="tkbar-open">Ver ticket</button>`;
+  const mom=(typeof tkCombine==='function'&&typeof tkAm==='function')?tkAm(tkCombine(TK.legs).d):'';
+  bar.innerHTML=`<div class="tkb-info">🎟️ Ticket · <b>${n}</b> ${n===1?'pierna':'piernas'}</div><div class="tkb-right"><span class="mono">${esc(mom)}</span><button type="button" id="tkbar-open">Ver</button></div>`;
   const o=document.getElementById('tkbar-open'); if(o) o.onclick=tkOpen;
 }
 // mismas reglas que server/tickets.py check()
@@ -78,9 +79,9 @@ function tkOpen(){
   tkSheet(`<div class="tks-h"><b>🎟️ Ticket (papel)</b><button type="button" class="tkx" onclick="tkClose()" aria-label="Cerrar">✕</button></div>
     ${L.length?L.map(row).join(''):'<div class="sub">Ticket vacío.</div>'}
     <div class="kpis s tkk"><div class="kpi"><div class="sub">Momio combinado</div><div class="v mono">${tkAm(d)}</div></div><div class="kpi"><div class="sub">Prob. modelo${cb.estimated?' (est.)':''}</div><div class="v mono">${p==null?'—':(p*100).toFixed(1)+'%'}</div></div>
-      <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub"${typeof tip==='function'?tip('EV'):''}>EV por 1u${cb.estimated?' (estimado, tope)':''}</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
+      <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub"${typeof tip==='function'?tip('EV'):''}>EV por 1u (tope)</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
     ${ck.err.map(x=>`<div class="tkw err">⛔ ${esc(x)}</div>`).join('')}${ck.warn.map(x=>`<div class="tkw">⚠️ ${esc(x)}</div>`).join('')}
-    <div class="sub" style="margin:6px 0">Paper trading: no se apuesta dinero. ${cb.estimated?`EV y prob. combinada son un <b>tope/estimado</b> (descuento ${(cb.h*100).toFixed(0)}% por correlación / error de modelo${cb.same?' · mismo juego':''}; no se asume independencia).`:'Prob. de una sola pierna sin descuento de correlación.'} ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
+    <div class="sub" style="margin:6px 0">El EV por 1u está marcado como <b>tope</b>: supone independencia y acumula el error del modelo.${cb.same?' Incluye piernas del mismo juego (correlacionadas; evítalas).':''} Paper trading: no se apuesta dinero. ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
     <input id="tkn" class="tkin" maxlength="60" placeholder="Nombre del ticket (opcional)">
     <div class="tkbtns"><button type="button" class="btn" onclick="TK.legs=[];tkSave_();tkClose();route()">Vaciar</button><button type="button" class="btn pri" ${ck.err.length||!L.length?'disabled':''} onclick="tkSubmit(this)">Guardar ticket</button></div>`);
 }
