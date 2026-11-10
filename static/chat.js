@@ -6,7 +6,7 @@ const CH_DISC='Estimación del modelo, no garantía de ganancia.';
 const CH_CHASE='No persigas las pérdidas: subir la apuesta para recuperar no mejora el valor esperado y aumenta el riesgo de ruina.';
 const CH_BAN=/\b(seguro|segura|seguros|seguras|garantizado|garantizada|garantizados|garantizadas)\b/gi;
 const CH_CHASE_RE=/recuper(ar|o|ando)|perdid|cazar|perseguir|aument(ar|o|ando) la apuesta|doblar (la )?apuesta|all-?in/i;
-const CH_SECTIONS=['Mi pick','Cuánto meterle','Lesiones y alineaciones','Localía y props'];
+const CH_SECTIONS=['Mi pick','Cuánto meterle','Análisis a detalle','Lesiones y alineaciones','Localía y props'];
 function chPolish(html, q){
   html=String(html||'').replace(CH_BAN,'estimado');
   if(CH_CHASE_RE.test(q||'') && !/no persigas las pérdidas/i.test(html)) html+='<p>'+CH_CHASE+'</p>';
@@ -126,6 +126,15 @@ async function chMarketAnswer(hit, m, qn){
   out.push(`<a href="${chLink(g)}">Abrir el juego →</a>`);
   return out.join('<br>');
 }
+
+function chAnalisis(d){
+  const an=d.analysis||(d.picks&&d.picks.analysis); if(!an||!an.signals) return '';
+  const lab={a_favor:'a favor',en_contra:'en contra',mixto:'mixto',neutral:'neutral',sin_dato:'sin dato'};
+  const rows=an.signals.map(s=>`• ${esc(s.label)}: <b>${esc(lab[s.verdict]||s.verdict)}</b> — ${esc(s.detail||'sin dato')}`);
+  const pk=d.picks||{};
+  const head=pk.published?'Pick principal publicado':(pk.discard_reason||'Sin pick principal');
+  return `<b>Análisis a detalle</b> (${esc(head)} · ${an.n_agree||0} a favor / ${an.n_present||0} con dato)<br>`+rows.join('<br>');
+}
 function chAgree(pr,l){ if(!pr||!l) return null;
   if(l.market==='Total'&&pr.total&&pr.total.side) return pr.total.side===l.side;
   if(l.market==='Spread'&&pr.spread&&pr.spread.side) return pr.spread.side===l.side;
@@ -133,7 +142,7 @@ function chAgree(pr,l){ if(!pr||!l) return null;
   if(l.market==='BTTS'&&pr.btts&&pr.btts.side) return pr.btts.side===l.side;
   return null; }
 async function chBestSingle(qn){
-  const items=(await chPicks()).filter(it=>it.lean&&it.lean.edge!=null&&it.lean.edge>0&&(it.status==='PICK'||it.status==='LEAN')&&Date.parse(it.game.date)>Date.now());
+  const items=(await chPicks()).filter(it=>it.published&&it.lean&&it.lean.edge!=null&&it.lean.edge>0&&(it.status==='PICK'||it.status==='LEAN')&&Date.parse(it.game.date)>Date.now());
   const rk=it=>(it.status==='PICK'?1e3:0)+(chAgree(it.pred,it.lean)===false?-500:0)+(it.lean.score!=null?it.lean.score:(it.lean.edge||0)*(it.lean.p_final||0));
   items.sort((a,b)=>rk(b)-rk(a));
   const it=items[0]; if(!it) return 'No hay ningún pick con ventaja en las próximas 72 h.';
@@ -188,14 +197,17 @@ async function chGameAnswer(league, eid, qn){
   const p=d.pred, pk=d.picks;
   if(p&&p.score){ const sc=d.kind==='tennis'?(p.score.sets||[]).map(x=>x.join('-')).join(' '):`${p.score.home}-${p.score.away} (local-visita)`;
     out.push(`Predicción NRNM: ${esc(sc)} · ganador ${esc(p.winner.side==='draw'?'empate':g[p.winner.side].name)} ${chPct(p.winner.p)}${p.total?` · ${esc(p.total.label)}`:''}${p.spread&&p.spread.line!=null?` · hándicap proy. ${p.spread.side==='home'?g.home.name:g.away.name} ${p.spread.line>0?'+':''}${p.spread.line}`:''}`); }
+  const anTxt=chAnalisis(d); if(anTxt) out.push(anTxt);
   else if(g.state==='pre'&&!p) out.push('Predicción NRNM: aún no hay (faltan datos del modelo).');
   else if(g.state!=='pre') out.push('Predicción NRNM: no aplica — el juego ya no está en pre-partido.');
   if(g.state==='pre'){
     const lean=pk&&pk.lean, predSide=p&&p.winner&&p.winner.side;
     const agrees=!lean||!predSide||lean.side===predSide||(lean.market==='ML'&&lean.side===predSide);
-    if(lean && (lean.edge>0.5 || (pk.status==='PICK') || (agrees && lean.edge!=null && lean.edge>=0))){
+    if(pk.published && lean && (lean.edge>0.5 || (pk.status==='PICK') || (agrees && lean.edge!=null && lean.edge>=0))){
       out.push(`${pk.status==='PICK'?'Pick':'Lean'}: <b>${esc(lean.label)}</b> ${esc(lean.price_txt||'')} · prob. ${chPct(lean.p_final)}${chEdge(lean.edge)} · ${esc(pk.status)}${pk.confidence?' · confianza '+esc(pk.confidence.level):''}`);
       if(!agrees) out.push('<span class="ch-mut">Ojo: este lean no coincide con la Predicción NRNM.</span>');
+    } else if(lean && !pk.published){
+      out.push(`Sin pick principal${pk.discard_reason?': '+esc(pk.discard_reason):''}.`);
     } else {
       let best=null;
       mkts.forEach(m=>m.outcomes.forEach(x=>{ if(x.edge!=null&&(best==null||x.edge>best.edge)) best=x; }));

@@ -168,20 +168,22 @@ def test_futbol_over_35_no_puede_dar_2_1_ni_under_25_dar_3_goles():
 
 def test_futbol_pick_de_ganador_y_handicap_se_respetan():
     pk = lambda **kw: dict(lean=dict(status="PICK", **kw), status="PICK", candidates=[])
+    # un pick de ML contrario al pFinal/modelo YA NO voltea al ganador (antes: Jets vs Bills)
     p = P.build(game(), soc_model(1.7, 1.3), None, "soccer", picks=pk(market="ML", side="away"))
-    assert p["winner"]["side"] == "away" and p["score"]["away"] > p["score"]["home"]
+    assert p["winner"]["side"] == "home" and p["score"]["home"] > p["score"]["away"]
     p = P.build(game(), soc_model(1.7, 1.3), dict(spread=dict(home=dict(line=-1.5)), book="X"), "soccer", picks=pk(market="Spread", side="home", line=-1.5))
     assert p["score"]["home"] - p["score"]["away"] >= 2 and p["spread"]["side"] == "home"
     _consistent(p, "soccer")
 
 def test_futbol_picks_contradictorios_se_corrigen_y_nunca_se_muestra_una_salida_inconsistente():
-    # modelo: gana visitante, pero el pick es hándicap local +0.5 (=local gana o empata): se respeta el pick y el ganador se corrige al marcador
+    # modelo/pFinal: gana visitante; un hándicap local +0.5 contrario ya no voltea al ganador
     p = P.build(game(), soc_model(.9, 1.7), None, "soccer", picks=dict(lean=dict(market="Spread", side="home", line=.5, status="PICK"), status="PICK", candidates=[]))
     _consistent(p, "soccer")
-    assert p["score"]["home"] >= p["score"]["away"] and p["winner"]["side"] in ("home", "draw") and "winner" in (p.get("adjusted") or [])
-    # sin ningún marcador posible (Under 0.5 con ganador local) se descarta la línea débil
+    assert p["winner"]["side"] == "away" and p["score"]["away"] > p["score"]["home"]
+    # Under 0.5 es incompatible con un ganador local: se suelta el total, el ganador pFinal se mantiene
     p = P.build(game(), soc_model(2.4, .5), dict(total=dict(over=dict(line=.5)), book="X"), "soccer", picks=dict(lean=dict(market="Total", side="under", line=.5, status="PICK"), status="PICK", candidates=[]))
-    _consistent(p, "soccer"); assert p["score"]["home"] + p["score"]["away"] == 0
+    _consistent(p, "soccer")
+    assert p["winner"]["side"] == "home" and p["score"]["home"] > p["score"]["away"]
 
 def test_futbol_barrido_de_lambdas_siempre_coherente_y_con_variedad():
     seen = set()

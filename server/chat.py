@@ -21,7 +21,7 @@ DISCLAIMER = "Estimación del modelo, no garantía de ganancia."
 CHASE_WARN = "No persigas las pérdidas: subir la apuesta para recuperar no mejora el valor esperado y aumenta el riesgo de ruina."
 BANNED_RE = re.compile(r"\b(seguro|segura|seguros|seguras|garantizado|garantizada|garantizados|garantizadas)\b", re.I)
 CHASE_RE = re.compile(r"recuper(ar|o|ando)|perdid|cazar|perseguir|aument(ar|o|ando) la apuesta|doblar (la )?apuesta|all-?in", re.I)
-SECTIONS = ("Mi pick", "Cuánto meterle", "Lesiones y alineaciones", "Localía y props")
+SECTIONS = ("Mi pick", "Cuánto meterle", "Análisis a detalle", "Lesiones y alineaciones", "Localía y props")
 
 SYSTEM = (
     "Eres el analista de NRNM. Responde en español, directo y con detalle. "
@@ -31,7 +31,7 @@ SYSTEM = (
     "cuota mínima aceptable, stake en unidades y en % del bankroll (1/4 Kelly, tope 2%) "
     "y en dinero si hay bankroll.\n"
     "3. Si EV <= 0, hay divergencia alta con el mercado o la alineación no está confirmada, di \"no apostar\" o \"esperar\" y explica por qué. REVISAR no se promociona como pick.\n"
-    "4. Cubre siempre, en este orden de secciones: Mi pick; Cuánto meterle; Lesiones y alineaciones; Localía y props. Incluye localía y sede, clima si aplica, movimiento de línea y props con valor.\n"
+    "4. Cubre siempre, en este orden de secciones: Mi pick; Cuánto meterle; Análisis a detalle; Lesiones y alineaciones; Localía y props. En Análisis a detalle recorre las 6 señales (modelo/pFinal, movimiento de línea, RLM/%apuestas/%dinero, tendencias, lesiones/alineaciones, físico/clima) con las cifras del JSON o «sin dato». No inventes. Un pick principal publicado ya pasó el filtro (≥4 señales con dato y ≥4 a favor, EV>0, confianza Media/Alta, mismo lado que la Predicción NRNM). PASS no se recomienda.\n"
     "5. Nunca digas \"seguro\", \"garantizado\" ni \"100%\". Cierra con: \"Estimación del modelo, no garantía de ganancia.\" No eres asesor financiero.\n"
     "6. En parlays avisa que el EV es un tope y que las piernas no son independientes.\n"
     "7. Si la persona parece perseguir pérdidas o subir el stake por encima de lo planeado, sugiere pausar y bajar el monto.\n"
@@ -51,7 +51,8 @@ def _pick_short(it):
     g = it.get("game") or {}; l = it.get("lean") or {}
     return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", liga=g.get("league"), id=g.get("id"), fecha=g.get("date"), pick_principal=it.get("status") == "PICK",
                 pick=l.get("label"), mercado=l.get("market"), linea=l.get("line"), cuota=l.get("price_txt"), prob_final=round(l["p_final"], 3) if l.get("p_final") is not None else None,
-                edge_pp=round(l["edge"], 1) if l.get("edge") is not None else None, estado=it.get("status"), confianza=(it.get("confidence") or {}).get("level"))
+                edge_pp=round(l["edge"], 1) if l.get("edge") is not None else None, estado=it.get("status"), confianza=(it.get("confidence") or {}).get("level"),
+                publicado=bool(it.get("published")), motivo=it.get("discard_reason"))
 
 def _game_short(a):
     if not a: return None
@@ -68,7 +69,11 @@ def _game_short(a):
             probs.append(dict(mercado=m.get("title"), lado=o.get("label"), p_modelo=o.get("p_model"), p_mercado=o.get("p_nv"), edge=o.get("edge"), cuota=(o.get("best") or {}).get("price_txt")))
     return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", estado=g.get("state"), fecha=g.get("date"),
                 prediccion=dict(marcador=p.get("score"), ganador=p.get("winner"), total=p.get("total"), handicap=p.get("spread"), ambos_anotan=p.get("btts")),
-                lean=((a.get("picks") or {}).get("lean") or {}).get("label"), picks_registrados=rec, probabilidades=probs[:24], lesiones=inj)
+                lean=((a.get("picks") or {}).get("lean") or {}).get("label"),
+                pick_publicado=bool((a.get("picks") or {}).get("published")),
+                motivo_descarte=((a.get("picks") or {}).get("discard_reason")),
+                analisis_detalle=(a.get("analysis") or ((a.get("picks") or {}).get("analysis"))),
+                picks_registrados=rec, probabilidades=probs[:24], lesiones=inj)
 
 async def answer(q, league=None, eid=None, bankroll=None, unit_pct=None, daily_used_frac=0):
     key, base, model = _cfg()

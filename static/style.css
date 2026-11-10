@@ -780,3 +780,15 @@ body.has-tk #tkbar{bottom:calc(56px + env(safe-area-inset-bottom));}
 #tkbar .tkb-right button{min-height:44px}
 .mp-books{margin-top:10px}
 h1{font-weight:800}
+
+/* Análisis a detalle (6 señales) */
+.an-row{padding:10px 0;border-bottom:1px solid #2a2a31}
+.an-row:last-of-type{border-bottom:0}
+.an-h{font-size:13px;font-weight:600}
+.an-fig{margin-top:4px;font-size:12px;color:#a1a1aa;letter-spacing:0}
+details.disc{margin:16px 0;background:#15151a;border:1px solid #23232b;border-radius:16px;padding:12px 16px}
+details.disc>summary{cursor:pointer;font-weight:600;color:#f4f4f5;list-style:none;display:flex;justify-content:space-between;align-items:center;min-height:44px}
+details.disc>summary::-webkit-details-marker{display:none}
+details.disc>summary::after{content:'▾';color:#a1a1aa}
+details.disc[open]>summary::after{content:'▴'}
+details.disc .disc-n{color:#a1a1aa;font-weight:400;font-variant-numeric:tabular-nums}

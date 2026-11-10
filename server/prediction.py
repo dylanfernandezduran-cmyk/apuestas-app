@@ -26,11 +26,17 @@ def _ok(c, h, a):
     d = h - a + L                                   # hándicap: L = línea del LOCAL
     return d > 0 if s == "home" else d < 0
 
-def _cascade(cons):
-    """Subconjuntos de restricciones por prioridad lexicográfica: primero los que conservan la 1ª (picks del modelo, luego ganador, total, hándicap), etc."""
+def _cascade(cons, n_keep=0):
+    """Subconjuntos de restricciones por prioridad lexicográfica.
+    Las primeras n_keep (el ganador pFinal) no se sueltan nunca: evitan que un marcador
+    vuelva a contradecir al ganador (Jets ML vs Bills ML)."""
     cs = list(cons)
-    for inc in itertools.product((True, False), repeat=len(cs)):
-        yield [c for c, k in zip(cs, inc) if k]
+    keep, opt = cs[:n_keep], cs[n_keep:]
+    if not opt:
+        yield list(keep)
+        return
+    for inc in itertools.product((True, False), repeat=len(opt)):
+        yield list(keep) + [c for c, k in zip(opt, inc) if k]
 
 def _soccer(mdl, odds, g):
     lh, la = mdl["lam_home"], mdl["lam_away"]
@@ -40,7 +46,8 @@ def _soccer(mdl, odds, g):
     w = max(p, key=p.get)
     N = len(mat)
     def choose(cons):
-        for cs in _cascade(cons):
+        n_keep = 1 if cons and cons[0][0] == "w" else 0
+        for cs in _cascade(cons, n_keep):
             cells = [(i, j) for i in range(N) for j in range(N) if all(_ok(c, i, j) for c in cs)]
             if cells:
                 h, a = max(cells, key=lambda x: mat[x[0]][x[1]])
@@ -57,7 +64,8 @@ def _margin(mdl, odds, g):
     h0, a0 = max(0, int(round(hp))), max(0, int(round(ap)))
     w = "home" if mu >= 0 else "away"
     def choose(cons):
-        for cs in _cascade(cons):
+        n_keep = 1 if cons and cons[0][0] == "w" else 0
+        for cs in _cascade(cons, n_keep):
             best = None; R = 14
             for h in range(max(0, h0 - R), h0 + R + 1):
                 for a in range(max(0, a0 - R), a0 + R + 1):
@@ -181,9 +189,11 @@ def _pick_cons(picks):
         if c.get("side") in ("home", "away", "draw", "over", "under", "yes", "no"): out[mk] = (c["side"], c.get("line"))
     return out
 
-def build(game, mdl, odds, fam, corners=None, picks=None):
+def build(game, mdl, odds, fam, corners=None, picks=None, p_view=None):
     """Predicción para un juego PRE o None si no hay modelo suficiente. corners: salida de corners_info() (sólo fútbol, datos reales de ESPN).
-    picks: dict(lean, status, candidates) del propio juego: ganador/total/hándicap y el marcador exacto se alinean con ellos (sin contradicciones)."""
+    El ganador (y su probabilidad) sale de p_view / pFinal cuando se provee: la misma probabilidad
+    final que usa el pick principal. Un pick que contradiga ese ganador NO lo vuelve a voltear.
+    Total, hándicap y marcador se mantienen coherentes con ese ganador."""
     if not mdl: return None
     try:
         if fam == "tennis": out, total, cover, choose = _tennis(mdl, odds, game)
@@ -192,13 +202,31 @@ def build(game, mdl, odds, fam, corners=None, picks=None):
     except Exception:
         return None
     if not out: return None
+    # fuente única: pFinal (blend modelo + mercado s/vig), no el margen crudo ni un pick contrario
+    if p_view and (p_view.get("winner") or {}).get("side"):
+        wv = p_view["winner"]
+        probs = dict(out["winner"].get("probs") or {})
+        if wv.get("probs"):
+            probs.update(wv["probs"])
+        side = wv["side"]
+        if side not in probs and wv.get("p") is not None:
+            probs[side] = wv["p"]
+        out["winner"] = dict(side=side, p=wv.get("p") if wv.get("p") is not None else probs.get(side),
+                             probs=probs, src="pfinal")
     pk = _pick_cons(picks)
-    fixed = set()                              # líneas que siguen a un pick del modelo (prioridad alta para el marcador)
-    # ganador: sigue al pick ML si lo hay
-    if "ML" in pk and pk["ML"][0] in out["winner"]["probs"]:
-        sd_ = pk["ML"][0]
-        if sd_ != out["winner"]["side"]: out["winner"]["side"] = sd_; out["winner"]["p"] = out["winner"]["probs"][sd_]; out["winner"]["aligned"] = "pick"
-        fixed.add("w")
+    # un ML que contradiga al ganador pFinal no se usa (esa era la raíz Jets vs Bills)
+    if "ML" in pk and pk["ML"][0] != out["winner"]["side"]:
+        pk.pop("ML", None)
+    if "Spread" in pk:
+        sp_side = pk["Spread"][0]
+        wside = out["winner"]["side"]
+        if wside in ("home", "away") and sp_side in ("home", "away") and sp_side != wside:
+            # hándicap del no-favorito: sólo se conserva si puede cubrirse con el ganador predicho
+            # (se deja en cons opcionales; no fija el ganador)
+            pass
+    fixed = set()                              # líneas coherentes con el ganador pFinal (picks de total/hándicap/BTTS)
+    # el ganador pFinal siempre es restricción fija del marcador
+    fixed.add("w")
     tt = (odds or {}).get("total") or {}
     T, src = None, None
     if "Total" in pk and pk["Total"][1] is not None: T, src = pk["Total"][1], "mercado"
@@ -237,11 +265,11 @@ def build(game, mdl, odds, fam, corners=None, picks=None):
         if "BTTS" in pk: out["btts"]["aligned"] = "pick"; fixed.add("b")
     # --- marcador exacto: el más probable que cumple TODAS las líneas (picks primero, luego las del modelo)
     cons = []
-    if "w" in fixed: cons.append(("w", out["winner"]["side"], None))
+    # ganador pFinal SIEMPRE primero (n_keep=1): no se suelta nunca
+    cons.append(("w", out["winner"]["side"], None))
     if "t" in fixed: cons.append(("t", out["total"]["side"], out["total"]["line"]))
     if "s" in fixed: cons.append(("s", out["spread"]["side"], out["spread"]["line"]))
     if "b" in fixed: cons.append(("b", out["btts"]["side"], None))
-    if "w" not in fixed: cons.append(("w", out["winner"]["side"], None))
     if "t" not in fixed and out.get("total"): cons.append(("t", out["total"]["side"], out["total"]["line"]))
     if "s" not in fixed and out.get("spread"): cons.append(("s", out["spread"]["side"], out["spread"]["line"]))
     if "b" not in fixed and out.get("btts"): cons.append(("b", out["btts"]["side"], None))
@@ -253,7 +281,8 @@ def build(game, mdl, odds, fam, corners=None, picks=None):
     res_side = ("home" if sc["home"] > sc["away"] else "away" if sc["away"] > sc["home"] else "draw")
     notes = []
     if res_side != out["winner"]["side"]:
-        out["winner"]["side"] = res_side; out["winner"]["p"] = out["winner"]["probs"].get(res_side, 0); out["winner"]["aligned"] = "marcador"; notes.append("winner")
+        # no se voltea el ganador pFinal para encajar un marcador (raíz de contradicciones Jets/Bills)
+        notes.append("score-mismatch")
     t = out.get("total")
     if t and not _ok(("t", t["side"], t["line"]), h, a) and h + a != t["line"]:
         t["side"] = "over" if h + a > t["line"] else "under"; t["p"] = t["p_over"] if t["side"] == "over" else 1 - t["p_over"]; t["aligned"] = "marcador"

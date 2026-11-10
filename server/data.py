@@ -217,8 +217,11 @@ async def tennis_detail(league, mid):
         res["model"] = dict(kind="ranking", p_home=mdl["p_home"], p_away=mdl["p_away"], w_model=(M.blend_weight(mdl) if odds else None), label=lab, imputed=bool(mdl.get("imputed")))
         res["picks"] = dict(lean=dec["lean"], status=dec["status"], candidates=dec["candidates"], confidence=conf)
         if ST.ENABLED: ST.apply(res["picks"], {})
-        res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=res["picks"])
+        from . import quality as Q
+        p_view = Q.pfinal_view(dec["candidates"], mdl, odds, "tennis")
+        res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=res["picks"], p_view=p_view)
         if ST.ENABLED: ST.finalize(res["picks"], res["pred"])
+        Q.apply(res)
     else:
         res["model"] = None
         res["picks"] = None
@@ -458,6 +461,14 @@ async def _analyze(league, eid):
                ats=_ats(summ))
     out["market"] = mk; out["odds_note"] = odds_note
     out["trends"] = _trends(league, fam, tsum, H["id"], A["id"], H["name"], A["name"], odds, inj)
+    try:
+        from .enrich import rest_info
+        out["rest"] = {}
+        for _s, _tid in (("home", H["id"]), ("away", A["id"])):
+            ri = rest_info(tsum[_tid]["recent"], game["date"], fam)
+            if ri: out["rest"][_s] = ri
+    except Exception:
+        out.setdefault("rest", {})
     if not mdl:
         out["model"] = None; out["picks"] = None
         gaps.append("Modelo: Sin dato suficiente de resultados de uno de los equipos")
@@ -503,8 +514,11 @@ async def _analyze(league, eid):
         wx = game.get("weather") or {}
         crit = "abridor de MLB sin confirmar" if league == "mlb" and not flags["pitchers_known"] else None
         if ST.ENABLED: ST.apply(out["picks"], dict(key_injury=flags["key_injury"], critical_missing=crit, windy=(wx.get("gust") or 0) >= 25))
-        out["pred"] = PRED.build(game, mdl, odds, fam, out.pop("_cor", None), picks=out["picks"])
+        from . import quality as Q
+        p_view = Q.pfinal_view(out["picks"]["candidates"], mdl, odds, fam)
+        out["pred"] = PRED.build(game, mdl, odds, fam, out.pop("_cor", None), picks=out["picks"], p_view=p_view)
         if ST.ENABLED: ST.finalize(out["picks"], out["pred"])
+        Q.apply(out)
         out["probs"] = PR.build(game, mdl, odds, mk)
     else:
         out["picks"] = None
@@ -553,19 +567,22 @@ async def picks(scope="24h"):
         p = a["picks"]
         return dict(game=a["game"], lean=p["lean"], status=p["status"], confidence=p["confidence"], has_odds=bool(a.get("odds")),
                     official=p.get("official") or [], considered=p.get("considered") or [], strict=("official" in p), pred=_pred_brief(a.get("pred")),
-                    top=[c for c in p["candidates"][:3]], model=a.get("model"), brief=PR.brief(a.get("probs")))
+                    top=[c for c in p["candidates"][:3]], model=a.get("model"), brief=PR.brief(a.get("probs")),
+                    published=bool(p.get("published")), discard_reason=p.get("discard_reason"),
+                    analysis=p.get("analysis"), suggestions=p.get("suggestions") or [], quality_ok=bool(p.get("quality_ok")))
     rs = [r for r in await asyncio.gather(*[one(g) for g in games]) if r]
+    from . import quality as Q
+    rs = Q.cap_daily(rs)
     pri = {"PICK": 0, "LEAN": 1, "REVISAR": 2, "PASS": 3, "SIN_LINEA": 4}
-    if ST.ENABLED: rs.sort(key=lambda r: (pri.get(r["status"], 3), -(((r["lean"] or {}).get("score")) or 0)))
-    else:
+    def _pr(r):
+        lean = r.get("lean") or {}
+        ev = lean.get("ev") if lean.get("ev") is not None else -999
+        conf = (r.get("confidence") or {}).get("level")
         cw = {"Alta": 2, "Media": 1, "Baja": 0}
-        def _pr(r):
-            lean = r.get("lean") or {}
-            ev = lean.get("ev") if lean.get("ev") is not None else -999
-            conf = (r.get("confidence") or {}).get("level")
-            div = 1 if lean.get("divergence_high") else 0
-            return (pri.get(r["status"], 3), div, -ev, -cw.get(conf, 0))
-        rs.sort(key=_pr)
-    res = dict(scope=scope, generated=time.time(), n_games=len(games), items=rs, window=[t0.isoformat(), t1.isoformat()])
+        div = 1 if lean.get("divergence_high") else 0
+        return (0 if r.get("published") else 1, pri.get(r["status"], 3), div, -ev, -cw.get(conf, 0))
+    rs.sort(key=_pr)
+    n_pub = sum(1 for r in rs if r.get("published"))
+    res = dict(scope=scope, generated=time.time(), n_games=len(games), n_published=n_pub, items=rs, window=[t0.isoformat(), t1.isoformat()])
     _picks_cache[key] = (time.time(), res)
     return res

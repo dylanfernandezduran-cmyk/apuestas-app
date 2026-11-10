@@ -73,25 +73,46 @@ def extract(a, now=None):
     def mk(**kw):
         r = dict(base); r.update(kw); return r
     if "official" not in a["picks"]:
-        # modo normal (por defecto): pick principal + sugerencias, como antes de 9ac8414
-        lean = a["picks"]["lean"]
-        if lean and MKT.get(lean.get("market")) and lean.get("side"):
+        # modo normal: 1 principal (si el filtro de calidad lo publicó) + sugerencias coherentes con la predicción
+        pk = a["picks"]
+        lean = pk.get("lean")
+        pred = a.get("pred")
+        # si quality.apply ya corrió, respeta published; si no (tests/legado), se registra el lean como antes
+        published = pk["published"] if "published" in pk else True
+        if published and lean and MKT.get(lean.get("market")) and lean.get("side"):
             out.append(mk(market=MKT[lean["market"]], selection=lean["side"], line=lean.get("line"), label=lean["label"], odds=lean.get("price"),
                           book=(book if lean.get("price") is not None else None), p_model=lean.get("p_model"), p_final=lean.get("p_final"), p_nv=lean.get("p_nv"),
                           edge=lean.get("edge"), basis="modelo", type="main"))
-        # sugerencias 1: candidatos del modelo con ventaja (PICK / LEAN) distintos del principal
-        for c in a["picks"].get("candidates") or []:
+        def _coherent(c):
+            if not pred:
+                return True
+            try:
+                from . import quality as Q
+                fam = (a.get("kind") == "tennis" and "tennis") or (a.get("game") or {}).get("sport")
+                fam = "soccer" if fam == "futbol" else ("tennis" if fam == "tenis" else fam)
+                return Q.consistent_with_pred(pred, c, fam)
+            except Exception:
+                return True
+        # sugerencias 1: del filtro (ya coherentes) o candidatos PICK/LEAN distintos del principal
+        sugg = list(pk.get("suggestions") or [])
+        if not sugg:
+            sugg = [c for c in (pk.get("candidates") or []) if c is not lean and MKT.get(c.get("market")) and c.get("status") in ("PICK", "LEAN")]
+        for c in sugg:
             if c is lean or not MKT.get(c.get("market")) or c.get("status") not in ("PICK", "LEAN"): continue
+            if not _coherent(c): continue
             out.append(mk(market=MKT[c["market"]], selection=c["side"], line=c.get("line"), label=c["label"], odds=c.get("price"), book=(book if c.get("price") is not None else None),
                           p_model=c.get("p_model"), p_final=c.get("p_final"), p_nv=c.get("p_nv"), edge=c.get("edge"), basis="modelo", type="suggestion"))
-        # sugerencias 2: mejor resultado por mercado de la sección Probabilidades (lo que muestran las tarjetas de lista / Top picks)
-        from . import probs as PR
-        for b in PR.brief(a.get("probs")):
-            if not b.get("side") or not b.get("market"): continue
-            best = b.get("best") or {}
-            out.append(mk(market=b["market"], selection=b["side"], line=b.get("line"), label=b["label"], odds=best.get("price"), book=best.get("book"),
-                          p_model=b.get("p_model"), p_final=b.get("p_final"), p_nv=b.get("p_nv"), edge=b.get("edge"),
-                          basis=("modelo" if b.get("p_model") is not None else "mercado"), type="suggestion"))
+        # sugerencias 2 (legado / sin filtro): briefs del mercado, sólo si no se filtró calidad y son coherentes
+        if "published" not in pk:
+            from . import probs as PR
+            for b in PR.brief(a.get("probs")):
+                if not b.get("side") or not b.get("market"): continue
+                best = b.get("best") or {}
+                row = dict(market=b["market"], side=b["side"], line=b.get("line"), status="LEAN")
+                if pred and not _coherent(row): continue
+                out.append(mk(market=b["market"], selection=b["side"], line=b.get("line"), label=b["label"], odds=best.get("price"), book=best.get("book"),
+                              p_model=b.get("p_model"), p_final=b.get("p_final"), p_nv=b.get("p_nv"), edge=b.get("edge"),
+                              basis=("modelo" if b.get("p_model") is not None else "mercado"), type="suggestion"))
         _stamp_conf_ev(out, a)
         return out
     # modo estricto (NRNM_STRICT=1): sólo los picks OFICIALES (máx. 2 por juego)

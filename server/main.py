@@ -277,6 +277,13 @@ async def game(league: str, eid: str):
     if not r: raise HTTPException(404, "Juego no encontrado o la fuente (ESPN) no respondió. Reintenta en unos segundos.")
     try: await enrich.detail(r, league, eid)
     except Exception: pass
+    try:
+        from . import quality as Q, record as REC
+        if r.get("picks") and (r.get("game") or {}).get("state") == "pre":
+            Q.refresh(r)
+            REC.record_analysis(r)
+    except Exception:
+        pass
     return r
 
 @app.get("/api/props/{league}/{eid}")

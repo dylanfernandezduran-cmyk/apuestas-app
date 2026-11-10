@@ -384,6 +384,36 @@ function dFoot(d){
   return `<section class="ds mini" data-k="gaps"><h3 class="dh"><span class="ttl2">Datos no disponibles · ${gaps.length}</span><button type="button" class="ib${DST.info.gaps?' on':''}" aria-label="Ver detalle">i</button></h3><div class="di" ${DST.info.gaps?'':'hidden'}><ul class="tl2">${gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div></section>${fin}`;
 }
 
+
+function dAnalisis(d){
+  const an=d.analysis||(d.picks&&d.picks.analysis); if(!an||!an.signals||!an.signals.length) return '';
+  const V={a_favor:['✅','A favor','pos'],en_contra:['⚠️','En contra','neg'],mixto:['↔️','Mixto','amb'],neutral:['➖','Neutral','mut'],sin_dato:['🕳️','Sin dato','mut']};
+  const am=o=>o==null?'sin dato':(o>0?'+'+o:String(o));
+  const fig=s=>{
+    const f=s.figures||{}, bits=[];
+    if(f.p_final!=null) bits.push('pFinal '+(f.p_final*100).toFixed(1)+'%');
+    if(f.p_model!=null) bits.push('modelo '+(f.p_model*100).toFixed(1)+'%');
+    if(f.p_nv!=null) bits.push('mercado s/vig '+(f.p_nv*100).toFixed(1)+'%');
+    if(f.ev!=null) bits.push('EV '+(f.ev>=0?'+':'')+(f.ev*100).toFixed(1)+'%');
+    if(f.open_odds!=null||f.now_odds!=null) bits.push('cuota '+am(f.open_odds)+' → '+am(f.now_odds));
+    if(f.open_line!=null||f.now_line!=null) bits.push('línea '+(f.open_line??'sin dato')+' → '+(f.now_line??'sin dato'));
+    if(f.d_nv_pp!=null) bits.push((f.d_nv_pp>0?'+':'')+Number(f.d_nv_pp).toFixed(1)+' pp');
+    if(f.tickets!=null||f.money!=null) bits.push((f.tickets!=null?f.tickets+'% apuestas':'% apuestas sin dato')+' / '+(f.money!=null?f.money+'% dinero':'% dinero sin dato'));
+    if(f.books&&f.books.length) bits.push(f.books.slice(0,6).map(b=>esc(b.book)+' '+am(b.open_odds)+'→'+am(b.now_odds)).join(' · '));
+    if(Array.isArray(f.tags)&&f.tags.length) bits.push(f.tags.map(t=>Array.isArray(t)?t[1]||t[0]:t).join(', '));
+    return bits.length?`<div class="an-fig mono">${bits.map(x=>esc(String(x))).join(' · ')}</div>`:'';
+  };
+  const rows=an.signals.map(s=>{
+    const v=V[s.verdict]||V.sin_dato;
+    return `<div class="an-row"><div class="an-h"><span class="${v[2]}">${v[0]} <b>${esc(s.label)}</b> · ${v[1]}</span></div>
+      <div class="sub">${esc(s.detail||'sin dato')}</div>${fig(s)}</div>`;
+  }).join('');
+  const pk=d.picks||{}, pub=pk.published, why=pk.discard_reason;
+  const sum=`${an.n_agree||0} a favor · ${an.n_against||0} en contra · ${an.n_present||0} con dato (se exigen ${an.n_required||4} presentes y ${an.min_agree||4} a favor)`;
+  const foot=pub?`<div class="sub pos">Pick principal publicado · ${esc(sum)}</div>`:`<div class="sub ${pk.status==='REVISAR'?'neg':'mut'}">${esc(why||'Sin pick principal')} · ${esc(sum)}</div>`;
+  return ds('analisis','Análisis a detalle',rows+foot,{info:'Seis señales: modelo (pFinal), movimiento de línea, RLM/%apuestas/%dinero, tendencias, lesiones y alineaciones, contexto físico/clima. Si falta un dato se muestra «sin dato»: no se inventa ni cuenta a favor ni en contra. El pick principal se publica sólo si hay al menos 4 señales con dato, 4 a favor, EV>0 y confianza Media/Alta, y coincide con la Predicción NRNM.'});
+}
+
 function detailSections(d){
   const tn_=d.kind==='tennis';
   const mercados=[dPicks(d), dProb(d), (marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')), dCmp(d), dPitch(d), dTrends(d), dRecent(d), dH2h(d), dKey(d), dModel(d)].join('');
@@ -392,7 +422,7 @@ function detailSections(d){
   const alin=[tn_?'':lineupsSection(d), dInj(d), dWx(d), dPlayers(d)].join('')||'<div class="card mut">Sin alineaciones ni lesiones publicadas.</div>';
   const tabs=[['mercados','Mercados'],['lineas','Líneas'],['props','Props'],['alin','Alineaciones']];
   const panes={mercados, lineas, props, alin};
-  return [dPred(d), dRec(d),
+  return [dPred(d), dAnalisis(d), dRec(d),
     `<div id="d-tabs"><div class="ds-tabs" role="tablist">${tabs.map((x,i)=>`<button type="button" role="tab" data-dt="${x[0]}" class="${i?'':'on'}" aria-selected="${i? 'false':'true'}">${x[1]}</button>`).join('')}</div>`,
     tabs.map((x,i)=>`<div class="ds-pane" data-dt="${x[0]}" ${i?'hidden':''}>${panes[x[0]]}</div>`).join(''),
     `</div>`, dFoot(d)].join('');

@@ -541,9 +541,12 @@ async function viewPicks(scope){
   const d = await api('/api/picks?scope='+apiScope);
   if(seq!==ROUTE_SEQ) return;
   if(alta) d.items=(d.items||[]).filter(r=>(r.confidence&&r.confidence.level)==='Alta'||r.conf_level==='Alta'||(r.lean&&r.lean.conf_level==='Alta'));
+  const allItems=d.items||[];
+  const published=allItems.filter(r=>r.published===true||r.published==null);
+  const discarded=allItems.filter(r=>r.published===false);
   const tabs=[['hoy','Hoy'],['manana','Mañana'],['72h','72 h'],['alta','Alta confianza']];
   const t=`<div class="pills">${tabs.map(([k,l])=>`<a class="pill ${k===scope?'on':''}" href="#/picks/${k}">${l}</a>`).join('')}</div>`;
-  const withOdds=d.items.filter(r=>r.has_odds&&r.status!=='PASS'&&r.status!=='REVISAR');
+  const withOdds=published.filter(r=>r.has_odds&&r.status!=='PASS'&&r.status!=='REVISAR');
   const card=r=>{ const l=r.lean||{}, g=r.game, rev=r.status==='REVISAR'||l.divergence_high;
     const cap=capasOf(r), evv=evPct(l), stak=stakeLabel(l,BK());
     const conf=(r.confidence&&r.confidence.level)||l.conf_level;
@@ -562,7 +565,7 @@ async function viewPicks(scope){
       ${l.price!=null&&r.has_odds?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:r.status==='PICK'},l)),'Agregar al ticket')}</div>`:''}</div>
       <div class="pk-ev ${evv>0?'pos':evv<0?'neg':'mut'}">${evTxt}</div></a>`; };
   const featOf=()=>{
-    const pool=d.items.filter(r=>r.has_odds&&r.status!=='REVISAR'&&r.status!=='PASS'&&r.status!=='SIN_LINEA'&&!(r.lean&&r.lean.divergence_high));
+    const pool=published.filter(r=>r.has_odds&&r.status!=='REVISAR'&&r.status!=='PASS'&&r.status!=='SIN_LINEA'&&!(r.lean&&r.lean.divergence_high));
     if(!pool.length) return '';
     const r=pool[0]; // ya vienen ordenados por EV y confianza
     const l=r.lean||{}, g=r.game, cap=capasOf(r), evv=evPct(l), stak=stakeLabel(l,BK());
@@ -583,16 +586,22 @@ async function viewPicks(scope){
   const compact=`<section class="hm" id="pk-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo, jugador o torneo" aria-label="Buscar"></label><div class="srch-r" hidden></div></section>`;
   let html=`${compact}<h1>Picks</h1>${t}<p class="ago">${esc(agoTxt(d.generated||d.ts||d.now))}</p>`;
   html+=featOf();
-  if(!d.items.length) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick':'No hay pick en esta ventana.'}</div>`;
-  else if(!withOdds.length && !d.items.some(r=>r.status==='REVISAR')) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick':'No hay pick en esta ventana.'}</div>`;
-  // agrupado por deporte (orden: MLB, NFL, Fútbol, NBA, NHL, Tenis; grupos vacíos ocultos). Dentro de cada grupo: con ventaja, PASS y sin línea (orden del servidor)
+  if(!published.length) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick principal (el filtro pidió al menos 4 señales a favor, EV&gt;0 y confianza Media/Alta).':'No hay pick principal en esta ventana.'}</div>`;
+  else if(!withOdds.length && !published.some(r=>r.status==='REVISAR')) html+=`<div class="card mut">${scope==='hoy'?'Hoy no hay pick':'No hay pick en esta ventana.'}</div>`;
   const rank=r=>r.has_odds?(r.status==='PASS'?1:0):2;
   PICK_GROUPS.forEach(k=>{
-    const its=d.items.filter(r=>r.game.sport===k).map((r,i)=>[r,i]).sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(x=>x[0]);
+    const its=published.filter(r=>r.game.sport===k).map((r,i)=>[r,i]).sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(x=>x[0]);
     if(!its.length) return;
     const sp=(SPORTS||[]).find(x=>x.key===k)||{name:k,emoji:''}, nPick=its.filter(r=>r.has_odds&&r.status!=='PASS').length;
     html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${sp.emoji}</span> ${esc(sp.name)} <span class="n mono">${its.length}${nPick?` · ${nPick} con ventaja`:''}</span></h2>`+its.slice(0,30).map(card).join('');
   });
+  if(discarded.length){
+    const dcard=r=>{ const l=r.lean||{}, g=r.game;
+      return `<a class="card pk pk-card mut" href="#/juego/${encodeURIComponent(g.league)}/${g.id}"><div class="pk-l"><div class="pkt">${esc(l.label||matchup(g))}</div>
+        <div class="sub">${esc(g.league_name||'')} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
+        <div class="sub">${esc(r.discard_reason||'No publicado')}</div></div></a>`; };
+    html+=`<details class="disc" id="pk-descartados"><summary>Ver todos / descartados <span class="disc-n mono">${discarded.length}</span></summary>${discarded.slice(0,80).map(dcard).join('')}</details>`;
+  }
   if(seq!==ROUTE_SEQ) return;
   $app.innerHTML=html;
   if(typeof srchInit==='function'){ const s=document.getElementById('pk-search'); if(s) srchInit(s); }
