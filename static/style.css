@@ -26,7 +26,7 @@ h2{font-size:14px;font-weight:600;margin:0 0 var(--s3);letter-spacing:.005em;dis
 .grid{display:grid;gap:var(--s3)}.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
 
 /* ---- tarjetas y piezas base ---- */
-.card{background:var(--panel);border:1px solid var(--hair);border-radius:var(--r-card,16px);padding:var(--s4)}
+.card{display:block;background:var(--panel);border:1px solid var(--hair);border-radius:var(--r-card,16px);padding:var(--s4)}
 .card.hot{border-color:rgba(var(--acc-rgb),.28)}
 .sport{display:flex;flex-direction:column;align-items:center;gap:var(--s2);padding:var(--s5) var(--s3);font-weight:600;font-size:15px;text-align:center;transition:border-color .15s}
 .sport:hover{border-color:rgba(var(--acc-rgb),.4)}.sport .em{font-size:28px;line-height:1}
@@ -56,7 +56,7 @@ footer.legal,#legal{display:none}
 .hide-m{}
 
 /* ---- lista de juegos ---- */
-.glist{display:grid;gap:var(--s2);grid-template-columns:minmax(0,1fr)}.glist>*{min-width:0}
+.glist,#sp-today{display:grid;gap:var(--s2);grid-template-columns:minmax(0,1fr)}.glist>*,#sp-today>*{min-width:0}
 .game{display:block;padding:var(--s3) var(--s4);cursor:pointer;transition:border-color .15s}
 .game:hover{border-color:#2a3441}
 .gh{display:flex;align-items:center;gap:var(--s2);font-size:12px;color:var(--mut);margin-bottom:var(--s2);min-height:20px}
