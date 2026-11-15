@@ -30,13 +30,45 @@ function lineMove(r,g){
   const lock = started && r.status!=='ANULADO' ? `<span class="lm-tg lm-lk">🔒 Cierre</span>` : '';
   return `<span class="lm">${st?`<span class="lm-tg ${st[0]}">${st[1]}</span>`:''}${lock}${bits.join(' · ')}${r.status==='ANULADO'&&r.note?`<em>${esc(r.note)}</em>`:''}</span>`;
 }
+
+function recConflictsPred(r, p){
+  if(!p||!r||r.status==='ANULADO') return false;
+  const mk=r.market, sel=r.selection, line=r.line;
+  if(mk==='sspread'||mk==='stotal') return false;
+  if(mk==='ml') return (p.winner&&p.winner.side!=null) ? sel!==p.winner.side : false;
+  if(mk==='total'){
+    const t=p.total; if(!t||t.side==null) return false;
+    if(sel!==t.side) return true;
+    return (t.line!=null && line!=null) ? Math.abs(t.line-line)>1e-6 : false;
+  }
+  if(mk==='spread'){
+    const s=p.spread; if(!s||s.side==null) return false;
+    if(sel!==s.side) return true;
+    if(s.line!=null && line!=null){
+      const candHome = sel==='home' ? Number(line) : -Number(line);
+      return Math.abs(Number(s.line)-candHome)>1e-6;
+    }
+    return false;
+  }
+  if(mk==='btts') return p.btts&&p.btts.side!=null ? sel!==p.btts.side : false;
+  return false;
+}
+function confLbl(c, p, l){
+  const ev = l && l.ev, st = ((p && p.status) || '').toUpperCase();
+  if(st==='PASS' || st==='SIN_LINEA' || st==='REVISAR' || (ev!=null && ev<=0)) return 'no aplica';
+  if(c && c.level) return c.level;
+  return (typeof SD!=='undefined'?SD:'—');
+}
+
 function dRec(d){
   const rows=d.record||[], g=d.game; if(!rows.length) return '';
   const fin=rows.find(r=>r.score_text);
   const right = fin ? tag2('FINAL · '+esc(fin.score_text),'fin') : g.state==='in' ? tag2('● EN VIVO','live') : tag2('PRE-JUEGO');
   const body = rows.map(r=>{
     const st = r.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,r.market,r.selection)||gradeBadge(r,false)) : gradeBadge(r,false);
-    return `<div class="rr2${r.status==='ANULADO'&&r.state?' lmx':''}"><div class="rlx"><b>${esc(r.label)}</b><span class="mt">${r.type==='main'?'Principal':'Sugerencia'} · ${oddsTxt(r)}${r.line!=null?' · línea '+(/spread$/.test(r.market)?sg(r.line):r.line):''}${r.p_model!=null?' · modelo '+pct(r.p_model,0):''}</span>${lineMove(r,g)}</div>
+    const conflict = recConflictsPred(r,d.pred);
+    const note = conflict ? `<em class="mt k-a">${g.state==='pre'?'No coincide con la Predicción NRNM (se re-evalúa antes del inicio).':'Quedó en vigor al inicio y no coincide con la Predicción NRNM; el récord cuenta este pick.'}</em>` : '';
+    return `<div class="rr2${r.status==='ANULADO'&&r.state?' lmx':''}${conflict?' mismatch':''}"><div class="rlx"><b>${esc(r.label)}</b><span class="mt">${r.type==='main'?'Principal':'Sugerencia'} · ${oddsTxt(r)}${r.line!=null?' · línea '+(/spread$/.test(r.market)?sg(r.line):r.line):''}${r.p_model!=null?' · modelo '+pct(r.p_model,0):''}</span>${note}${lineMove(r,g)}</div>
       <div class="rg">${st}${r.units!=null?`<b class="mono ${r.units>0?'k-t':r.units<0?'k-p':'mut'}">${units(r.units)}</b>`:''}</div></div>`; }).join('');
   return ds('rec','Picks registrados',body,{right, info:'Cada pick guarda su línea/cuota de APERTURA y, hasta que empieza el juego, se re-evalúa con el modelo a la línea ACTUAL: si la línea se mueve se actualiza («Abrió 48.5 · Actual 40.5»); si el modelo ahora prefiere el otro lado queda INVERTIDO (y se registra el lado nuevo); si ya no hay valor queda CANCELADO. Al inicio se bloquea la línea de cierre y se califica contra ella. Se califican solos con el marcador final de ESPN cada ~10 min; mientras no haya final confirmado quedan pendientes. Unidades a 1u plano.'});
 }
@@ -73,8 +105,8 @@ function dPicks(d){
   const evTxt = l.ev==null?SD:sg(l.ev)+'%';
   const edgeLbl = l.divergence_high ? 'Divergencia alta' : (l.edge==null?SD:sg(l.edge)+' pp');
   const edgeCls = l.divergence_high ? 'k-a' : (l.edge>0?'k-t':'k-p');
-  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell(l.divergence_high?'Divergencia':('Edge <abbr'+((typeof tip==='function')?tip('edge'):'')+'>s/vig</abbr>'),edgeLbl,edgeCls),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',evTxt,l.ev>0?'k-t':l.ev<0?'k-p':''),cell('Confianza',c?esc(c.level):SD)]
-    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',SD),cell('Confianza',c?esc(c.level):SD)];
+  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell(l.divergence_high?'Divergencia':('Edge <abbr'+((typeof tip==='function')?tip('edge'):'')+'>s/vig</abbr>'),edgeLbl,edgeCls),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',evTxt,l.ev>0?'k-t':l.ev<0?'k-p':''),cell('Confianza',esc(confLbl(c,p,l)))]
+    : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',SD),cell('Confianza',esc(confLbl(c,p,l)))];
   const sig=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[l.signals.verdict]||'mut'}">●</span> ${esc((VERD[l.signals.verdict]||[])[1]||'')}${l.signals.best?` · mejor precio <b class="mono">${esc(l.signals.best.price_txt)}</b> en ${esc(l.signals.best.book)}`:''}</div>` : '';
   const main = `<div class="mp2 ${p.status==='PICK'?'hot':''}"><div class="mph"><span class="mpk ${p.status==='PICK'?'k-p':p.status==='LEAN'?'k-a':'mut'}">${esc(st[1])}</span>${gb}</div>
     <div class="mpl">${esc(l.label)}</div><div class="pcs">${cells.join('')}</div>${sig}${g.state==='pre'&&l.price!=null?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:p.status==='PICK'},l)),'Agregar al ticket')}</div>`:''}${dMiPickBooks(d)}</div>`;
@@ -104,7 +136,7 @@ function dPicksStrict(d){
   const card=(x,i)=>{ const rr=recFor(mktKey(x),x.side,x.line);
     const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
     return `<div class="mp2 hot"><div class="mph"><span class="mpk k-p">${i?'2.º PICK OFICIAL':'PICK OFICIAL'}</span><span class="scb mono">${x.score}/100</span>${gb}</div>
-    <div class="mpl">${esc(x.label)}</div><div class="pcs">${[cell('Cuota',esc(x.price_txt||SD)),cell('Prob. final',pct(x.p_final,0)),cell('Edge',sg(x.edge)+' pp',x.edge>0?'k-t':'k-p'),cell('Confianza',c?esc(c.level):SD)].join('')}</div>
+    <div class="mpl">${esc(x.label)}</div><div class="pcs">${[cell('Cuota',esc(x.price_txt||SD)),cell('Prob. final',pct(x.p_final,0)),cell('Edge',sg(x.edge)+' pp',x.edge>0?'k-t':'k-p'),cell('Confianza',esc(confLbl(c,p,x)))].join('')}</div>
     ${parts(x)}${sigL(x)}${g.state==='pre'?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:true},x)))}</div>`:''}</div>`; };
   const l=p.lean;
   const none = `<div class="mp2"><div class="mph"><span class="mpk mut">SIN PICK OFICIAL</span></div><div class="mpl">Ningún mercado pasa el filtro estricto</div>

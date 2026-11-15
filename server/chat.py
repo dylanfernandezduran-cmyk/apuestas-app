@@ -35,7 +35,10 @@ SYSTEM = (
     "5. Nunca digas \"seguro\", \"garantizado\" ni \"100%\". Cierra con: \"Estimación del modelo, no garantía de ganancia.\" No eres asesor financiero.\n"
     "6. En parlays avisa que el EV es un tope y que las piernas no son independientes.\n"
     "7. Si la persona parece perseguir pérdidas o subir el stake por encima de lo planeado, sugiere pausar y bajar el monto.\n"
-    "Nunca contradigas la predicción ni el pick registrado del juego. Recomienda primero PICK y luego LEAN. PASS/SIN_LINEA no son recomendación. No menciones ningún «filtro estricto»."
+    "Nunca contradigas la predicción ni el pick registrado del juego. Recomienda primero PICK y luego LEAN. PASS/SIN_LINEA no son recomendación. No menciones ningún «filtro estricto».\n"
+    "8. El ganador del juego es consistencia.ganador_pfinal (mismo pFinal de la carta). "
+    "El pFinal del pick (hándicap/total) NO es el ganador. Si consistencia.contradicciones no está vacío, dilo y quédate con la predicción. "
+    "Si el estado es PASS o el EV≤0, no recomiendes y no hables de confianza Alta (la confianza mostrada es «no aplica»)."
 )
 
 def polish(text, question=""):
@@ -49,9 +52,15 @@ def polish(text, question=""):
 
 def _pick_short(it):
     g = it.get("game") or {}; l = it.get("lean") or {}
+    try:
+        from .consistency import clamp_display_confidence
+        conf = clamp_display_confidence(it.get("confidence"), it.get("status"), l.get("ev"))
+        conf_level = conf.get("level")
+    except Exception:
+        conf_level = (it.get("confidence") or {}).get("level")
     return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", liga=g.get("league"), id=g.get("id"), fecha=g.get("date"), pick_principal=it.get("status") == "PICK",
                 pick=l.get("label"), mercado=l.get("market"), linea=l.get("line"), cuota=l.get("price_txt"), prob_final=round(l["p_final"], 3) if l.get("p_final") is not None else None,
-                edge_pp=round(l["edge"], 1) if l.get("edge") is not None else None, estado=it.get("status"), confianza=(it.get("confidence") or {}).get("level"),
+                edge_pp=round(l["edge"], 1) if l.get("edge") is not None else None, estado=it.get("status"), confianza=conf_level,
                 publicado=bool(it.get("published")), motivo=it.get("discard_reason"))
 
 def _game_short(a):
@@ -67,12 +76,21 @@ def _game_short(a):
     for m in ((a.get("probs") or {}).get("markets") or []):
         for o in m.get("outcomes") or []:
             probs.append(dict(mercado=m.get("title"), lado=o.get("label"), p_modelo=o.get("p_model"), p_mercado=o.get("p_nv"), edge=o.get("edge"), cuota=(o.get("best") or {}).get("price_txt")))
+    try:
+        from .consistency import chat_consistency, clamp_display_confidence
+        cons = chat_consistency(a)
+        pk = a.get("picks") or {}
+        conf_show = clamp_display_confidence(pk.get("confidence"), pk.get("status"), ((pk.get("lean") or {}).get("ev")))
+    except Exception:
+        cons, conf_show = None, None
     return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", estado=g.get("state"), fecha=g.get("date"),
                 prediccion=dict(marcador=p.get("score"), ganador=p.get("winner"), total=p.get("total"), handicap=p.get("spread"), ambos_anotan=p.get("btts")),
                 lean=((a.get("picks") or {}).get("lean") or {}).get("label"),
                 pick_publicado=bool((a.get("picks") or {}).get("published")),
                 motivo_descarte=((a.get("picks") or {}).get("discard_reason")),
                 analisis_detalle=(a.get("analysis") or ((a.get("picks") or {}).get("analysis"))),
+                consistencia=cons,
+                confianza_mostrada=(conf_show or {}).get("level") if conf_show else ((a.get("picks") or {}).get("confidence") or {}).get("level"),
                 picks_registrados=rec, probabilidades=probs[:24], lesiones=inj)
 
 async def answer(q, league=None, eid=None, bankroll=None, unit_pct=None, daily_used_frac=0):

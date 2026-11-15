@@ -221,11 +221,11 @@ def _modelo(cand, pred):
     ev = cand.get("ev")
     figs = dict(p_final=pf, p_nv=pnv, p_model=pm, ev=ev, edge=cand.get("edge"))
     w = ((pred or {}).get("winner") or {})
-    bits = [f"pFinal { _pct(pf) }", f"modelo {_pct(pm)}", f"mercado s/vig {_pct(pnv)}"]
+    bits = [f"pFinal del pick {_pct(pf)}", f"modelo {_pct(pm)}", f"mercado s/vig {_pct(pnv)}"]
     if ev is not None:
         bits.append(f"EV {ev_as_pct(ev):+.1f}%")
-    if w.get("side") is not None and w.get("src") == "pfinal":
-        bits.append(f"ganador pFinal: {w['side']} ({_pct(w.get('p'))})")
+    if w.get("side") is not None:
+        bits.append(f"ganador (mismo pFinal del juego): {w['side']} ({_pct(w.get('p'))})")
     if pf is None:
         return _sig("modelo", "sin_dato", "pFinal: sin dato", figs)
     # a favor si este lado es el de mayor pFinal (o, en totales, pFinal > 0.5)
@@ -868,6 +868,9 @@ def apply(out):
     picks["suggestions"] = sugg
     # 1 principal: no dejar candidatos PICK del lado contrario como si fueran accionables
     _stamp_why(picks, pred, analysis, conf)
+    ev_disp = (lean or {}).get("ev") if isinstance(lean, dict) else None
+    from .consistency import clamp_display_confidence
+    picks["confidence"] = clamp_display_confidence(conf, status, ev_disp)
     out["picks"] = picks
     out["analysis"] = analysis
     return out

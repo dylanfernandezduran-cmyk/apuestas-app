@@ -152,18 +152,130 @@ def _stamp_conf_ev(rows, a):
             r["why_json"] = _json.dumps(why, ensure_ascii=False) if not isinstance(why, str) else why
 
 def record_analysis(a, now=None):
-    """Persiste los picks de un análisis. Devuelve cuántas filas nuevas se insertaron."""
+    """Persiste los picks de un análisis y alinea pendientes pre-saque a la predicción vigente.
+
+    Se corre en cada refresh (no sólo al publicar). Los juegos ya iniciados no se tocan.
+    """
+    now = now or time.time()
     rows = extract(a, now)
-    if not rows:
-        # sin pick oficial: los picks pendientes ya registrados de este juego (aún sin empezar) se cancelan (criterio estricto)
-        g = (a or {}).get("game") or {}
-        if a and (a.get("picks") or {}).get("official") is not None and g.get("state") == "pre":
-            try: reconcile([], now, key=(g["league"], str(g["id"])))
-            except Exception: pass
-        return 0
-    try: reconcile(rows, now)
-    except Exception: pass
-    return record_rows(rows)
+    g = (a or {}).get("game") or {}
+    key = (g["league"], str(g["id"])) if g.get("league") is not None and g.get("id") is not None else None
+    pre = g.get("state") == "pre"
+    n = 0
+    if rows:
+        try: reconcile(rows, now, pred=(a or {}).get("pred"))
+        except Exception: pass
+        n = record_rows(rows)
+    elif a and (a.get("picks") or {}).get("official") is not None and pre and key:
+        # modo estricto: sin oficiales se cancelan los pendientes de este juego
+        try: reconcile([], now, key=key)
+        except Exception: pass
+    if pre and key and a:
+        try: enforce_pred(a.get("pred"), key, now, sport=g.get("sport"))
+        except Exception: pass
+    return n
+
+
+def _fam_sport(sport):
+    if sport in ("futbol", "soccer"):
+        return "soccer"
+    if sport in ("tenis", "tennis"):
+        return "tennis"
+    return sport
+
+
+def enforce_pred(pred, key, now=None, sport=None):
+    """Cancela o actualiza (misma cara, línea nueva) cualquier PENDIENTE pre-saque que no coincida con la predicción.
+
+    No toca picks cuyo start_ts ya pasó ni filas calificadas. Mercados de sets (tenis) se omiten.
+    """
+    import json
+    from . import consistency as C
+    now = int(now or time.time())
+    cnt = dict(cancelled=0, updated=0)
+    if not pred or not key:
+        return cnt
+    lg, eid = key
+    with history._lock:
+        c = _c()
+        if c is None:
+            return cnt
+        cur = c.execute(
+            "SELECT id, market, selection, line, odds, open_line, open_odds, status, state, moves, label "
+            "FROM picks WHERE league=? AND eid=? AND status='PENDIENTE' AND start_ts>?",
+            (lg, str(eid), now),
+        )
+        for pid, mk, sel, line, odds, oline, oodds, status, state, moves, label in cur.fetchall():
+            row = dict(market=mk, selection=sel, line=line, label=label, odds=odds)
+            kind, reason = C.classify_pick(pred, row)
+            if kind != "mismatch":
+                continue
+            tgt = C.pred_target(pred, mk, sel)
+            mv = json.loads(moves) if moves else []
+            # misma cara, sólo cambió la línea: se actualiza a la línea de la predicción (ACTUALIZADO)
+            if tgt and sel == tgt.get("side") and reason == "línea" and tgt.get("line") is not None:
+                new_line = tgt["line"]
+                if mk in ("spread", "Spread") and tgt.get("home_line") is not None:
+                    new_line = float(tgt["home_line"]) if sel == "home" else -float(tgt["home_line"])
+                new_label = C.updated_label(dict(label=label, line=line), dict(tgt, line=new_line))
+                mv.append(dict(t=now, line=new_line, odds=odds, reason="alineado a predicción"))
+                moved = (new_line != oline) or (odds != oodds)
+                new_state = "ACTUALIZADO" if moved else "ACTIVO"
+                c.execute(
+                    "UPDATE picks SET line=?, label=?, state=?, moves=?, updated_at=?, "
+                    "note=? WHERE id=?",
+                    (new_line, new_label, new_state, json.dumps(mv), now,
+                     "Línea alineada a la Predicción NRNM (mismo lado) antes del inicio", pid),
+                )
+                # re-chequeo: si aún no coincide, se cancela
+                kind2, _ = C.classify_pick(pred, dict(market=mk, selection=sel, line=new_line, label=new_label))
+                if kind2 == "mismatch":
+                    c.execute(
+                        "UPDATE picks SET status='ANULADO', state='CONTRADICE', updated_at=?, note=? WHERE id=?",
+                        (now, "Cancelado antes del inicio: tras alinear la línea sigue sin coincidir con la Predicción NRNM", pid),
+                    )
+                    cnt["cancelled"] += 1
+                else:
+                    cnt["updated"] += 1
+                continue
+            c.execute(
+                "UPDATE picks SET status='ANULADO', state='CONTRADICE', updated_at=?, note=? WHERE id=?",
+                (now, "Cancelado antes del inicio: contradice la Predicción NRNM (lado o línea)", pid),
+            )
+            cnt["cancelled"] += 1
+        c.commit()
+    return cnt
+
+
+def reconcile_open_to_pred(now=None):
+    """Recorre todos los PENDIENTE que aún no empiezan y los alinea a la predicción guardada.
+
+    Se invoca en cada ciclo de calificación y puede correrse al arranque. No reescribe historia ni saques ya ocurridos.
+    """
+    now = int(now or time.time())
+    from . import prediction as PRED
+    keys = []
+    seen = set()
+    for r in _rows("SELECT DISTINCT league, eid, sport FROM picks WHERE status='PENDIENTE' AND start_ts>?", (now,)):
+        k = (r["league"], str(r["eid"]))
+        if k not in seen:
+            seen.add(k)
+            keys.append((r["league"], str(r["eid"]), r.get("sport")))
+    cnt = dict(games=0, cancelled=0, updated=0, skipped_no_pred=0)
+    for lg, eid, sport in keys:
+        try:
+            row = PRED.get(lg, eid)
+        except Exception:
+            row = None
+        pred = (row or {}).get("pred")
+        if not pred:
+            cnt["skipped_no_pred"] += 1
+            continue
+        r = enforce_pred(pred, (lg, eid), now, sport=sport)
+        cnt["games"] += 1
+        cnt["cancelled"] += r.get("cancelled", 0)
+        cnt["updated"] += r.get("updated", 0)
+    return cnt
 
 def _fresh_by_market(rows):
     out = {}
@@ -175,9 +287,10 @@ def _fresh_by_market(rows):
             out.setdefault(r["market"], r)
     return out
 
-def reconcile(rows, now=None, key=None):
+def reconcile(rows, now=None, key=None, pred=None):
     """Re-evalúa los picks YA registrados de este juego contra el análisis actual (sólo antes del inicio). Devuelve dict de conteos."""
     import json
+    from . import consistency as C
     now = int(now or time.time())
     if not rows and not key: return {}
     lg, eid = (rows[0]["league"], rows[0]["eid"]) if rows else key
@@ -207,6 +320,16 @@ def reconcile(rows, now=None, key=None):
                 if f and f.get("type") == "main":
                     c.execute("UPDATE picks SET status='ANULADO', state='INVERTIDO', updated_at=?, note=? WHERE id=?",
                               (now, f"Invertido antes del inicio: a la línea actual el modelo prefiere {f['label']}", pid)); cnt["flipped"] += 1
+                elif f:
+                    c.execute("UPDATE picks SET status='ANULADO', state='CANCELADO', updated_at=?, note=? WHERE id=?",
+                              (now, "Cancelado antes del inicio: a la línea actual ya no pasa el filtro de pick oficial (edge/probabilidad/señales/coherencia)", pid)); cnt["cancelled"] += 1
+                elif pred is not None:
+                    # sin candidato fresco de este mercado: no se cancela si sigue coincidiendo (o sólo cambió la línea: lo alinea enforce_pred)
+                    kind, reason = C.classify_pick(pred, dict(market=mk, selection=sel, line=line, label=label))
+                    if kind == "mismatch" and reason == "lado":
+                        c.execute("UPDATE picks SET status='ANULADO', state='CONTRADICE', updated_at=?, note=? WHERE id=?",
+                                  (now, "Cancelado antes del inicio: contradice la Predicción NRNM (lado o línea)", pid)); cnt["cancelled"] += 1
+                    # kind ok/skip/línea: se deja; enforce_pred ajusta la línea
                 else:
                     c.execute("UPDATE picks SET status='ANULADO', state='CANCELADO', updated_at=?, note=? WHERE id=?",
                               (now, "Cancelado antes del inicio: a la línea actual ya no pasa el filtro de pick oficial (edge/probabilidad/señales/coherencia)", pid)); cnt["cancelled"] += 1
@@ -268,12 +391,39 @@ def activate_started(now=None):
     with history._lock:
         c = _c()
         if c is None: return 0
-        n = c.execute(
-            "UPDATE picks SET status='PENDIENTE', state='ACTIVO', updated_at=?, "
-            "note='Cancelado antes del inicio; se mantiene activo y se califica con el resultado real' "
-            "WHERE id IN (SELECT p.id FROM picks p WHERE p.start_ts<=? AND p.status='ANULADO' AND p.state='CANCELADO' AND p.graded_at IS NULL "
-            "AND NOT EXISTS (SELECT 1 FROM picks q WHERE q.league=p.league AND q.eid=p.eid AND q.market=p.market AND q.id<>p.id AND q.status<>'ANULADO'))",
-            (now, now)).rowcount
+        # no se reactivan CONTRADICE (anulados por ir contra la predicción) ni INVERTIDO
+        cand = c.execute(
+            "SELECT p.id, p.league, p.eid, p.market, p.selection, p.line FROM picks p "
+            "WHERE p.start_ts<=? AND p.status='ANULADO' AND p.state='CANCELADO' AND p.graded_at IS NULL "
+            "AND NOT EXISTS (SELECT 1 FROM picks q WHERE q.league=p.league AND q.eid=p.eid AND q.market=p.market AND q.id<>p.id AND q.status<>'ANULADO')",
+            (now,)).fetchall()
+        revive = []
+        if cand:
+            import json
+            from . import consistency as C
+            pred_cache = {}
+            for pid, lg, eid, mk, sel, line in cand:
+                if (lg, str(eid)) not in pred_cache:
+                    try:
+                        row = c.execute("SELECT payload FROM predictions WHERE league=? AND eid=?", (lg, str(eid))).fetchone()
+                        pred_cache[(lg, str(eid))] = json.loads(row[0]) if row and row[0] else None
+                    except Exception:
+                        pred_cache[(lg, str(eid))] = None
+                pred = pred_cache[(lg, str(eid))]
+                kind, _ = C.classify_pick(pred, dict(market=mk, selection=sel, line=line)) if pred else ("skip", None)
+                if kind == "mismatch":
+                    # se quedó cancelado por coherencia; no revivir al saque
+                    c.execute("UPDATE picks SET state='CONTRADICE', updated_at=?, note=? WHERE id=?",
+                              (now, "No se reactiva al inicio: contradice la Predicción NRNM", pid))
+                    continue
+                revive.append(pid)
+        n = 0
+        if revive:
+            n = c.execute(
+                "UPDATE picks SET status='PENDIENTE', state='ACTIVO', updated_at=?, "
+                "note='Cancelado antes del inicio; se mantiene activo y se califica con el resultado real' "
+                f"WHERE id IN ({','.join('?'*len(revive))})",
+                (now, *revive)).rowcount
         c.commit()
     return n
 
@@ -444,3 +594,9 @@ def day(date):
     sp = {}
     for r in rows: sp.setdefault(r["sport"], []).append(r)
     return dict(summary=_agg(rows), by_sport={k: _agg(v) for k, v in sp.items()}, picks=rows)
+
+
+def pending_mismatches(now=None, since_ts=None, only_open=True, date=None):
+    """Delegado a consistency: pendientes que no coinciden con la predicción guardada."""
+    from . import consistency as C
+    return C.pending_mismatches(now=now, since_ts=since_ts, only_open=only_open, date=date)

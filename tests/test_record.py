@@ -86,10 +86,17 @@ def test_nfl_total_example_over_48_5_flips_to_under_at_40_5(db):
 
 def test_market_without_value_is_cancelled(db):
     R.record_analysis(analysis(), now=NOW)
-    a = analysis(); a["probs"]["markets"] = a["probs"]["markets"][:1]   # el hándicap ya no sale (sin valor/lado del modelo)
+    a = analysis(); a["probs"]["markets"] = a["probs"]["markets"][:1]   # el hándicap ya no sale en el brief
     R.record_analysis(a, now=NOW + 60)
     sp = next(r for r in R.game_rows("nba", "1") if r["market"] == "spread")
-    assert (sp["status"], sp["state"]) == ("ANULADO", "CANCELADO")
+    # si la predicción sigue teniendo ese hándicap (mismo lado/línea), no se cancela por desaparecer del brief
+    assert sp["status"] == "PENDIENTE" and sp["selection"] == "home" and sp["line"] == -3.5
+    # si la predicción cambia de lado, sí se cancela
+    a2 = analysis(); a2["probs"]["markets"] = a2["probs"]["markets"][:1]
+    a2["pred"]["spread"] = dict(side="away", line=3.5)
+    R.record_analysis(a2, now=NOW + 90)
+    sp = next(r for r in R.game_rows("nba", "1") if r["market"] == "spread")
+    assert sp["status"] == "ANULADO" and sp["state"] in ("CANCELADO", "CONTRADICE", "INVERTIDO")
 
 def test_nothing_recorded_after_start_or_for_live_games(db):
     assert R.record_analysis(analysis(start=NOW - 10), now=NOW) == 0                  # ya empezó (hora)

@@ -57,7 +57,12 @@ GRADE_MIN = float(os.environ.get("GRADE_MIN", "10"))   # minutos entre calificac
 GRADE_STATE = {"last": None, "runs": 0, "graded": 0, "err": None, "last_result": None}
 
 async def grade_once():
+    try:
+        rec = REC.reconcile_open_to_pred()
+    except Exception as ex:
+        rec = dict(err=str(ex)[:80])
     r = await grading.grade_pending()
+    r["reconciled"] = rec
     try: r["pred"] = await PRED.grade_pending()
     except Exception as ex: r["pred"] = dict(err=str(ex)[:80])
     try: r["tickets"] = await TK.grade_pending()

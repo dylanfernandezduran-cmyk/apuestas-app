@@ -229,3 +229,25 @@ def test_one_main_per_game_even_with_two_aligned_markets():
     if out["picks"]["published"]:
         assert out["picks"]["lean"]["label"] == "Jets ML"  # mayor EV
         assert sum(1 for c in [out["picks"]["lean"]] if c) == 1
+
+
+def test_modelo_pick_pfinal_label_is_not_the_game_winner():
+    pred = dict(winner=dict(side="away", p=.608, src="pfinal"),
+                score=dict(home=22, away=24), spread=dict(side="home", line=3.0),
+                total=dict(side="under", line=47.5))
+    sig = Q._modelo(_cand(market="Spread", side="home", line=3.0, p_final=.49, p_model=.50, p_nv=.52, ev=-4.3), pred)
+    assert "pFinal del pick 49.0%" in sig["detail"]
+    assert "ganador (mismo pFinal del juego): away (60.8%)" in sig["detail"]
+
+
+def test_apply_clamps_alta_on_pass_negative_ev():
+    pred = dict(winner=dict(side="away", p=.608, src="pfinal"),
+                score=dict(home=22, away=24), spread=dict(side="home", line=3.0),
+                total=dict(side="under", line=47.5))
+    spread = _cand(market="Spread", side="home", line=3.0, label="ATL +3", p_final=.49, ev=-4.3, edge=-2, status="LEAN")
+    out = dict(game=_game(), pred=pred, picks=dict(lean=spread, status="PICK", candidates=[spread],
+                                                   confidence=dict(level="Alta")))
+    Q.apply(out)
+    assert out["picks"]["published"] is False
+    assert out["picks"]["status"] == "PASS"
+    assert out["picks"]["confidence"]["level"] == "no aplica"
