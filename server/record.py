@@ -34,7 +34,7 @@ def _c():
             status TEXT DEFAULT 'PENDIENTE', units REAL, graded_at INTEGER, score_text TEXT, final_home REAL, final_away REAL, note TEXT,
             UNIQUE(league, eid, market, selection))""")
         for col, typ in (("open_line", "REAL"), ("open_odds", "INTEGER"), ("state", "TEXT"), ("moves", "TEXT"), ("updated_at", "INTEGER"),
-                         ("conf_level", "TEXT"), ("ev", "REAL")):
+                         ("conf_level", "TEXT"), ("ev", "REAL"), ("signals_json", "TEXT"), ("why_json", "TEXT")):
             try: c.execute(f"ALTER TABLE picks ADD COLUMN {col} {typ}")
             except Exception: pass
         c.execute("UPDATE picks SET open_line=line, open_odds=odds WHERE open_line IS NULL AND open_odds IS NULL")
@@ -79,20 +79,22 @@ def extract(a, now=None):
         pred = a.get("pred")
         # si quality.apply ya corrió, respeta published; si no (tests/legado), se registra el lean como antes
         published = pk["published"] if "published" in pk else True
-        if published and lean and MKT.get(lean.get("market")) and lean.get("side"):
+        def _fam():
+            fam = (a.get("kind") == "tennis" and "tennis") or (a.get("game") or {}).get("sport")
+            return "soccer" if fam == "futbol" else ("tennis" if fam == "tenis" else fam)
+        def _coherent(c):
+            # sin predicción no se registra (antes se aceptaba todo y nacían contradicciones)
+            if not pred or not c:
+                return False
+            try:
+                from . import quality as Q
+                return Q.same_pick(pred, c, _fam())
+            except Exception:
+                return False
+        if published and lean and MKT.get(lean.get("market")) and lean.get("side") and _coherent(lean):
             out.append(mk(market=MKT[lean["market"]], selection=lean["side"], line=lean.get("line"), label=lean["label"], odds=lean.get("price"),
                           book=(book if lean.get("price") is not None else None), p_model=lean.get("p_model"), p_final=lean.get("p_final"), p_nv=lean.get("p_nv"),
                           edge=lean.get("edge"), basis="modelo", type="main"))
-        def _coherent(c):
-            if not pred:
-                return True
-            try:
-                from . import quality as Q
-                fam = (a.get("kind") == "tennis" and "tennis") or (a.get("game") or {}).get("sport")
-                fam = "soccer" if fam == "futbol" else ("tennis" if fam == "tenis" else fam)
-                return Q.consistent_with_pred(pred, c, fam)
-            except Exception:
-                return True
         # sugerencias 1: del filtro (ya coherentes) o candidatos PICK/LEAN distintos del principal
         sugg = list(pk.get("suggestions") or [])
         if not sugg:
@@ -126,21 +128,28 @@ def extract(a, now=None):
     return out
 
 def _stamp_conf_ev(rows, a):
-    conf = ((a or {}).get("picks") or {}).get("confidence") or {}
+    pk = ((a or {}).get("picks") or {})
+    conf = pk.get("confidence") or {}
     level = conf.get("level")
+    why = pk.get("why")
+    sig = pk.get("signals_json") or ((why or {}).get("signals") if isinstance(why, dict) else None)
+    import json as _json
     for r in rows:
         if r.get("conf_level") is None: r["conf_level"] = level
         if r.get("ev") is None:
-            # busca ev del candidato que coincida
             ev = None
-            lean = ((a or {}).get("picks") or {}).get("lean") or {}
+            lean = pk.get("lean") or {}
             if lean.get("side") == r.get("selection") and MKT.get(lean.get("market")) == r.get("market"):
                 ev = lean.get("ev")
             if ev is None:
-                for c in ((a or {}).get("picks") or {}).get("candidates") or []:
+                for c in pk.get("candidates") or []:
                     if c.get("side") == r.get("selection") and MKT.get(c.get("market")) == r.get("market"):
                         ev = c.get("ev"); break
             r["ev"] = ev
+        if r.get("signals_json") is None and sig is not None:
+            r["signals_json"] = _json.dumps(sig, ensure_ascii=False) if not isinstance(sig, str) else sig
+        if r.get("why_json") is None and why is not None:
+            r["why_json"] = _json.dumps(why, ensure_ascii=False) if not isinstance(why, str) else why
 
 def record_analysis(a, now=None):
     """Persiste los picks de un análisis. Devuelve cuántas filas nuevas se insertaron."""
@@ -158,8 +167,12 @@ def record_analysis(a, now=None):
 
 def _fresh_by_market(rows):
     out = {}
-    for r in rows:                      # el 1º de cada mercado (el principal va primero)
-        out.setdefault(r["market"], r)
+    for r in rows:
+        if r.get("type") == "main":
+            out.setdefault(r["market"], r)
+    for r in rows:
+        if r.get("type") != "main":
+            out.setdefault(r["market"], r)
     return out
 
 def reconcile(rows, now=None, key=None):
@@ -185,13 +198,13 @@ def reconcile(rows, now=None, key=None):
                 new_state = "ACTUALIZADO" if moved else "ACTIVO"
                 if status == "ANULADO": cnt["reactivated"] += 1
                 elif changed: cnt["updated"] += 1
-                c.execute("UPDATE picks SET line=?, odds=?, label=?, book=COALESCE(?, book), p_model=?, p_final=?, p_nv=?, edge=?, ev=?, conf_level=COALESCE(?, conf_level), status='PENDIENTE', state=?, moves=?, updated_at=?, "
+                c.execute("UPDATE picks SET line=?, odds=?, label=?, book=COALESCE(?, book), p_model=?, p_final=?, p_nv=?, edge=?, ev=?, conf_level=COALESCE(?, conf_level), signals_json=COALESCE(?, signals_json), why_json=COALESCE(?, why_json), status='PENDIENTE', state=?, moves=?, updated_at=?, "
                           "note=CASE WHEN ?='ANULADO' THEN NULL ELSE note END WHERE id=?",
                           (f.get("line"), f.get("odds"), f["label"], f.get("book"), f.get("p_model"), f.get("p_final"), f.get("p_nv"), f.get("edge"),
-                           f.get("ev"), f.get("conf_level"), new_state,
+                           f.get("ev"), f.get("conf_level"), f.get("signals_json"), f.get("why_json"), new_state,
                            json.dumps(mv), now, status, pid))
             elif status == "PENDIENTE":
-                if f:
+                if f and f.get("type") == "main":
                     c.execute("UPDATE picks SET status='ANULADO', state='INVERTIDO', updated_at=?, note=? WHERE id=?",
                               (now, f"Invertido antes del inicio: a la línea actual el modelo prefiere {f['label']}", pid)); cnt["flipped"] += 1
                 else:
@@ -217,8 +230,8 @@ def record_rows(rows):
             cur = c.execute(f"INSERT OR IGNORE INTO picks({COLS}) VALUES ({','.join('?' * 22)})", vals)
             if cur.rowcount:
                 n += 1
-                c.execute("UPDATE picks SET open_line=line, open_odds=odds, state='ACTIVO', conf_level=?, ev=? WHERE id=?",
-                          (r.get("conf_level"), r.get("ev"), cur.lastrowid))
+                c.execute("UPDATE picks SET open_line=line, open_odds=odds, state='ACTIVO', conf_level=?, ev=?, signals_json=?, why_json=? WHERE id=?",
+                          (r.get("conf_level"), r.get("ev"), r.get("signals_json"), r.get("why_json"), cur.lastrowid))
             elif typ == "main" and not has_main:
                 # el pick ya existía como sugerencia y el juego aún no tenía principal: se asciende (línea/cuota registradas NO cambian)
                 c.execute("UPDATE picks SET type='main' WHERE league=? AND eid=? AND market=? AND selection=? AND type='suggestion' AND status='PENDIENTE'",

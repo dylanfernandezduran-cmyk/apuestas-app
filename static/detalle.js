@@ -385,6 +385,31 @@ function dFoot(d){
 }
 
 
+
+function dWhy(d){
+  const pk=d.picks||{};
+  const why=pk.why||d.why;
+  const sim=why&&why.similar;
+  const pub=pk.published;
+  const lean=pk.lean;
+  if(!pub && !sim) return '';
+  const bits=[];
+  if(pub && lean){
+    bits.push(`<div><b>Por qué este pick</b> · ${esc(lean.label||'')}${lean.price_txt?` <span class="mono">${esc(lean.price_txt)}</span>`:''}</div>`);
+    bits.push(`<div class="sub">Sale del mismo pFinal y del mismo mercado/línea que la Predicción NRNM. Si no coinciden, no se publica.</div>`);
+  }
+  if(sim){
+    const ic = (sim.hit_lo!=null && sim.hit_hi!=null) ? ` (IC 95% ${sim.hit_lo}–${sim.hit_hi}%)` : '';
+    const roi = sim.roi!=null ? ` · ROI ${sim.roi>0?'+':''}${sim.roi}%` : '';
+    bits.push(`<div class="why-sim">Récord de picks similares · <b>${esc(sim.label||'')}</b>: <b>${sim.hit!=null?sim.hit+'%': 'sin %'}</b> de acierto en <b>n=${sim.n}</b>${ic}${roi}.</div>`);
+    bits.push(`<div class="sub">${esc(sim.note||'Cifras reales del récord. No es una garantía de acierto.')}</div>`);
+  }else if(pub){
+    bits.push(`<div class="sub">Aún no hay muestra suficiente de picks similares en el récord para mostrar un % de acierto.</div>`);
+  }
+  if(!bits.length) return '';
+  return `<section class="card why-pick">${bits.join('')}</section>`;
+}
+
 function dAnalisis(d){
   const an=d.analysis||(d.picks&&d.picks.analysis); if(!an||!an.signals||!an.signals.length) return '';
   const V={a_favor:['✅','A favor','pos'],en_contra:['⚠️','En contra','neg'],mixto:['↔️','Mixto','amb'],neutral:['➖','Neutral','mut'],sin_dato:['🕳️','Sin dato','mut']};
@@ -422,7 +447,7 @@ function detailSections(d){
   const alin=[tn_?'':lineupsSection(d), dInj(d), dWx(d), dPlayers(d)].join('')||'<div class="card mut">Sin alineaciones ni lesiones publicadas.</div>';
   const tabs=[['mercados','Mercados'],['lineas','Líneas'],['props','Props'],['alin','Alineaciones']];
   const panes={mercados, lineas, props, alin};
-  return [dPred(d), dAnalisis(d), dRec(d),
+  return [dPred(d), dWhy(d), dAnalisis(d), dRec(d),
     `<div id="d-tabs"><div class="ds-tabs" role="tablist">${tabs.map((x,i)=>`<button type="button" role="tab" data-dt="${x[0]}" class="${i?'':'on'}" aria-selected="${i? 'false':'true'}">${x[1]}</button>`).join('')}</div>`,
     tabs.map((x,i)=>`<div class="ds-pane" data-dt="${x[0]}" ${i?'hidden':''}>${panes[x[0]]}</div>`).join(''),
     `</div>`, dFoot(d)].join('');

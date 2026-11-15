@@ -352,8 +352,13 @@ async def lineas(hours: int = 36):
 @app.get("/api/record")
 async def record(sport: str | None = None, type: str | None = None, days: int | None = None, limit: int = 60, basis: str | None = None):
     """Récord de picks: resumen (G-P-E, %, unidades a 1u plano con la cuota registrada) + últimos calificados. Filtros: sport, type=main|suggestion, days."""
+    try:
+        from . import learn
+        workings = learn.workings(typ="main")
+    except Exception:
+        workings = None
     return dict(summary=REC.summary(sport, type, days, basis), recent=REC.query(sport, type, days, min(max(limit, 1), 300), basis=basis), grading=dict(GRADE_STATE, every_min=GRADE_MIN),
-                filters=dict(sport=sport, type=type, days=days, basis=basis), pred=PRED.stats(sport, days), now=time.time())
+                filters=dict(sport=sport, type=type, days=days, basis=basis), pred=PRED.stats(sport, days), workings=workings, now=time.time())
 
 @app.post("/api/grade")
 async def grade_now():

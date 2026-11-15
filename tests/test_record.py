@@ -14,7 +14,11 @@ def analysis(start=NOW + 3600, state="pre", lean_odds=-110, spread_line=-3.5, sp
         dict(key="ml", title="Ganador", unit=None, outcomes=[dict(key="ml.home", side="home", p_model=.6, p_final=.58, p_nv=.55, p_pin=None, edge=.03, best=dict(price=lean_odds, book="Pinnacle"), clipped=False, label="Utah ML", line=None)]),
         dict(key="spread", title="Spread", unit=None, outcomes=[dict(key="spread.home", side="home", p_model=.52, p_final=.52, p_nv=.5, p_pin=None, edge=.01, best=dict(price=spread_price, book="Pinnacle"), clipped=False, label=f"Utah {spread_line}", line=spread_line)]),
     ])
-    return dict(game=g, odds=dict(book="ESPN BET"), picks=dict(lean=lean, candidates=[lean]), probs=probs)
+    score = dict(home=110, away=100) if lean_side == "home" else dict(home=100, away=110)
+    # el spread de la sugerencia es siempre del local; el marcador debe poder cubrirlo en el caso base (home lean)
+    pred = dict(winner=dict(side=lean_side, p=.58, src="pfinal"), score=score,
+                spread=dict(side="home", line=spread_line))
+    return dict(game=g, odds=dict(book="ESPN BET"), picks=dict(lean=lean, candidates=[lean]), probs=probs, pred=pred)
 
 def test_records_main_and_suggestions(db):
     n = R.record_analysis(analysis(), now=NOW)
@@ -66,7 +70,11 @@ def test_nfl_total_example_over_48_5_flips_to_under_at_40_5(db):
     def an(side, line):
         g = dict(sport="nfl", league="nfl", id="9", state="pre", date=iso(NOW + 7200), home=dict(id="1", name="KC"), away=dict(id="2", name="LV"))
         lean = dict(market="Total", side=side, line=line, label=f"{'Over' if side == 'over' else 'Under'} {line}", price=-110, p_model=.6, p_final=.57, p_nv=.5, edge=7, status="PICK")
-        return dict(game=g, odds=dict(book="DK"), picks=dict(lean=lean, candidates=[lean]), probs=dict(markets=[]))
+        tot = 28 + 24 if side == "over" else 17 + 20
+        # marcador coherente con el lado (no se usa para registrar, sí para same_pick)
+        hs, aw = (28, 24) if side == "over" else (17, 20)
+        pred = dict(winner=dict(side="home", p=.57, src="pfinal"), total=dict(side=side, line=line), score=dict(home=hs, away=aw))
+        return dict(game=g, odds=dict(book="DK"), picks=dict(lean=lean, candidates=[lean]), probs=dict(markets=[]), pred=pred)
     R.record_analysis(an("over", 48.5), now=NOW)
     R.record_analysis(an("over", 44.5), now=NOW + 600)
     r = R.game_rows("nfl", "9")[0]

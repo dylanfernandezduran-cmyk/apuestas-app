@@ -605,6 +605,28 @@ let RECF = {sport:'', type:'', basis:'', days:''};
 const recMatch = r => { const H={name:r.home,logo:r.home_logo}, A={name:r.away,logo:r.away_logo}, soc=r.sport==='futbol'||r.sport==='tenis';
   const m=(t)=>`<span class="mu">${badge(t,16)}<span>${esc(t.name)}</span></span>`;
   return (soc?[H,A]:[A,H]).map(m).join(` <span class="vs">${soc?'vs':'@'}</span> `); };
+
+function worksBlock(w){
+  if(!w) return '';
+  const row=(x,cls)=>{
+    const ic=(x.hit_lo!=null&&x.hit_hi!=null)?` · IC ${x.hit_lo}–${x.hit_hi}%`:'';
+    const roi=x.roi!=null?` · ROI ${x.roi>0?'+':''}${x.roi}%`:'';
+    const clv=x.clv!=null?` · CLV ${x.clv>0?'+':''}${x.clv}`:'';
+    return `<div class="works-r"><div><b>${esc(x.label)}</b><div class="sub">${esc(x.reason||'')}</div></div>
+      <div class="mono ${cls}">${x.hit!=null?x.hit+'%':'—'} n=${x.n}${ic}${roi}${clv}</div></div>`;
+  };
+  const list=(arr,cls)=>arr&&arr.length?arr.map(x=>row(x,cls)).join(''):'<div class="sub">Sin segmentos con muestra suficiente todavía.</div>';
+  const ov=w.overall||{};
+  const oline = ov.hit!=null?`Récord principal (muestra completa): ${ov.hit}% de acierto (n=${ov.n})${ov.roi!=null?` · ROI ${ov.roi}%`:''}${ov.clv!=null?` · CLV ${ov.clv}`:''}.`:'';
+  return `<section class="card works">
+    <h3>Lo que funciona / lo que no</h3>
+    <div class="sub">${esc(w.note||'Cifras reales del récord, con muestra mínima e intervalos. No es una promesa de acierto.')}${oline?' '+esc(oline):''}</div>
+    <div class="works-col"><h4 class="pos">Lo que funciona</h4>${list(w.funciona,'pos')}</div>
+    <div class="works-col"><h4 class="neg">Lo que no</h4>${list(w.no_funciona,'neg')}</div>
+    ${(w.mas_estricto&&w.mas_estricto.length)?`<div class="works-col"><h4 class="amb">Umbral más estricto</h4>${list(w.mas_estricto,'amb')}</div>`:''}
+  </section>`;
+}
+
 async function viewRecord(){
   SPORTS = SPORTS || await api('/api/sports');
   loading('Cargando récord…');
@@ -627,7 +649,7 @@ async function viewRecord(){
     </div><div class="kpis s">${kpi('Calificados',S.graded)}${kpi('⏳ Pendientes',S.pending)}${kpi('⚪ Anulados',S.void)}</div>
    <div class="sub">G = ganado · P = perdido · E = push (devolución). % acierto = G/(G+P) sin pushes. Medio ganado/perdido (líneas de cuarto) cuenta 0.5 en G o P y 0.5 en E. Unidades = ganancia/pérdida de apostar 1u a la cuota registrada${S.n_unpriced?` (${S.n_unpriced} calificados sin cuota registrada no entran en unidades/ROI)`:''}.
    ${STATIC?'':'<button class="btn" onclick="gradeNow(this)">🔄 Calificar ahora</button>'} <span class="sub">Automático cada ${d.grading.every_min} min${d.grading.last?' · última '+tsFmt(d.grading.last):''}</span></div>`;
-  html+=predRecord(d.pred);
+  html+=worksBlock(d.workings); html+=predRecord(d.pred);
   if(!d.recent.length) html+=`<div class="card mut" style="margin-top:10px">Aún no hay picks calificados con esos filtros. ${S.pending?`Hay <b>${S.pending}</b> picks registrados esperando el final de sus juegos.`:'Cuando el servidor genere picks y sus juegos terminen, aparecerán aquí.'}</div>`;
   else html+=`<div class="day">Últimos picks calificados</div><div class="rec-list">`+d.recent.map(r=>`<div class="rec-r"><div class="rl"><span class="mono sub">${fmtShort(new Date(r.start_ts*1000).toISOString())} · ${SPORT_EM[r.sport]||''} ${esc(r.league.toUpperCase())}</span> ${typeLbl(r.type)}${r.basis==='mercado'?' <span class="sub">(sólo mercado)</span>':''}
      <div class="rl-m">${recMatch(r)}</div><div><b>${esc(r.label)}</b> <span class="mono sub">${oddsTxt(r)}</span></div>${lineMove(r,{state:'post'})}<div class="sub mono">${esc(r.score_text||'')}</div>${r.note?`<div class="sub">ℹ️ ${esc(r.note)}</div>`:''}</div>

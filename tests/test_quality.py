@@ -85,7 +85,8 @@ def test_main_pick_side_always_matches_predicted_winner():
     # Under no es coherente con el marcador 24-17=41 no, 24+17=41 < 41.5 so under IS consistent
     sugg = out["picks"]["suggestions"]
     assert all(Q.consistent_with_pred(pred, c) for c in sugg)
-    assert any(c["market"] == "Total" and c["side"] == "under" for c in sugg) or not sugg
+    # Under contradice el total mostrado (Over 41.5); no se sugiere
+    assert not any(c["market"] == "Total" and c["side"] == "under" for c in sugg)
 
 
 def _rich_out(pred, cands, conf="Alta"):
@@ -180,8 +181,10 @@ def test_suggestions_only_if_consistent_with_score():
     out = _rich_out(pred, [jets, over, under], conf="Alta")
     Q.apply(out)
     sugg = out["picks"]["suggestions"]
-    assert all(c["side"] != "over" or c["market"] != "Total" for c in sugg)
-    assert any(c["market"] == "Total" and c["side"] == "under" for c in sugg)
+    lean = out["picks"].get("lean")
+    pool = list(sugg) + ([lean] if lean else [])
+    assert all(c["side"] != "over" or c["market"] != "Total" for c in pool)
+    assert any(c["market"] == "Total" and c["side"] == "under" for c in pool)
 
 
 def test_daily_cap_keeps_top_10_by_ev_and_confidence():

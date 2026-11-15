@@ -96,6 +96,8 @@ def consistent_with_pred(pred, cand, fam=None):
     if not pred or not cand:
         return False
     mk, side, line = cand.get("market"), cand.get("side"), cand.get("line")
+    mk = {"ml": "ML", "spread": "Spread", "total": "Total", "btts": "BTTS", "ou": "OU",
+          "sspread": "Spread", "stotal": "Total"}.get(mk, mk)
     if not mk or not side:
         return False
     h, a = _score_pair(pred, fam)
@@ -104,7 +106,12 @@ def consistent_with_pred(pred, cand, fam=None):
         return w is not None and side == w
     if mk in ("Total", "OU") and h is not None:
         t = pred.get("total") or {}
-        if t.get("side") and (line is None or t.get("line") is None or float(t["line"]) == float(line)):
+        if t.get("side") and t.get("line") is not None and line is not None:
+            try:
+                return side == t["side"] and abs(float(t["line"]) - float(line)) < 1e-6
+            except (TypeError, ValueError):
+                return False
+        if t.get("side") and (line is None or t.get("line") is None):
             return side == t["side"]
         if line is None:
             return False
@@ -118,6 +125,13 @@ def consistent_with_pred(pred, cand, fam=None):
         return (tot > L) == (side == "over")
     if mk == "Spread" and h is not None:
         s = pred.get("spread") or {}
+        if s.get("side") and s.get("line") is not None and line is not None:
+            try:
+                pred_home = float(s["line"])
+                cand_home = float(line) if side == "home" else -float(line)
+            except (TypeError, ValueError):
+                return False
+            return side == s["side"] and abs(pred_home - cand_home) < 1e-6
         if s.get("side") and (line is None or s.get("line") is None):
             return side == s["side"]
         L = line if line is not None else s.get("line")
@@ -800,12 +814,21 @@ def apply(out):
             continue
         if c.get("market") in ("ML", "Spread") and _main_side_ok(pred, c):
             mains.append(c)
+        elif c.get("market") in ("Total", "BTTS", "OU") and ok_score:
+            mains.append(c)
         elif c.get("status") in ("PICK", "LEAN"):
             sugg.append(c)
     mains.sort(key=_rank_key, reverse=True)
     sugg.sort(key=_rank_key, reverse=True)
-    # un principal por juego: el de mayor EV entre los alineados
-    cand = mains[0] if mains else None
+    # un principal por juego: ML/spread alineados al ganador tienen prioridad; si no hay, un total/BTTS coherente
+    side_mains = [c for c in mains if c.get("market") in ("ML", "Spread")]
+    tot_mains = [c for c in mains if c.get("market") in ("Total", "BTTS", "OU")]
+    cand = side_mains[0] if side_mains else (tot_mains[0] if tot_mains else None)
+    for c in mains:
+        if c is not cand and c.get("status") in ("PICK", "LEAN") and c not in sugg:
+            sugg.append(c)
+    sugg = [c for c in sugg if c is not cand]
+    sugg.sort(key=_rank_key, reverse=True)
     analysis = panel(out, cand or (cands[0] if cands else {}), pred) if (cand or cands) else dict(
         signals=[_sig(k, "sin_dato", "sin dato") for k, _ in SIGNALS], n_present=0, n_agree=0, n_against=0,
         n_required=MIN_PRESENT, min_agree=MIN_AGREE)
@@ -827,6 +850,9 @@ def apply(out):
     else:
         reason = publish_reason(cand, analysis, conf, raw_status or cand.get("status"))
         if reason is None:
+            # capa de récord (conservadora): segmentos significativamente negativos se bloquean
+            reason = _learn_reason(cand, analysis, conf, pred)
+        if reason is None:
             published = True
             status = cand.get("status") if cand.get("status") in ("PICK", "LEAN") else "PICK"
             lean = cand
@@ -841,6 +867,7 @@ def apply(out):
     picks["analysis"] = analysis
     picks["suggestions"] = sugg
     # 1 principal: no dejar candidatos PICK del lado contrario como si fueran accionables
+    _stamp_why(picks, pred, analysis, conf)
     out["picks"] = picks
     out["analysis"] = analysis
     return out
@@ -955,3 +982,145 @@ def would_publish(pick, analysis, pred=None, min_present=MIN_PRESENT, min_agree=
     if n_ag < min_agree:
         return False, f"{n_ag}/{n_pres} a favor"
     return True, None
+
+
+def same_pick(pred, cand, fam=None):
+    """True sólo si mercado, lado y línea del candidato coinciden con la predicción mostrada."""
+    if not pred or not cand:
+        return False
+    return consistent_with_pred(pred, cand, fam)
+
+
+def _learn_reason(cand, analysis, conf, pred):
+    """Bloqueo / umbral extra del récord. Falla cerrada (no bloquea) si el módulo no puede correr."""
+    try:
+        from . import learn
+        row = dict(sport=None, market=cand.get("market"), selection=cand.get("side"),
+                   line=cand.get("line"), odds=cand.get("price") if cand.get("price") is not None else cand.get("odds"),
+                   p_final=cand.get("p_final"), p_nv=cand.get("p_nv"), ev=cand.get("ev"),
+                   conf_level=(conf or {}).get("level") if isinstance(conf, dict) else conf,
+                   edge=cand.get("edge"))
+        fb = learn.feedback(row)
+        if fb.get("action") == "block":
+            return fb.get("reason") or "segmento del récord significativamente negativo"
+        if fb.get("action") == "stricter":
+            ev = ev_as_pct(cand.get("ev")) if cand.get("ev") is not None else None
+            level = (conf or {}).get("level") if isinstance(conf, dict) else conf
+            if level != "Alta":
+                return (fb.get("reason") or "récord flojo") + " (se exige confianza Alta)"
+            if ev is None or ev < 5:
+                return (fb.get("reason") or "récord flojo") + " (se exige EV ≥ 5%)"
+        # se adjunta el similar en _stamp_why
+        cand["_learn"] = fb
+        return None
+    except Exception:
+        return None
+
+
+def _stamp_why(picks, pred, analysis, conf):
+    lean = picks.get("lean")
+    fb = (lean or {}).get("_learn") if isinstance(lean, dict) else None
+    try:
+        from . import learn
+        snap = learn.snapshot_signals(analysis, lean, conf)
+    except Exception:
+        snap = None
+    why = dict(
+        published=bool(picks.get("published")),
+        reason=None if picks.get("published") else picks.get("discard_reason"),
+        similar=(fb or {}).get("similar") if fb else None,
+        signals=snap,
+    )
+    if picks.get("published") and lean and pred:
+        mk = lean.get("market")
+        side, line = lean.get("side"), lean.get("line")
+        why["aligned"] = dict(market=mk, side=side, line=line,
+                              pred_side=_pred_side(pred, mk), pred_line=_pred_line(pred, mk))
+    picks["why"] = why
+    if snap is not None:
+        picks["signals_json"] = snap
+    return picks
+
+
+def _pred_side(pred, mk):
+    if mk == "ML":
+        return ((pred or {}).get("winner") or {}).get("side")
+    if mk in ("Total", "OU"):
+        return ((pred or {}).get("total") or {}).get("side")
+    if mk == "Spread":
+        return ((pred or {}).get("spread") or {}).get("side")
+    if mk == "BTTS":
+        return ((pred or {}).get("btts") or {}).get("side")
+    return None
+
+
+def _pred_line(pred, mk):
+    if mk in ("Total", "OU"):
+        return ((pred or {}).get("total") or {}).get("line")
+    if mk == "Spread":
+        return ((pred or {}).get("spread") or {}).get("line")
+    return None
+
+
+def align_pred(out, mdl, odds, fam, corners=None, game=None):
+    """Reconstruye la predicción SOLO con el pick publicado (mismo pFinal, mismo mercado/línea).
+    Si tras reconstruir sigue contradiciendo, no se publica."""
+    if not out:
+        return out
+    from . import prediction as PRED
+    game = game or out.get("game")
+    p_view = out.get("p_view") or pfinal_view((out.get("picks") or {}).get("candidates"), mdl, odds, fam)
+    out["p_view"] = p_view
+    pk = out.get("picks") or {}
+    if pk.get("published") and pk.get("lean"):
+        pub = dict(published=True, lean=pk["lean"], status=pk.get("status") or "PICK",
+                   candidates=[pk["lean"]], suggestions=pk.get("suggestions") or [])
+    else:
+        pub = dict(published=False, lean=None, status="PASS", candidates=[], suggestions=[])
+    if mdl and game:
+        rebuilt = PRED.build(game, mdl, odds, fam, corners, picks=pub, p_view=p_view)
+        if rebuilt:
+            out["pred"] = rebuilt
+    pred = out.get("pred")
+    if pk.get("published") and pk.get("lean") and not same_pick(pred, pk["lean"], fam):
+        pk["published"] = False
+        pk["quality_ok"] = False
+        pk["discard_reason"] = "la predicción y el pick no coinciden en mercado, lado o línea; no se publica"
+        pk["status"] = "PASS"
+        # no se deja un lean publicable contrario a la predicción
+        out["picks"] = pk
+        # reconstruir la predicción sin pick (sólo pFinal) para no mostrar una línea del pick descartado
+        if mdl and game:
+            rebuilt = PRED.build(game, mdl, odds, fam, corners, picks=dict(published=False, lean=None), p_view=p_view)
+            if rebuilt:
+                out["pred"] = rebuilt
+        _stamp_why(pk, out.get("pred"), pk.get("analysis") or out.get("analysis"), pk.get("confidence") or {})
+    elif pk.get("published") and pk.get("lean"):
+        _stamp_why(pk, pred, pk.get("analysis") or out.get("analysis"), pk.get("confidence") or {})
+        # adjuntar similar del récord si no vino en apply (p.ej. lean sin _learn aún)
+        if not (pk.get("why") or {}).get("similar"):
+            try:
+                from . import learn
+                row = dict(sport=(game or {}).get("sport"), market=pk["lean"].get("market"),
+                           selection=pk["lean"].get("side"), line=pk["lean"].get("line"),
+                           odds=pk["lean"].get("price"), p_final=pk["lean"].get("p_final"),
+                           p_nv=pk["lean"].get("p_nv"), ev=pk["lean"].get("ev"),
+                           conf_level=(pk.get("confidence") or {}).get("level"),
+                           edge=pk["lean"].get("edge"))
+                pk["why"]["similar"] = learn.feedback(row).get("similar")
+            except Exception:
+                pass
+    return out
+
+
+def finalize(out, mdl, odds, fam, corners=None, game=None):
+    """Filtro de calidad + predicción reconstruida con el mismo pFinal y el pick publicado."""
+    game = game or (out or {}).get("game")
+    p_view = (out or {}).get("p_view") or pfinal_view(((out or {}).get("picks") or {}).get("candidates"), mdl, odds, fam)
+    if out is not None:
+        out["p_view"] = p_view
+        if not out.get("pred") and mdl and game:
+            from . import prediction as PRED
+            out["pred"] = PRED.build(game, mdl, odds, fam, corners, picks=None, p_view=p_view)
+    apply(out)
+    return align_pred(out, mdl, odds, fam, corners, game)

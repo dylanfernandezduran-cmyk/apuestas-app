@@ -174,9 +174,14 @@ def _tennis(mdl, odds, g):
     return out, total, cover, (lambda cons: choose(cons, next((c[1] for c in cons if c[0] == "w"), w)))
 
 def _pick_cons(picks):
-    """Picks accionables del propio juego (PICK o el lean si es LEAN/PICK) -> {mercado: (lado, línea propia)}; el mejor edge de cada mercado."""
+    """Picks accionables -> {mercado: (lado, línea)}. Si quality ya decidió, SOLO el pick publicado (nunca un EV contrario)."""
     if not picks: return {}
     if "official" in picks: ok = list(picks["official"])          # modo estricto: la predicción se alinea sólo con los picks oficiales
+    elif "published" in picks:
+        # fuente única post-filtro: el lean publicado (mismo mercado/lado/línea que se registra)
+        ok = []
+        lean = picks.get("lean")
+        if picks.get("published") and lean: ok.append(lean)
     else:
         cands = list(picks.get("candidates") or [])
         ok = [c for c in cands if c.get("status") == "PICK"]
@@ -285,15 +290,31 @@ def build(game, mdl, odds, fam, corners=None, picks=None, p_view=None):
         notes.append("score-mismatch")
     t = out.get("total")
     if t and not _ok(("t", t["side"], t["line"]), h, a) and h + a != t["line"]:
-        t["side"] = "over" if h + a > t["line"] else "under"; t["p"] = t["p_over"] if t["side"] == "over" else 1 - t["p_over"]; t["aligned"] = "marcador"
-        t["label"] = f"{'Más' if t['side'] == 'over' else 'Menos'} de {t['line']:g}"; notes.append("total")
+        if t.get("aligned") == "pick" or "t" in fixed:
+            # el marcador no pudo respetar el pick: se suelta (la predicción se mantiene coherente;
+            # el caller no publica ese pick)
+            t["side"] = "over" if h + a > t["line"] else "under"; t["p"] = t["p_over"] if t["side"] == "over" else 1 - t["p_over"]; t["aligned"] = "marcador"
+            t["label"] = f"{'Más' if t['side'] == 'over' else 'Menos'} de {t['line']:g}"
+            notes.append("total-pick-dropped"); out["pick_conflict"] = True
+        else:
+            t["side"] = "over" if h + a > t["line"] else "under"; t["p"] = t["p_over"] if t["side"] == "over" else 1 - t["p_over"]; t["aligned"] = "marcador"
+            t["label"] = f"{'Más' if t['side'] == 'over' else 'Menos'} de {t['line']:g}"; notes.append("total")
     s_ = out.get("spread")
     if s_ and not _ok(("s", s_["side"], s_["line"]), h, a) and h - a + s_["line"] != 0:
-        s_["side"] = "home" if h - a + s_["line"] > 0 else "away"; s_["p"] = s_["p_home"] if s_["side"] == "home" else s_["p_away"]; s_["aligned"] = "marcador"; notes.append("spread")
+        if s_.get("aligned") == "pick" or "s" in fixed:
+            s_["side"] = "home" if h - a + s_["line"] > 0 else "away"; s_["p"] = s_["p_home"] if s_["side"] == "home" else s_["p_away"]; s_["aligned"] = "marcador"
+            notes.append("spread-pick-dropped"); out["pick_conflict"] = True
+        else:
+            s_["side"] = "home" if h - a + s_["line"] > 0 else "away"; s_["p"] = s_["p_home"] if s_["side"] == "home" else s_["p_away"]; s_["aligned"] = "marcador"; notes.append("spread")
     b_ = out.get("btts")
     if b_ and not _ok(("b", b_["side"], None), h, a):
-        b_["side"] = "yes" if (h > 0 and a > 0) else "no"; b_["p"] = b_["p_yes"] if b_["side"] == "yes" else 1 - b_["p_yes"]; b_["aligned"] = "marcador"
-        b_["price"] = ((odds or {}).get("btts") or {}).get(b_["side"]); b_["label"] = f"Ambos anotan: {'Sí' if b_['side'] == 'yes' else 'No'}"; notes.append("btts")
+        if b_.get("aligned") == "pick" or "b" in fixed:
+            b_["side"] = "yes" if (h > 0 and a > 0) else "no"; b_["p"] = b_["p_yes"] if b_["side"] == "yes" else 1 - b_["p_yes"]; b_["aligned"] = "marcador"
+            b_["price"] = ((odds or {}).get("btts") or {}).get(b_["side"]); b_["label"] = f"Ambos anotan: {'Sí' if b_['side'] == 'yes' else 'No'}"
+            notes.append("btts-pick-dropped"); out["pick_conflict"] = True
+        else:
+            b_["side"] = "yes" if (h > 0 and a > 0) else "no"; b_["p"] = b_["p_yes"] if b_["side"] == "yes" else 1 - b_["p_yes"]; b_["aligned"] = "marcador"
+            b_["price"] = ((odds or {}).get("btts") or {}).get(b_["side"]); b_["label"] = f"Ambos anotan: {'Sí' if b_['side'] == 'yes' else 'No'}"; notes.append("btts")
     if notes: out["adjusted"] = notes
     if corners and fam == "soccer":
         c = corners; line = c["line"]; mu, sd = c["total"], c["sd"]

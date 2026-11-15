@@ -835,3 +835,12 @@ details.disc>summary::-webkit-details-marker{display:none}
 details.disc>summary::after{content:'▾';color:var(--mut)}
 details.disc[open]>summary::after{content:'▴'}
 details.disc .disc-n{color:var(--mut);font-weight:400;font-variant-numeric:tabular-nums}
+
+.why-pick{margin:10px 0;padding:12px 16px}
+.why-sim{margin-top:8px}
+.works{margin:12px 0;padding:12px 16px}
+.works h3{margin:0 0 6px}
+.works h4{margin:10px 0 6px;font-size:13px}
+.works-r{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--hair)}
+.works-r:last-child{border-bottom:0}
+.works-r .mono{text-align:right;white-space:normal;max-width:55%}

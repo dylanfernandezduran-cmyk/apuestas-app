@@ -219,9 +219,10 @@ async def tennis_detail(league, mid):
         if ST.ENABLED: ST.apply(res["picks"], {})
         from . import quality as Q
         p_view = Q.pfinal_view(dec["candidates"], mdl, odds, "tennis")
-        res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=res["picks"], p_view=p_view)
+        res["p_view"] = p_view
+        res["pred"] = PRED.build(g, mdl, odds, "tennis", picks=None, p_view=p_view)
         if ST.ENABLED: ST.finalize(res["picks"], res["pred"])
-        Q.apply(res)
+        Q.finalize(res, mdl, odds, "tennis", game=g)
     else:
         res["model"] = None
         res["picks"] = None
@@ -516,9 +517,11 @@ async def _analyze(league, eid):
         if ST.ENABLED: ST.apply(out["picks"], dict(key_injury=flags["key_injury"], critical_missing=crit, windy=(wx.get("gust") or 0) >= 25))
         from . import quality as Q
         p_view = Q.pfinal_view(out["picks"]["candidates"], mdl, odds, fam)
-        out["pred"] = PRED.build(game, mdl, odds, fam, out.pop("_cor", None), picks=out["picks"], p_view=p_view)
+        out["p_view"] = p_view
+        cor = out.pop("_cor", None)
+        out["pred"] = PRED.build(game, mdl, odds, fam, cor, picks=None, p_view=p_view)
         if ST.ENABLED: ST.finalize(out["picks"], out["pred"])
-        Q.apply(out)
+        Q.finalize(out, mdl, odds, fam, corners=cor, game=game)
         out["probs"] = PR.build(game, mdl, odds, mk)
     else:
         out["picks"] = None
