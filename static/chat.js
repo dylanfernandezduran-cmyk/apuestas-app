@@ -89,8 +89,192 @@ function chFindGame(items, qn){
   }
   return bs>=2?best:null;
 }
-const CH_STOP=new Set('para que como cual cuál esta este estos estas mejor pick picks meter individual sencillo apuesta apostar juego juegos partido partidos sets set linea momio cuota parlay ticket favor contra gana ganar ganador over under mas menos hoy manana tirar'.split(' '));
+const CH_STOP=new Set('para que como cual cual esta este estos estas mejor mejores pick picks meter individual sencillo apuesta apostar juego juegos partido partidos sets set linea momio cuota parlay ticket favor contra gana ganar ganador over under mas menos hoy manana tirar recomendacion recomiendas recomendar valor uefa concacaf nations amistosos amistoso friendly friendlies champions premier bundesliga laliga futbol soccer tenis hockey basket baloncesto beisbol americano liga'.split(' '));
 function chLev(a,b){ if(Math.abs(a.length-b.length)>2) return 9; const d=[...Array(b.length+1).keys()]; for(let i=1;i<=a.length;i++){ let pv=d[0]; d[0]=i; for(let j=1;j<=b.length;j++){ const t=d[j]; d[j]=Math.min(d[j]+1,d[j-1]+1,pv+(a[i-1]===b[j-1]?0:1)); pv=t; } } return d[b.length]; }
+
+/* --- intent helpers (testable) --- */
+const CH_CONF_RANK={Alta:3,Media:2,Baja:1,'no aplica':0};
+function chEvPct(ev){
+  if(ev==null||ev==='') return null;
+  const x=Number(ev); if(!isFinite(x)) return null;
+  return Math.abs(x)<=1 ? x*100 : x;
+}
+function chEvTxt(ev){
+  const p=chEvPct(ev);
+  return p==null?'sin EV':((p>0?'+':'')+p.toFixed(1)+'% EV');
+}
+function chYmd(iso){
+  try{ return new Intl.DateTimeFormat('en-CA',{timeZone:typeof TZ==='string'?TZ:'America/Mexico_City'}).format(new Date(iso)); }catch(e){ return ''; }
+}
+function chTodayYmd(){ return chYmd(Date.now()); }
+function chTomorrowYmd(){
+  const t=chTodayYmd(); const d=new Date(t+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+1);
+  return d.toISOString().slice(0,10);
+}
+const CH_SPORT_ALIASES={
+  nba:['nba','basket','basquet','baloncesto'],
+  nfl:['nfl','americano','football americano'],
+  mlb:['mlb','beis','beisbol'],
+  nhl:['nhl','hockey'],
+  futbol:['futbol','soccer','futbol soccer'],
+  tenis:['tenis','atp','wta','tennis']
+};
+const CH_LEAGUE_ALIASES={
+  'mlb':['mlb'],
+  'nfl':['nfl'],
+  'nba':['nba'],
+  'nhl':['nhl'],
+  'atp':['atp'],
+  'wta':['wta'],
+  'mex.1':['liga mx','ligamx','liga mexico','futbol mexicano'],
+  'eng.1':['premier','premier league','premier ligue','liga premier'],
+  'esp.1':['laliga','la liga','liga espanola'],
+  'ita.1':['serie a','seriea'],
+  'ger.1':['bundesliga','bundes liga'],
+  'uefa.champions':['champions','champions league','liga de campeones','uefa champions','uefa'],
+  'uefa.nations':['liga de naciones uefa','uefa nations league','nations league','liga de naciones','naciones uefa','uefa nations','naciones','uefa'],
+  'concacaf.nations.league':['liga de naciones concacaf','concacaf nations league','naciones concacaf','concacaf'],
+  'fifa.friendly':['amistosos','amistoso','friendlies','friendly','amistosos internacionales','partidos amistosos']
+};
+const CH_LEAGUE_LABEL={
+  'mex.1':'Liga MX','eng.1':'Premier League','esp.1':'LaLiga','ita.1':'Serie A','ger.1':'Bundesliga',
+  'uefa.champions':'Champions League','uefa.nations':'Liga de Naciones UEFA',
+  'concacaf.nations.league':'Liga de Naciones CONCACAF','fifa.friendly':'Amistosos internacionales',
+  'mlb':'MLB','nfl':'NFL','nba':'NBA','nhl':'NHL','atp':'ATP','wta':'WTA'
+};
+function chPhraseScore(qn, phrase){
+  const p=chNorm(phrase); if(!p) return 0;
+  // alias cortos (uefa, nba) no deben ganar a una frase más específica con typo
+  if(qn.includes(p)) return p.length<=5 ? 4 : 10+Math.min(p.length,20);
+  const qtok=qn.split(/[^a-z0-9]+/).filter(t=>t.length>=3);
+  const ptok=p.split(/[^a-z0-9]+/).filter(t=>t.length>=3);
+  if(!ptok.length) return 0;
+  let hit=0, pts=0;
+  for(const pt of ptok){
+    let s=0;
+    for(const qt of qtok){
+      if(qt===pt) s=Math.max(s,3);
+      else {
+        const d=chLev(qt,pt);
+        if(d===1 && Math.min(qt.length,pt.length)>=5) s=Math.max(s,2);
+        else if(d===2 && Math.min(qt.length,pt.length)>=7) s=Math.max(s,1);
+      }
+    }
+    if(s){ hit++; pts+=s; }
+  }
+  if(hit>=ptok.length) return pts+3;
+  if(ptok.length>=2 && hit>=Math.ceil(ptok.length*0.66)) return pts;
+  return 0;
+}
+function chScope(qn){
+  const s=chNorm(qn);
+  const date=/hoy/.test(s)?'hoy':(/manana|pasado manana/.test(s)?'manana':null);
+  const leagues=[], sports=[];
+  let bestL=0;
+  for(const [k,als] of Object.entries(CH_LEAGUE_ALIASES)){
+    const phrases=als.concat([k.replace(/\./g,' '), CH_LEAGUE_LABEL[k]||'']);
+    const sc=Math.max.apply(null, phrases.map(ph=>chPhraseScore(s, ph)));
+    if(sc>0){ leagues.push({k,sc}); bestL=Math.max(bestL,sc); }
+  }
+  for(const [k,als] of Object.entries(CH_SPORT_ALIASES)){
+    const sc=Math.max.apply(null, als.map(ph=>chPhraseScore(s, ph)));
+    if(sc>0) sports.push({k,sc});
+  }
+  // si hay liga concreta, quedarse con las de puntuación cercana al máximo (uefa → nations+champions)
+  const keepL=leagues.filter(x=>x.sc>=bestL-2 && x.sc>=3).map(x=>x.k);
+  const keepS=sports.filter(x=>x.sc>=3).map(x=>x.k);
+  const labels=keepL.map(k=>CH_LEAGUE_LABEL[k]||k);
+  if(!labels.length && keepS.length) labels.push(...keepS.map(k=>k==='futbol'?'fútbol':k==='tenis'?'tenis':k.toUpperCase()));
+  return {date, leagues:keepL, sports:keepS, label:labels.join(', ')};
+}
+function chApplyScope(items, scope){
+  let pool=items.slice();
+  if(scope.leagues && scope.leagues.length) pool=pool.filter(it=>scope.leagues.includes((it.game||{}).league));
+  else if(scope.sports && scope.sports.length) pool=pool.filter(it=>scope.sports.includes((it.game||{}).sport));
+  if(scope.date==='hoy'){ const t=chTodayYmd(); pool=pool.filter(it=>chYmd((it.game||{}).date)===t); }
+  if(scope.date==='manana'){ const t=chTomorrowYmd(); pool=pool.filter(it=>chYmd((it.game||{}).date)===t); }
+  return pool;
+}
+function chIsOfficialPick(it){
+  if(!it||!it.published||it.status!=='PICK'||!it.lean||!it.lean.label) return false;
+  return chAgree(it.pred,it.lean)!==false;
+}
+function chRankPick(it){
+  const ev=chEvPct(it.lean&&it.lean.ev);
+  const conf=(it.confidence&&it.confidence.level)||'';
+  return [ev==null?1:0, -(ev==null?0:ev), -(CH_CONF_RANK[conf]||0)];
+}
+function chCmpRank(a,b){ for(let i=0;i<a.length;i++){ if(a[i]!==b[i]) return a[i]-b[i]; } return 0; }
+function chPredLine(it){
+  const g=it.game||{}, p=it.pred||{};
+  const who=p.winner&&p.winner.side?(p.winner.side==='draw'?'empate':((g[p.winner.side]||{}).name||p.winner.side)):null;
+  const sc=p.score&&p.score.home!=null?`${p.score.home}-${p.score.away}`:null;
+  const tot=p.total&&p.total.label?p.total.label:null;
+  const bits=[];
+  if(who) bits.push('ganador '+who+(p.winner&&p.winner.p!=null?' '+chPct(p.winner.p):''));
+  if(sc) bits.push('proy. '+sc);
+  if(tot) bits.push(tot);
+  const when=g.date?chWhen(g.date):'';
+  return `• <a href="${chLink(g)}">${esc(chGame(it))}</a>${when?' ('+esc(when)+')':''}${bits.length?': <b>'+esc(bits.join(' · '))+'</b>':' : sin predicción todavía'}`;
+}
+function chListIntent(qn){
+  const s=chNorm(qn);
+  if(/parlay|parley|combinad|ticket|arma/.test(s)) return 'parlay';
+  if(/mejores picks|mejor pick|picks de |picks del |picks para |picks hoy|picks manana|que me recomiendas|que apuesto|que apostar|recomendacion/.test(s)) return 'best';
+  const sc=chScope(s);
+  if((sc.leagues.length||sc.sports.length)&&/pick|apost|recomien|valor/.test(s)) return 'best';
+  return null;
+}
+function chWhy(it,st){
+  const raw=(it&&it.discard_reason)||'';
+  if(!raw) return '';
+  const s=String(st||'');
+  if(s && raw.toLowerCase().startsWith(s.toLowerCase())){
+    const rest=raw.slice(s.length).replace(/^\s*[·\-:(]+\s*/, '').replace(/\)$/,'');
+    return rest?` · ${esc(rest)}`:'';
+  }
+  return ` · ${esc(raw)}`;
+}
+function chBestAnswerFromItems(items, qn){
+  const scope=chScope(qn);
+  const upcoming=(items||[]).filter(it=>it&&it.game&&Date.parse(it.game.date)>Date.now()-60e3);
+  const pool=chApplyScope(upcoming, scope);
+  const named=!!(scope.leagues.length||scope.sports.length);
+  const scoped=!!(named||scope.date);
+  const picks=pool.filter(chIsOfficialPick).sort((a,b)=>chCmpRank(chRankPick(a),chRankPick(b)));
+  const revis=named?pool.filter(it=>!chIsOfficialPick(it)&&(it.status==='REVISAR'||it.status==='PASS'||it.status==='LEAN'||it.status==='SIN_LINEA'||!it.published)):[];
+  const where=scope.label?(scope.label):(scope.date==='hoy'?'hoy':scope.date==='manana'?'mañana':'próximas 72 h');
+  const whenBit=scope.date==='hoy'?', hoy':(scope.date==='manana'?', mañana':'');
+  const note='<span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading. Acuerdo con la predicción no garantiza acierto.</span>';
+  if(picks.length){
+    let html=`Mejores picks (por EV y confianza${whenBit}${scope.label?' · '+esc(scope.label):''}):<br>`+picks.slice(0,8).map(chPickLine).join('<br>');
+    if(named && revis.length){
+      html+=`<br><br><b>Sin pick / revisar</b> en ${esc(where)} (no son recomendación):<br>`+revis.slice(0,24).map(it=>{
+        const st=it.status||'sin pick';
+        const why=chWhy(it,st);
+        return `• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> — ${esc(st)}${why}`;
+      }).join('<br>');
+    }
+    return html+'<br>'+note;
+  }
+  if(named){
+    const preds=pool.filter(it=>it.pred&&(it.pred.winner||it.pred.score)).sort((a,b)=>Date.parse(a.game.date)-Date.parse(b.game.date));
+    let html=`No hay picks en estado PICK para ${esc(where)}. No invento ninguno ni salto a otros deportes o ligas.`;
+    if(preds.length) html+=`<br><br>Predicciones NRNM de esos juegos:<br>`+preds.slice(0,24).map(chPredLine).join('<br>');
+    else if(pool.length) html+=`<br>Hay ${pool.length} juego(s) en esa lista, pero aún no hay predicción publicada.`;
+    else html+=`<br>No hay juegos de ${esc(where)} en esa ventana.`;
+    if(revis.length){
+      html+=`<br><br><b>Sin pick / revisar</b> (no son recomendación):<br>`+revis.slice(0,24).map(it=>`• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> — ${esc(it.status||'sin pick')}${chWhy(it,it.status||'sin pick')}`).join('<br>');
+    }
+    return html+'<br>'+note;
+  }
+  if(scope.date){
+    return `No hay picks en estado PICK para ${esc(where)}. No relleno la lista con PASS ni REVISAR.<br>`+note;
+  }
+  return 'No hay picks en estado PICK en las próximas 72 h. No relleno la lista con PASS ni REVISAR de otros juegos.<br>'+note;
+}
+/* --- end intent helpers --- */
+
 // busca equipo/jugador (con tolerancia a errores de dedo) en juegos en vivo y próximos (72 h) de todas las ligas
 async function chSearchGames(qn){
   const words=qn.split(/[^a-z0-9]+/).filter(w=>w.length>=4&&!CH_STOP.has(w)); if(!words.length) return {hit:null,near:[]};
@@ -175,20 +359,24 @@ function chAgree(pr,l){ if(!pr||!l) return null;
   if(l.market==='BTTS'&&pr.btts&&pr.btts.side) return pr.btts.side===l.side;
   return null; }
 async function chBestSingle(qn){
-  const items=(await chPicks()).filter(it=>it.published&&it.lean&&it.lean.edge!=null&&it.lean.edge>0&&(it.status==='PICK'||it.status==='LEAN')&&Date.parse(it.game.date)>Date.now());
-  const rk=it=>(it.status==='PICK'?1e3:0)+(chAgree(it.pred,it.lean)===false?-500:0)+(it.lean.score!=null?it.lean.score:(it.lean.edge||0)*(it.lean.p_final||0));
-  items.sort((a,b)=>rk(b)-rk(a));
-  const it=items[0]; if(!it) return 'No hay ningún pick con ventaja en las próximas 72 h.';
+  const all=await chPicks();
+  const scope=chScope(qn);
+  const items=chApplyScope(all.filter(it=>it.game&&Date.parse(it.game.date)>Date.now()), scope).filter(chIsOfficialPick);
+  items.sort((a,b)=>chCmpRank(chRankPick(a),chRankPick(b)));
+  const it=items[0]; if(!it) return chBestAnswerFromItems(all, qn);
   const l=it.lean, pr=it.pred||{}, sg=(l.signals||{}).verdict;
-  const why=[`prob. del modelo ${chPct(l.p_final)} vs ${chPct(l.p_nv)} del mercado (edge ${l.edge>0?'+':''}${l.edge.toFixed(1)} pp)`];
+  const why=[`pFinal ${chPct(l.p_final)} · ${chEvTxt(l.ev)}`];
   if(it.confidence&&it.confidence.level) why.push('confianza '+esc(it.confidence.level));
   if(sg&&sg!=='sin_dato') why.push('señales de mercado '+esc(sg.replace('_',' ')));
-  const ag=chAgree(pr,l); if(ag!=null) why.push(ag?'coincide con la Predicción NRNM':'<b>no</b> coincide con la Predicción NRNM');
-  return `Mejor pick individual (${esc(it.status)}, próximas 72 h):<br><b>${esc(l.label)}</b> ${esc(l.price_txt||'')} — <a href="${chLink(it.game)}">${esc(chGame(it))}</a> (${esc(chWhen(it.game.date))})<br>Por qué: ${why.filter(Boolean).join(' · ')}.<br><span class="ch-mut">Siguientes: ${items.slice(1,3).map(x=>esc(x.lean.label)+' '+esc(x.lean.price_txt||'')).join(' · ')||'—'}. Estimaciones, no garantías. Paper trading.</span>`;
+  const ag=chAgree(pr,l); if(ag!=null) why.push(ag?'concuerda con la Predicción NRNM':'<b>no</b> concuerda con la Predicción NRNM');
+  return `Mejor pick individual (${esc(it.status)}${scope.label?', '+esc(scope.label):''}):<br><b>${esc(l.label)}</b> ${esc(l.price_txt||'')} — <a href="${chLink(it.game)}">${esc(chGame(it))}</a> (${esc(chWhen(it.game.date))})<br>Por qué: ${why.filter(Boolean).join(' · ')}.<br><span class="ch-mut">Siguientes: ${items.slice(1,3).map(x=>esc(x.lean.label)+' '+esc(x.lean.price_txt||'')).join(' · ')||'—'}. Estimaciones, no garantías. Paper trading.</span>`;
 }
 function chPickLine(it){
   const l=it.lean||{}; if(!l.label) return `${chGame(it)}: sin pick (sin línea de mercado).`;
-  return `• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> (${esc(chWhen(it.game.date))})<br>&nbsp;&nbsp;<b>${esc(l.label)}</b> ${esc(l.price_txt||'')} · prob. ${chPct(l.p_final)}${chEdge(l.edge)} · ${esc(it.status)}${it.confidence?' · confianza '+esc(it.confidence.level):''}`;
+  const conf=it.confidence&&it.confidence.level?` · confianza ${esc(it.confidence.level)}`:'';
+  const ag=chAgree(it.pred,l);
+  const conc=ag===true?' · concuerda con la predicción':(ag===false?' · no concuerda con la predicción':'');
+  return `• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> (${esc(chWhen(it.game.date))})<br>&nbsp;&nbsp;<b>${esc(l.label)}</b> ${esc(l.price_txt||'')} · ${esc(chEvTxt(l.ev))} · pFinal ${chPct(l.p_final)} · ${esc(it.status)}${conf}${conc}`;
 }
 async function chGameAnswer(league, eid, qn){
   const d = await api(`/api/game/${encodeURIComponent(league)}/${encodeURIComponent(eid)}`, 60000);
@@ -271,23 +459,22 @@ async function chGameAnswer(league, eid, qn){
 const CH_NUM={dos:2,tres:3,cuatro:4,cinco:5,seis:6};
 async function chParlay(qn){
   const n=Math.min(6,Math.max(2,+((qn.match(/\b([2-6])\b/)||[])[1]||CH_NUM[(qn.match(/\b(dos|tres|cuatro|cinco|seis)\b/)||[])[1]]||3)));
-  const sp={nba:/nba|basket/,nfl:/nfl|americano/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier/,tenis:/tenis|atp|wta/,mlb:/mlb|beis/};
-  const spk=Object.keys(sp).find(k=>sp[k].test(qn));
-  let scope=/manana/.test(qn)?'manana':'hoy', d=await api('/api/picks?scope='+scope);
-  // picks oficiales si el modo estricto está encendido; si no (por defecto), el pick del juego (PICK o LEAN)
-  const off=x=>((x.official&&x.official.length)?x.official:((x.status==='PICK'||x.status==='LEAN')&&x.lean?[x.lean]:[])).filter(c=>c.price!=null&&c.edge!=null&&c.edge>0&&['ML','Spread','Total','BTTS'].includes(c.market));
-  const rk=c=>c.score!=null?c.score:(c.edge||0)*(c.p_final||0);
-  const fut=it=>Date.parse(it.game.date)>Date.now()+60e3;          // la versión en línea puede traer juegos que ya empezaron
-  let pool=d.items.filter(it=>fut(it)&&off(it).length&&(!spk||it.game.sport===spk));
-  if(scope==='hoy'&&pool.length<n){ const d2=await api('/api/picks?scope=24h'); const have=new Set(pool.map(it=>it.game.league+it.game.id)); pool=pool.concat(d2.items.filter(it=>fut(it)&&off(it).length&&(!spk||it.game.sport===spk)&&!have.has(it.game.league+it.game.id))); scope='24h'; }
-  pool.sort((a,b)=>(b.status==='PICK')-(a.status==='PICK')||rk(off(b)[0])-rk(off(a)[0]));
+  const sc=chScope(qn);
+  let scope=sc.date==='manana'?'manana':'hoy', d=await api('/api/picks?scope='+scope);
+  const off=x=>((x.official&&x.official.length)?x.official:(chIsOfficialPick(x)&&x.lean?[x.lean]:[])).filter(c=>c.price!=null&&['ML','Spread','Total','BTTS'].includes(c.market)&&chEvPct(c.ev)!=null&&chEvPct(c.ev)>0);
+  const rk=c=>{ const ev=chEvPct(c.ev); return [ev==null?1:0, -(ev||0)]; };
+  const fut=it=>Date.parse(it.game.date)>Date.now()+60e3;
+  const inSc=it=>!(sc.leagues.length||sc.sports.length)||chApplyScope([it],sc).length;
+  let pool=d.items.filter(it=>fut(it)&&off(it).length&&inSc(it));
+  if(scope==='hoy'&&pool.length<n){ const d2=await api('/api/picks?scope=24h'); const have=new Set(pool.map(it=>it.game.league+it.game.id)); pool=pool.concat(d2.items.filter(it=>fut(it)&&off(it).length&&inSc(it)&&!have.has(it.game.league+it.game.id))); scope='24h'; }
+  pool.sort((a,b)=>chCmpRank(rk(off(a)[0]),rk(off(b)[0])));
   const pick=pool.slice(0,n);
-  if(!pick.length) return `No hay picks con ventaja${spk?' de '+spk.toUpperCase():''} ${scope==='manana'?'mañana':'en las próximas 24 h'}, así que no armo un parlay con relleno.`;
+  if(!pick.length) return `No hay picks en estado PICK${sc.label?' de '+esc(sc.label):''} ${scope==='manana'?'mañana':'en las próximas 24 h'}, así que no armo un parlay con relleno.`;
   const legs=pick.map(it=>tkLegFromCand(it.game,Object.assign({official:it.status==='PICK'},off(it)[0])));
   const dd=legs.reduce((a,l)=>a*tkDec(l.odds),1), pm=legs.every(l=>l.p!=null)?legs.reduce((a,l)=>a*l.p,1):null;
   CH.parlay=legs;
   const lines=pick.map((it,i)=>{ const c=off(it)[0], v=(c.signals||{}).verdict; return `${i+1}. <b>${esc(c.label)}</b> ${esc(c.price_txt||'')} — ${esc(chGame(it))} (${esc(chWhen(it.game.date))})<br>&nbsp;&nbsp;${c.score!=null?'puntaje '+c.score+'/100 · ':''}${esc(it.status)} · prob. ${chPct(c.p_final)}${chEdge(c.edge)}${v&&v!=='sin_dato'?' · señales '+esc(v.replace('_',' ')):''}`; });
-  return `Parlay de ${legs.length}${legs.length<n?` (sólo hay ${legs.length} picks con ventaja; no relleno)`:''} con los picks de mayor ventaja (PICK primero), 1 por juego (sin correlación):<br>${lines.join('<br>')}
+  return `Parlay de ${legs.length}${legs.length<n?` (sólo hay ${legs.length} picks con ventaja; no relleno)`:''} con los picks de mayor EV (sólo PICK, que concuerdan con la predicción), 1 por juego (sin correlación):<br>${lines.join('<br>')}
     <br>Momio combinado <b>${tkAm(dd)}</b> · prob. del modelo <b>${pm==null?'—':(pm*100).toFixed(1)+'%'}</b> (asume independencia) · implícita ${(100/dd).toFixed(1)}%.
     <br><button type="button" class="btn pri ch-mk" onclick="tkLoad(CH.parlay)">🎟️ Crear ticket con estas piernas</button><br><span class="ch-mut">Paper trading. Más piernas = mucho menos probable; ningún parlay es «seguro».</span>`;
 }
@@ -327,21 +514,21 @@ async function chLocal(q){
   if(/individual|sencill|solo uno|un solo pick|el mejor pick|mejor pick para|mejor apuesta|que le meto/.test(qn) && !/\bvs\b/.test(qn))
     return chBestSingle(qn);
   if(cur && (/(este|esta|del|el) (juego|partido)|aqui/.test(qn) || (/lesion|baja|prop|jugador|marcador|prediccion/.test(qn) && !/mejores|hoy|manana|todos/.test(qn)))) return chGameAnswer(cur.league, cur.eid, qn);
-  let pool=items.filter(it=>it.lean&&it.lean.edge!=null);
-  const sp={nba:/nba|basket/,nfl:/nfl|americano/,mlb:/mlb|beis/,nhl:/nhl|hockey/,futbol:/futbol|soccer|liga mx|premier|champions/,tenis:/tenis|atp|wta/};
-  for(const [k,re] of Object.entries(sp)) if(re.test(qn)) pool=pool.filter(it=>it.game.sport===k);
-  if(/ambos anotan|btts/.test(qn)) pool=pool.filter(it=>(it.lean.market||'')==='BTTS'||(it.top||[]).some(t=>t.market==='BTTS'));
-  if(/hoy/.test(qn)){ const today=new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date()); pool=pool.filter(it=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date(it.game.date))===today); }
-  if(/pick|recomien|apost|mejor|valor|hoy|manana|parlay|btts|ambos/.test(qn) || pool.length!==items.length){
-    pool.sort((a,b)=>(b.status==='PICK')-(a.status==='PICK')||(b.lean.edge||0)-(a.lean.edge||0));
-    if(!pool.length) return 'No encuentro picks con ventaja para eso en las próximas 72 h.';
-    return `Mejores picks (por edge, próximas 72 h${/hoy/.test(qn)?', hoy':''}):<br>`+pool.slice(0,5).map(chPickLine).join('<br>')+'<br><span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading.</span>';
+  if(/ambos anotan|btts/.test(qn) && !chListIntent(qn)){
+    const btts=chApplyScope(items.filter(it=>it.lean&&((it.lean.market||'')==='BTTS'||(it.top||[]).some(t=>t.market==='BTTS'))), chScope(qn));
+    if(btts.length) return chBestAnswerFromItems(btts, qn);
+  }
+  if(chListIntent(qn) || /pick|recomien|apost|mejor|valor|hoy|manana|btts|ambos/.test(qn) || chScope(qn).leagues.length || chScope(qn).sports.length){
+    return chBestAnswerFromItems(items, qn);
   }
   return 'No encontré ese equipo/juego en los próximos 3 días. Prueba con el nombre del equipo (ej. «Real Madrid», «Lakers»), «mejores picks hoy», «props» o «lesiones» desde un juego abierto.';
 }
 async function chAsk(q){
   if(CH.llm==null && !STATIC){ try{ CH.llm=(await api('/api/chat/status',8000)).llm; }catch(e){ CH.llm=false; } }
   if(chAgreeIntent(q)) return {html: await chAgreeingAnswer(), src:'Lista real de la app (predicción + picks registrados)'};
+  const listKind=chListIntent(chNorm(q));
+  if(listKind==='parlay') return {html: await chParlay(chNorm(q)), src:'Parlay con picks reales de la app'};
+  if(listKind==='best') return {html: await chLocal(q), src:'Lista real de la app (picks PICK por EV y confianza)'};
   if(CH.llm && !STATIC && !/parlay|parley|combinad|ticket|arma/.test(chNorm(q))){
     try{
       const c=chCurGame();
