@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 
 def test_cron_escalonado_y_dispatch():
-    yml = (ROOT / ".github/workflows/pages.yml").read_text()
+    yml = (ROOT / "scripts/pages.workflow.yml").read_text()
     assert 'cron: "7,22,37,52 * * * *"' in yml
     assert 'cron: "17 8 * * *"' in yml
     assert "*/10 * * * *" not in yml
@@ -17,6 +17,7 @@ def test_cron_escalonado_y_dispatch():
     assert "ODDS_TTL_FLOOR" in yml and "600" in yml
     assert "needs.build.outputs.changed" in yml
     assert (ROOT / "scripts/trigger_pages_refresh.sh").is_file()
+    assert (ROOT / "scripts/pages.workflow.yml").is_file()
 
 
 def test_content_hash_ignora_now_y_built():

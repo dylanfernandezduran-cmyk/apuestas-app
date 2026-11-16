@@ -18,6 +18,8 @@
 #   POST https://api.github.com/repos/dylanfernandezduran-cmyk/apuestas-app/actions/workflows/pages.yml/dispatches
 #   Body: {"ref":"main"}
 #
+# El workflow nuevo está en scripts/pages.workflow.yml (hay que copiarlo a
+# .github/workflows/pages.yml con un token que tenga alcance «workflow»).
 # Esto no se configura aquí: el dueño tiene que crear el PAT y el cron en su cuenta.
 set -eu
 REPO="${GITHUB_REPOSITORY:-dylanfernandezduran-cmyk/apuestas-app}"
