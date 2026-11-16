@@ -307,6 +307,16 @@ async def player_prop(league: str, eid: str, aid: str, key: str, hist: int = 10)
     if not r: raise HTTPException(404, "Prop no disponible para este jugador")
     return r
 
+@app.get("/api/picks/agreeing")
+async def picks_agreeing(date: str = None, include_live: int = 1):
+    """Picks registrados de hoy (o de `date`) que coinciden en mercado, lado y línea con la Predicción NRNM."""
+    from .consistency import agreeing_picks
+    live = str(include_live).lower() not in ("0", "false", "no")
+    d = (date or "").strip() or None
+    if d and len(d) != 10:
+        raise HTTPException(400, "date debe ser YYYY-MM-DD")
+    return agreeing_picks(date=d, include_live=live)
+
 @app.get("/api/chat/status")
 async def chat_status():
     return CHAT.status()

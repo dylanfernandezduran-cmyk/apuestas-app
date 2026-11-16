@@ -38,7 +38,9 @@ SYSTEM = (
     "Nunca contradigas la predicción ni el pick registrado del juego. Recomienda primero PICK y luego LEAN. PASS/SIN_LINEA no son recomendación. No menciones ningún «filtro estricto».\n"
     "8. El ganador del juego es consistencia.ganador_pfinal (mismo pFinal de la carta). "
     "El pFinal del pick (hándicap/total) NO es el ganador. Si consistencia.contradicciones no está vacío, dilo y quédate con la predicción. "
-    "Si el estado es PASS o el EV≤0, no recomiendes y no hables de confianza Alta (la confianza mostrada es «no aplica»)."
+    "Si el estado es PASS o el EV≤0, no recomiendes y no hables de confianza Alta (la confianza mostrada es «no aplica»).\n"
+    "9. Si piden los picks que concuerdan/coinciden con la predicción y los registrados, usa SOLO el arreglo "
+    "picks_que_concuerdan (si viene). No inventes ninguno. Si está vacío, dilo. Recuerda que coincidir no garantiza acierto."
 )
 
 def polish(text, question=""):
@@ -93,7 +95,38 @@ def _game_short(a):
                 confianza_mostrada=(conf_show or {}).get("level") if conf_show else ((a.get("picks") or {}).get("confidence") or {}).get("level"),
                 picks_registrados=rec, probabilidades=probs[:24], lesiones=inj)
 
+def agreeing_intent(q):
+    """True si pide la lista de picks que coinciden con la Predicción NRNM."""
+    s = (q or "").lower()
+    # quita acentos
+    import unicodedata
+    s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+    if re.search(r"picks que concuerdan|picks que coinciden", s):
+        return True
+    if re.search(r"concuerd", s) and re.search(r"predic|registr|pick", s):
+        return True
+    if re.search(r"coincid", s) and re.search(r"predic|registr", s):
+        return True
+    if re.search(r"prediccion y pick|pick y prediccion|prediccion con (los )?picks", s):
+        return True
+    return False
+
+
+def agreeing_reply(now=None, date=None, include_live=True):
+    from .consistency import agreeing_picks, format_agreeing_text, format_agreeing_html
+    report = agreeing_picks(now=now, date=date, include_live=include_live)
+    return dict(
+        agreeing=True, llm=False,
+        text=format_agreeing_text(report),
+        html=format_agreeing_html(report),
+        n=report["n"], date=report["date"], include_live=report["include_live"],
+        items=report["items"], note=report["note"],
+    )
+
+
 async def answer(q, league=None, eid=None, bankroll=None, unit_pct=None, daily_used_frac=0):
+    if agreeing_intent(q):
+        return agreeing_reply()
     key, base, model = _cfg()
     if not key: return dict(llm=False)
     from . import data

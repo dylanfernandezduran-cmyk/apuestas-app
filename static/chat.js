@@ -35,6 +35,41 @@ const chVs = g => (g.sport==='futbol'||g.sport==='tenis') ? `${g.home.name} vs $
 const chGame = it => chVs(it.game);
 const chLink = g => `#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id)}`;
 
+function chAgreeIntent(q){
+  const s=chNorm(q);
+  if(/picks que concuerdan|picks que coinciden/.test(s)) return true;
+  if(/concuerd/.test(s) && /predic|registr|pick/.test(s)) return true;
+  if(/coincid/.test(s) && /predic|registr/.test(s)) return true;
+  if(/prediccion y pick|pick y prediccion|prediccion con (los )?picks/.test(s)) return true;
+  return false;
+}
+function chAgreeList(d){
+  const items=(d&&d.items)||[], note=(d&&d.note)||'Que el pick registrado y la Predicción NRNM coincidan no garantiza acierto. Es una estimación del modelo, no una garantía de ganancia.';
+  if(!items.length){
+    return `Hoy${d&&d.date?' ('+esc(d.date)+')':''} no hay picks registrados que coincidan con la Predicción NRNM en los juegos que aún no empiezan${d&&d.include_live?' ni en los que están en vivo':''}. No invento ninguno. Puede que aún no se haya registrado un pick, o que el registrado no coincida en lado o línea.<br><span class="ch-mut">${esc(note)}</span>`;
+  }
+  const evs=it=>it.ev==null?'sin dato':((it.ev>0?'+':'')+Number(it.ev).toFixed(1)+'%');
+  const pfs=it=>{ if(it.p_final==null) return 'sin dato'; const x=Number(it.p_final); return (Math.abs(x)<=1.5?(x*100).toFixed(1):x.toFixed(1))+'%'; };
+  const rows=items.map((it,i)=>{
+    const typ=it.type==='main'?'Principal':'Sugerencia';
+    const cuota=esc(it.odds_txt||'sin cuota')+(it.book?' · '+esc(it.book):'');
+    const live=it.live?' · <b>EN VIVO</b> (bloqueado al inicio)':'';
+    let sim='Picks parecidos: aún no hay muestra suficiente en el récord.';
+    if(it.similar&&it.similar.n){
+      const hit=it.similar.hit_pct!=null?Math.round(it.similar.hit_pct)+'%':'sin %';
+      sim=`Picks parecidos (${esc(it.similar.label||'segmento')}): <b>${hit}</b> de acierto en <b>n=${it.similar.n}</b> (récord real, no es una garantía).`;
+    }
+    return `${i+1}. <b>[${typ}] ${esc(it.pick||'—')}</b> (${cuota}) — <a href="${esc(it.href||'#/')}">${esc(it.game||'')}</a> · ${esc((it.sport||'').toUpperCase())} · ${esc(it.kickoff_cdmx||'')}${live}<br>&nbsp;&nbsp;pFinal ${esc(pfs(it))} · EV ${esc(evs(it))} · confianza ${esc(it.confidence||'sin dato')}<br>&nbsp;&nbsp;Señales: ${esc(it.signals||'sin dato')}<br>&nbsp;&nbsp;${sim}`;
+  });
+  const anyLive=items.some(it=>it.live);
+  return `Picks de hoy${d.date?' ('+esc(d.date)+')':''} que concuerdan: el pick registrado y la Predicción NRNM coinciden en mercado, lado y línea. <b>${items.length}</b> en total${anyLive?', incluyendo juegos en vivo (pick bloqueado al inicio)':''}:<br>${rows.join('<br>')}<br><span class="ch-mut">${esc(note)}</span>`;
+}
+async function chAgreeingAnswer(){
+  const d=await api('/api/picks/agreeing?include_live=1', 30000);
+  return chAgreeList(d||{items:[]});
+}
+
+
 async function chPicks(){
   if(CH.picks && Date.now()-CH.picksT<120000) return CH.picks;
   const d = await api('/api/picks?scope=72h', 60000); CH.picks = d.items||[]; CH.picksT = Date.now(); return CH.picks;
@@ -258,6 +293,7 @@ async function chParlay(qn){
 }
 async function chLocal(q){
   const qn=chNorm(q);
+  if(chAgreeIntent(q)) return chAgreeingAnswer();
   if(/parlay|parley|combinad|ticket|arma/.test(qn)) return chParlay(qn);
   if(/^(hola|buenas|hey|que tal|ayuda|help)\b/.test(qn)) return 'Hola 👋 Pregúntame por <b>los mejores picks de hoy</b>, un equipo (ej. «Chiefs»), sus <b>lesiones</b>, <b>props</b> de jugadores o el <b>récord</b>. Respondo sólo con los datos de la app.';
   if(/record|historial|cuanto (llevamos|vamos)|acierto/.test(qn)){
@@ -305,6 +341,7 @@ async function chLocal(q){
 }
 async function chAsk(q){
   if(CH.llm==null && !STATIC){ try{ CH.llm=(await api('/api/chat/status',8000)).llm; }catch(e){ CH.llm=false; } }
+  if(chAgreeIntent(q)) return {html: await chAgreeingAnswer(), src:'Lista real de la app (predicción + picks registrados)'};
   if(CH.llm && !STATIC && !/parlay|parley|combinad|ticket|arma/.test(chNorm(q))){
     try{
       const c=chCurGame();
@@ -321,7 +358,7 @@ function chRender(){
   p.hidden=!CH.open; document.body.classList.toggle('ch-open', !!CH.open); const fab=document.getElementById('chb'); if(fab){ fab.classList.toggle('on',CH.open); fab.setAttribute('aria-label', CH.open?'Cerrar chat IA':'Abrir chat IA'); fab.setAttribute('aria-expanded', CH.open?'true':'false'); } chSyncNav();
   if(!CH.open) return;
   const _bk=typeof BK==='function'?BK():{bankroll:'',unit_pct:1};
-  const sug=['Props NBA','Alineaciones','Armar ticket'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
+  const sug=['Picks que concuerdan','Props NBA','Alineaciones','Armar ticket'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
   p.innerHTML=`<div class="ch-h"><b>Analista NRNM · datos reales</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
     <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):'<div class="ch-a">Hola, pregúntame por picks, un equipo, lesiones, props o el récord. Uso sólo los datos de la app.</div>'}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
     <div class="ch-s">${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>

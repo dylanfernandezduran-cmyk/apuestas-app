@@ -542,3 +542,273 @@ def compare_pred_vs_picks():
             "Las predicciones cubren casi todos los juegos; los picks principales son un subconjunto filtrado. No son la misma muestra."
         ),
     )
+
+
+# ---------- picks que concuerdan: predicción + registro (mismo mercado/lado/línea) ----------
+AGREE_NOTE = (
+    "Que el pick registrado y la Predicción NRNM coincidan no garantiza acierto. "
+    "Es una estimación del modelo, no una garantía de ganancia."
+)
+
+_CONF_RANK = {"Alta": 3, "Media": 2, "Baja": 1, "no aplica": 0}
+
+
+def _odds_txt(odds):
+    from .odds import fmt_am
+    if odds is None:
+        return None
+    try:
+        return fmt_am(int(odds))
+    except (TypeError, ValueError):
+        return None
+
+
+def _game_title(home, away, sport):
+    home, away = home or "local", away or "visitante"
+    if sport in ("futbol", "tenis"):
+        return f"{home} vs {away}"
+    return f"{away} @ {home}"
+
+
+def _kickoff_cdmx(ts):
+    if ts is None:
+        return None
+    t = time.gmtime(int(ts) + CDMX_OFF)
+    months = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+    h, ampm = t.tm_hour % 12 or 12, ("a.m." if t.tm_hour < 12 else "p.m.")
+    return f"{t.tm_mday} {months[t.tm_mon-1]}, {h}:{t.tm_min:02d} {ampm} CDMX"
+
+
+def _signals_brief(row):
+    raw = row.get("signals_json")
+    if not raw:
+        why = row.get("why_json")
+        if why:
+            try:
+                w = json.loads(why) if isinstance(why, str) else why
+                raw = w.get("signals") if isinstance(w, dict) else None
+            except Exception:
+                raw = None
+    if not raw:
+        return None
+    try:
+        sig = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
+    if not isinstance(sig, dict):
+        return None
+    n_ag, n_pr = sig.get("n_agree"), sig.get("n_present")
+    verdicts = sig.get("verdicts") or {}
+    bits = []
+    if n_ag is not None and n_pr is not None:
+        bits.append(f"{n_ag} a favor / {n_pr} con dato")
+    labels = dict(modelo="modelo", movimiento="movimiento", rlm="RLM", tendencias="tendencias",
+                  lesiones="lesiones", fisico="físico")
+    verd_es = dict(a_favor="a favor", en_contra="en contra", mixto="mixto", neutral="neutral", sin_dato="sin dato")
+    det = []
+    for k, lab in labels.items():
+        v = verdicts.get(k)
+        if v:
+            det.append(f"{lab}: {verd_es.get(v, v)}")
+    if det:
+        bits.append("; ".join(det))
+    return " · ".join(bits) if bits else None
+
+
+def _similar_brief(row):
+    try:
+        from . import learn
+        mk = {"ml": "ML", "spread": "Spread", "total": "Total", "btts": "BTTS",
+              "sspread": "Spread", "stotal": "Total"}.get(row.get("market"), row.get("market"))
+        fb = learn.feedback(dict(
+            sport=row.get("sport"), market=mk, selection=row.get("selection"),
+            line=row.get("line"), odds=row.get("odds"), ev=row.get("ev"),
+            conf_level=row.get("conf_level"), p_final=row.get("p_final"),
+            p_nv=row.get("p_nv"), edge=row.get("edge"),
+        ))
+        sim = (fb or {}).get("similar")
+        if not sim:
+            return None
+        return dict(
+            label=sim.get("label"), n=sim.get("n"),
+            hit_pct=sim.get("hit"), hit_lo=sim.get("hit_lo"), hit_hi=sim.get("hit_hi"),
+            roi=sim.get("roi"),
+            note=sim.get("note") or "Cifras reales del récord de picks similares. No es una garantía de acierto.",
+        )
+    except Exception:
+        return None
+
+
+def agreeing_picks(now=None, date=None, include_live=True):
+    """Picks registrados (principal + sugerencias) de hoy que coinciden en mercado, lado y línea con la predicción.
+
+    Por defecto incluye juegos aún no empezados y, si include_live, los que ya empezaron hoy y siguen PENDIENTE
+    (pick bloqueado al inicio). No incluye calificados ni anulados. No inventa filas.
+    Los mercados de sets de tenis se omiten si la predicción no los cubre.
+    """
+    now = int(now or time.time())
+    lo, hi, day = day_window(date, now)
+    # asegurar tabla predictions
+    try:
+        _load_pred("_", "_")
+    except Exception:
+        pass
+    q = ("SELECT * FROM picks WHERE status='PENDIENTE' AND start_ts>=? AND start_ts<?")
+    args = [int(lo), int(hi)]
+    if not include_live:
+        q += " AND start_ts>?"
+        args.append(now)
+    q += " ORDER BY start_ts, league, eid, (type='main') DESC, id"
+    cache = {}
+    items = []
+    for r in _rows(q, tuple(args)):
+        pred = _load_pred(r["league"], r["eid"], cache)
+        if not pred:
+            continue
+        kind, _reason = classify_pick(pred, r)
+        if kind != "ok":
+            continue
+        evp = ev_as_pct(r.get("ev")) if r.get("ev") is not None else None
+        conf = clamp_display_confidence(
+            dict(level=r.get("conf_level")) if r.get("conf_level") else {},
+            status=None,
+            ev=r.get("ev"),
+        )
+        started = int(r.get("start_ts") or 0) <= now
+        sport = r.get("sport")
+        home, away = r.get("home"), r.get("away")
+        items.append(dict(
+            sport=sport, league=r.get("league"), eid=str(r.get("eid")),
+            home=home, away=away,
+            game=_game_title(home, away, sport),
+            kickoff_ts=r.get("start_ts"),
+            kickoff_cdmx=_kickoff_cdmx(r.get("start_ts")),
+            kickoff_iso=time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(int(r["start_ts"]))) if r.get("start_ts") else None,
+            live=started,
+            type=r.get("type") or "suggestion",
+            market=r.get("market"), selection=r.get("selection"), line=r.get("line"),
+            pick=r.get("label"),
+            odds=r.get("odds"), book=r.get("book"),
+            odds_txt=_odds_txt(r.get("odds")),
+            p_final=r.get("p_final"), ev=evp,
+            confidence=(conf.get("level") if conf.get("level") else (r.get("conf_level") or "sin dato")),
+            signals=_signals_brief(r),
+            similar=_similar_brief(r),
+            href=f"#/juego/{r.get('league')}/{r.get('eid')}",
+        ))
+    def _key(it):
+        ev = it.get("ev")
+        return (
+            ev is None,
+            -(ev if ev is not None else 0),
+            -_CONF_RANK.get(it.get("confidence") or "", 0),
+            0 if it.get("type") == "main" else 1,
+            it.get("kickoff_ts") or 0,
+        )
+    items.sort(key=_key)
+    return dict(
+        date=day, now=now, include_live=bool(include_live),
+        n=len(items), items=items, note=AGREE_NOTE,
+    )
+
+
+
+def format_agreeing_text(report):
+    """Texto plano para el chat (servidor). Sin inventar ítems."""
+    items = (report or {}).get("items") or []
+    day = (report or {}).get("date") or ""
+    live_on = (report or {}).get("include_live")
+    if not items:
+        ambito = "en los juegos de hoy que aún no empiezan" + (" ni en los que están en vivo" if live_on else "")
+        return (
+            f"Hoy ({day}) no hay picks registrados que coincidan con la Predicción NRNM {ambito}. "
+            "No invento ninguno. Puede que aún no se haya registrado un pick, o que el registrado no coincida en lado o línea.\n\n"
+            + AGREE_NOTE
+        )
+    extra = ""
+    if live_on and any(it.get("live") for it in items):
+        extra = ", incluyendo juegos en vivo (pick bloqueado al inicio)"
+    lines = [
+        f"Picks de hoy ({day}) que concuerdan: el pick registrado y la Predicción NRNM coinciden en mercado, lado y línea. "
+        f"{len(items)} en total{extra}:"
+    ]
+    for i, it in enumerate(items, 1):
+        typ = "Principal" if it.get("type") == "main" else "Sugerencia"
+        cuota = it.get("odds_txt") or "sin cuota"
+        if it.get("book"):
+            cuota = f"{cuota} · {it['book']}"
+        when = it.get("kickoff_cdmx") or "hora sin dato"
+        live = " · EN VIVO (bloqueado al inicio)" if it.get("live") else ""
+        ev = it.get("ev")
+        evs = "sin dato" if ev is None else f"{ev:+.1f}%"
+        pf = it.get("p_final")
+        pfs = "sin dato" if pf is None else (f"{pf*100:.1f}%" if abs(float(pf)) <= 1.5 else f"{float(pf):.1f}%")
+        pick = it.get("pick") or "—"
+        game = it.get("game") or ""
+        sport = (it.get("sport") or "").upper()
+        conf = it.get("confidence") or "sin dato"
+        lines.append(f"{i}. [{typ}] {pick} ({cuota}) — {game} · {sport} · {when}{live}")
+        lines.append(f"   pFinal {pfs} · EV {evs} · confianza {conf}")
+        if it.get("signals"):
+            lines.append(f"   Señales: {it['signals']}")
+        else:
+            lines.append("   Señales: sin dato")
+        sim = it.get("similar")
+        if sim and sim.get("n"):
+            hit = sim.get("hit_pct")
+            hit_s = f"{hit:.0f}%" if isinstance(hit, (int, float)) else "sin %"
+            lab = sim.get("label") or "segmento"
+            lines.append(f"   Picks parecidos ({lab}): {hit_s} de acierto en n={sim['n']} (récord real, no es una garantía).")
+        else:
+            lines.append("   Picks parecidos: aún no hay muestra suficiente en el récord.")
+    lines.append("")
+    lines.append(AGREE_NOTE)
+    return "\n".join(lines)
+
+
+def format_agreeing_html(report):
+    """HTML para /api/chat y tests. El frontend tambien formatea en JS."""
+    import html as _html
+    esc = _html.escape
+    items = (report or {}).get("items") or []
+    text_fallback = format_agreeing_text(report)
+    if not items:
+        return "<p>" + esc(text_fallback).replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+    head = text_fallback.split(":")[0] + ":"
+    parts = [esc(head), "<ol class=\"ch-agree\">"]
+    for it in items:
+        typ = "Principal" if it.get("type") == "main" else "Sugerencia"
+        cuota = esc(it.get("odds_txt") or "sin cuota")
+        if it.get("book"):
+            cuota += " · " + esc(it["book"])
+        href = esc(it.get("href") or "#/")
+        live = " · <b>EN VIVO</b> (bloqueado al inicio)" if it.get("live") else ""
+        ev = it.get("ev")
+        evs = "sin dato" if ev is None else f"{ev:+.1f}%"
+        pf = it.get("p_final")
+        pfs = "sin dato" if pf is None else (f"{float(pf)*100:.1f}%" if abs(float(pf)) <= 1.5 else f"{float(pf):.1f}%")
+        sim = it.get("similar") or {}
+        if sim.get("n"):
+            hit = sim.get("hit_pct")
+            hit_s = f"{hit:.0f}%" if isinstance(hit, (int, float)) else "sin %"
+            sim_s = (
+                f"Picks parecidos ({esc(sim.get('label') or 'segmento')}): <b>{hit_s}</b> "
+                f"de acierto en <b>n={int(sim['n'])}</b> (récord real, no es una garantía)."
+            )
+        else:
+            sim_s = "Picks parecidos: aún no hay muestra suficiente en el récord."
+        sig = esc(it.get("signals") or "sin dato")
+        pick = esc(it.get("pick") or "—")
+        game = esc(it.get("game") or "")
+        sport = esc((it.get("sport") or "").upper())
+        when = esc(it.get("kickoff_cdmx") or "")
+        conf = esc(it.get("confidence") or "sin dato")
+        parts.append(
+            f"<li><b>[{typ}] {pick}</b> ({cuota}) — "
+            f"<a href=\"{href}\">{game}</a> · {sport} · {when}{live}<br>"
+            f"pFinal {esc(pfs)} · EV {esc(evs)} · confianza {conf}<br>"
+            f"Señales: {sig}<br>{sim_s}</li>"
+        )
+    parts.append("</ol>")
+    parts.append(f"<p class=\"ch-mut\">{esc(AGREE_NOTE)}</p>")
+    return "".join(parts)
