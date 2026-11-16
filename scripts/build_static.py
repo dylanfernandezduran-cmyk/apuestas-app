@@ -4,15 +4,17 @@ window.NRNM_STATIC, lee esos archivos en lugar de /api. Datos reales de las mism
 
 uso: python scripts/build_static.py [carpeta_salida=site] [horas_adelante=48]
 La base SQLite (picks, líneas de apertura/cierre, récord, predicciones) se toma de APUESTAS_DB (el workflow la conserva en la rama `estado`)."""
-import asyncio, json, os, re, shutil, sys, time
+import asyncio, hashlib, json, os, re, shutil, sys, time
 from datetime import datetime, timedelta, timezone
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "site"))
 HOURS = float(sys.argv[2]) if len(sys.argv) > 2 else 48
 import httpx
 from server import record as REC
 from server import main, data
 from server.config import LEAGUES
+from server import cache as HTTPCACHE
+from site_hash import content_hash
 
 def key_for(path):
     """MISMA regla que staticUrl() en static/app.js: /api/x/y?b=2&a=1 -> data/x/y@a=1_b=2.json"""
@@ -27,6 +29,10 @@ STATS = dict(ok=0, err=0, files=0, errors=[])
 
 async def main_():
     t0 = time.time()
+    cache_file = os.environ.get("APUESTAS_HTTP_CACHE") or os.path.join(os.path.dirname(os.environ.get("APUESTAS_DB") or ""), "http-cache.json")
+    if cache_file and os.path.isfile(cache_file):
+        n = HTTPCACHE.load_store(cache_file)
+        print(f"http-cache restaurada: {n} entradas de {cache_file}")
     if os.path.isdir(OUT): shutil.rmtree(OUT)
     os.makedirs(OUT)
     shutil.copytree(os.path.join(ROOT, "static"), os.path.join(OUT, "static"))
@@ -99,9 +105,19 @@ async def main_():
         await get("/api/chat/status")
         await get("/api/lineas")
         await get("/api/lineas?hours=36")
-    meta = dict(built=built, seconds=round(time.time() - t0, 1), games=len(jobs), ok=STATS["ok"], err=STATS["err"], errors=STATS["errors"][:40])
+    digest = content_hash(OUT)
+    http = {k: HTTPCACHE.STATS[k] for k in ("hits", "misses", "errors", "curl", "stale_budget") if k in HTTPCACHE.STATS}
+    http["by_host"] = HTTPCACHE.STATS.get("by_host") or {}
+    meta = dict(built=built, seconds=round(time.time() - t0, 1), games=len(jobs), ok=STATS["ok"], err=STATS["err"],
+                errors=STATS["errors"][:40], hash=digest, http=http)
+    prev = (os.environ.get("PREV_SITE_HASH") or "").strip()
+    meta["changed"] = (not prev) or prev != digest
     json.dump(meta, open(os.path.join(OUT, "data", "build.json"), "w"), indent=1)
+    open(os.path.join(OUT, ".content-hash"), "w").write(digest + "\n")
     open(os.path.join(OUT, ".nojekyll"), "w").close()
+    if cache_file:
+        n = HTTPCACHE.dump_store(cache_file)
+        print(f"http-cache guardada: {n} entradas en {cache_file}")
     print(json.dumps(meta, indent=1))
 
 if __name__ == "__main__":

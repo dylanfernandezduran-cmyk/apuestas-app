@@ -2,6 +2,8 @@
 import asyncio, math, time
 from collections import defaultdict
 from .cache import get_json
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from .config import ESPN, LEAGUES, FAMILY, SOCCER
 
 _ratings: dict = {}
@@ -37,9 +39,30 @@ def _parse_events(events, games, family):
         except Exception:
             continue
 
+
+async def _active_team_ids(path, days_back=3, days_fwd=7):
+    """Ids de equipos que sí juegan en una ventana corta (evita 100+ calendarios en amistosos)."""
+    today = datetime.now(ZoneInfo("America/Mexico_City")).date()
+    dates = [(today + timedelta(days=i)).strftime("%Y%m%d") for i in range(-int(days_back), int(days_fwd) + 1)]
+    res = await asyncio.gather(*[get_json(f"{ESPN}/{path}/scoreboard", ttl=600, params={"dates": d}) for d in dates])
+    ids = set()
+    for d in res:
+        for e in (d or {}).get("events") or []:
+            try:
+                for c in e["competitions"][0].get("competitors") or []:
+                    tid = (c.get("team") or {}).get("id")
+                    if tid: ids.add(str(tid))
+            except Exception:
+                pass
+    return ids
+
 async def build(league: str):
     cfg = LEAGUES[league]; fam = cfg["family"]
     teams = await _team_ids(cfg["path"])
+    if cfg.get("intl") and teams:
+        active = await _active_team_ids(cfg["path"], days_back=3, days_fwd=cfg.get("days") or 7)
+        if active:
+            teams = [t for t in teams if str(t[0]) in active] or teams[:40]
     games: dict = {}
     names = dict(teams)
     async def one(tid):

@@ -175,7 +175,7 @@ async function viewTickets(date){
    <div class="kpis">${kpi('Tickets del día G-P',A.W+A.L+A.P?`${A.W}-${A.L}${A.P?'-'+A.P:''}`:SD)}${kpi('Unidades (1u)',A.n_priced?units(A.units):SD,A.units>0?'pos':A.units<0?'neg':'')}</div>
    <div class="kpis s">${kpi('Tickets',A.n)}${kpi('⏳ Pendientes',A.pending)}${kpi('Total histórico',T.W+T.L+T.P?`${T.W}-${T.L}-${T.P} · ${units(T.units)}`:SD)}</div>
    ${d.tickets.length?d.tickets.map(card).join(''):`<div class="card mut" style="margin-top:10px">Sin tickets este día. Agrega piernas con <b>+ Ticket</b> en los picks, el detalle de un juego o un prop, o pídele al chat «arma un parlay de 3 con lo más seguro de hoy».</div>`}
-   <div class="sub" style="margin-top:10px">${STATIC?'Versión en línea: los tickets se guardan en este dispositivo (no en la PC) y se califican con los marcadores publicados cada ~10-15 min. ':''}Se califican solos con el marcador final real (cada pierna y el ticket). Push/anulada = la pierna se quita del momio. Paper trading: sin dinero real.</div>`;
+   <div class="sub" style="margin-top:10px">${STATIC?'Versión en línea: los tickets se guardan en este dispositivo (no en la PC) y se califican con los marcadores de la versión en línea (mira «actualizado hace» arriba). ':''}Se califican solos con el marcador final real (cada pierna y el ticket). Push/anulada = la pierna se quita del momio. Paper trading: sin dinero real.</div>`;
   const st=document.getElementById('rdstrip'), on=st&&st.querySelector('.on'); if(on) st.scrollLeft=on.offsetLeft-st.clientWidth/2+on.offsetWidth/2;
 }
 async function tkRm(id){ if(!confirm('¿Borrar este ticket pendiente?')) return; if(STATIC) tkLocalPut(tkLocalAll().filter(t=>t.id!==id)); else await fetch('/api/tickets/'+id,{method:'DELETE'}); route(); }

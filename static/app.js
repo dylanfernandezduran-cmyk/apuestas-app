@@ -82,7 +82,7 @@ setInterval(()=>{document.getElementById('clock').textContent = new Intl.DateTim
 
 // fetch con tope de tiempo: nunca se queda girando; el error sube a route() que muestra el mensaje + «Reintentar»
 const API_TIMEOUT_MS = 45000;
-// Modo GitHub Pages (pt90u): sin servidor; las respuestas de /api vienen de JSON estáticos que un GitHub Action regenera cada ~10-15 min
+// Modo GitHub Pages (pt90u): sin servidor; las respuestas de /api vienen de JSON estáticos que un GitHub Action regenera (cron +, si se configura, un disparo externo)
 const STATIC = typeof window!=='undefined' && !!window.NRNM_STATIC;
 let LOCAL_URL = 'http://DESKTOP-NOG66RU.local:8765'; // estable ante DHCP (mDNS); IP se refresca abajo
 const NOSTATIC = [/^\/api\/prop\//, /^\/api\/search/, /^\/api\/grade/, /^\/api\/history\//];
@@ -96,8 +96,8 @@ async function api(path, ms){
   const ac = new AbortController(), t = setTimeout(()=>ac.abort(), ms||API_TIMEOUT_MS);
   try{
     if(STATIC && NOSTATIC.some(r=>r.test(path))) throw new Error('Esto necesita el servidor: no está disponible en la versión en línea (GitHub). Ábrelo en el link local '+LOCAL_URL+' con la PC encendida.');
-    const r = await fetch(STATIC ? staticUrl(path) : path, {signal: ac.signal, cache: STATIC ? 'no-cache' : 'default'});
-    if(STATIC && r.status===404) throw new Error('Sin datos publicados para esto todavía en la versión en línea (se actualiza cada ~10-15 min). Para datos al momento usa el link local '+LOCAL_URL+'.');
+    const r = await fetch(STATIC ? staticUrl(path) : path, {signal: ac.signal, cache: STATIC ? 'no-store' : 'default'});
+    if(STATIC && r.status===404) throw new Error('Sin datos publicados para esto todavía en la versión en línea (se refresca sola en GitHub; mira «actualizado hace»). Para datos al momento usa el link local '+LOCAL_URL+'.');
     if(!r.ok) throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail||r.statusText);
     return await r.json();
   }catch(e){
@@ -967,14 +967,45 @@ async function refreshLocalUrl(){
     if(r.ok){ const j = await r.json(); window.__NRNM_LAN = j; if(j.url_local) LOCAL_URL = j.url_local; }
   }catch(e){}
 }
+function fmtAgo(iso){
+  const t=new Date(iso).getTime();
+  if(!iso||!isFinite(t)) return 'sin dato de actualización';
+  const m=Math.max(0, Math.round((Date.now()-t)/60000));
+  if(m<1) return 'actualizado hace un momento';
+  if(m===1) return 'actualizado hace 1 min';
+  if(m<60) return 'actualizado hace '+m+' min';
+  const h=Math.floor(m/60), r=m%60;
+  if(h<24) return 'actualizado hace '+h+' h'+(r? ' '+r+' min':'');
+  return 'actualizado hace '+Math.floor(h/24)+' d';
+}
 if(STATIC){ try{ const b=document.createElement('div'); b.className='stbar';
-  const dt=new Intl.DateTimeFormat('es-MX',{timeZone:TZ,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(window.NRNM_STATIC.built));
+  let built=window.NRNM_STATIC && window.NRNM_STATIC.built;
+  let newer=null;
+  const stamp=()=>newer||built;
   const paint = ()=>{
     const lan = window.__NRNM_LAN || (window.NRNM_STATIC && window.NRNM_STATIC.lan) || {};
     const ip = lan.url_ip ? ` · <a href="${esc(lan.url_ip)}">${esc((lan.ip||'')+':8765')}</a>` : '';
-    b.innerHTML=`🌐 Versión en línea · datos de ${esc(dt)} (CDMX) · se actualizan cada ~10-15 min · <a href="${LOCAL_URL}">link local (en vivo)</a>${ip}`;
+    const iso=stamp();
+    let dt='';
+    try{ dt=new Intl.DateTimeFormat('es-MX',{timeZone:TZ,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(iso)); }catch(e){}
+    const ref=(newer&&built&&newer!==built)?' · <button type="button" class="stbar-ref">Hay datos más nuevos — toca para actualizar</button>':'';
+    b.innerHTML=`🌐 Versión en línea · <b>${esc(fmtAgo(iso))}</b> · ${esc(dt)} CDMX · se refresca sola, sin la PC${ref} · <a href="${LOCAL_URL}">link local (en vivo)</a>${ip}`;
   };
+  b.addEventListener('click',e=>{ if(e.target.closest('.stbar-ref')) location.reload(); });
   paint();
   document.querySelector('header').after(b);
   refreshLocalUrl().then(paint).catch(()=>{});
+  const poll=async()=>{
+    try{
+      const r=await fetch('data/build.json',{cache:'no-store'});
+      if(!r.ok) return;
+      const j=await r.json();
+      if(j.built && built && j.built>built) newer=j.built;
+      else if(j.built && !newer) built=j.built;
+    }catch(e){}
+    paint();
+  };
+  setInterval(poll, 60000);
+  setInterval(paint, 30000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) poll(); });
 }catch(e){} }

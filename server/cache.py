@@ -1,11 +1,79 @@
-import asyncio, json, shutil, subprocess, time, httpx
+import asyncio, json, os, shutil, subprocess, time, httpx
 
 _client: httpx.AsyncClient | None = None
 _store: dict = {}
 _locks: dict = {}
-STATS = {"hits": 0, "misses": 0, "errors": 0, "curl": 0}
+STATS = {"hits": 0, "misses": 0, "errors": 0, "curl": 0, "stale_budget": 0, "by_host": {}}
 _curl_until = 0.0     # hasta cuándo usar curl en vez de httpx (ESPN/Akamai a veces responde 403 a la huella TLS de Python)
 CURL_RETRY_S = 600
+_budget_used: dict = {}
+
+# Techos por proceso (un build de Pages). Si se acaba el cupo se sirve caché vieja; no se inventa.
+# Open-Meteo gratis: 10_000/día, 5_000/h, 600/min (por IP; los runners de GitHub las comparten).
+# Action Network y Pinnacle guest no publican cupo: conservamos un techo bajo por build.
+def _host(url):
+    try:
+        return httpx.URL(url).host or ""
+    except Exception:
+        return ""
+
+def _budget_of(host):
+    defaults = {
+        "api.actionnetwork.com": int(os.environ.get("BUDGET_AN", "40")),
+        "guest.api.arcadia.pinnacle.com": int(os.environ.get("BUDGET_PIN", "80")),
+        "api.open-meteo.com": int(os.environ.get("BUDGET_OM", "40")),
+        "geocoding-api.open-meteo.com": int(os.environ.get("BUDGET_GEO", "30")),
+    }
+    return defaults.get(host)
+
+def _host_stat(host, field, n=1):
+    h = STATS["by_host"].setdefault(host or "?", {"hits": 0, "misses": 0, "errors": 0})
+    h[field] = h.get(field, 0) + n
+
+def load_store(path):
+    """Restaura la caché HTTP de un JSON (rama estado) para builds incrementales."""
+    if not path or not os.path.isfile(path):
+        return 0
+    try:
+        blob = json.load(open(path, encoding="utf-8"))
+        items = blob.get("items") if isinstance(blob, dict) else None
+        if not isinstance(items, dict):
+            return 0
+        n = 0
+        now = time.time()
+        for k, ent in items.items():
+            if not isinstance(ent, (list, tuple)) or len(ent) < 2:
+                continue
+            ts, data = ent[0], ent[1]
+            try:
+                ts = float(ts)
+            except (TypeError, ValueError):
+                continue
+            if now - ts > 36 * 3600:
+                continue
+            _store[k] = (ts, data)
+            n += 1
+        return n
+    except Exception:
+        return 0
+
+def dump_store(path, max_bytes=8_000_000):
+    """Guarda la caché HTTP recortada (más recientes primero) para el siguiente build."""
+    if not path:
+        return 0
+    items = sorted(_store.items(), key=lambda kv: kv[1][0], reverse=True)
+    out = {}
+    raw = b"{}"
+    for k, (ts, data) in items:
+        out[k] = [ts, data]
+        raw = json.dumps({"v": 1, "items": out}, ensure_ascii=False, separators=(",", ":")).encode()
+        if len(raw) > max_bytes:
+            out.pop(k)
+            raw = json.dumps({"v": 1, "items": out}, ensure_ascii=False, separators=(",", ":")).encode()
+            break
+    os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+    open(path, "wb").write(raw)
+    return len(out)
 
 def client():
     global _client
@@ -82,14 +150,25 @@ async def get_json(url: str, ttl: int = 120, params: dict | None = None, headers
     ent = _store.get(key)
     if ent and now - ent[0] < ttl:
         STATS["hits"] += 1
+        _host_stat(_host(url), "hits")
         return ent[1]
     lock = _locks.setdefault(key, asyncio.Lock())
     async with lock:
         ent = _store.get(key)
         if ent and time.time() - ent[0] < ttl:
             STATS["hits"] += 1
+            _host_stat(_host(url), "hits")
             return ent[1]
+        host = _host(url)
+        cap = _budget_of(host)
+        if cap is not None and _budget_used.get(host, 0) >= cap:
+            STATS["stale_budget"] += 1
+            _host_stat(host, "errors")
+            return ent[1] if ent else None
         STATS["misses"] += 1
+        _host_stat(host, "misses")
+        if cap is not None:
+            _budget_used[host] = _budget_used.get(host, 0) + 1
         global _curl_until
         blocked = False
         if time.time() < _curl_until:

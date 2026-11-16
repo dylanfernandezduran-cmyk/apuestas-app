@@ -651,6 +651,8 @@ ul.tl2{list-style:none;margin:10px 0 0;padding:0}.tl2 li{position:relative;paddi
 /* barra de la versión en línea (GitHub Pages) */
 .stbar{font-size:11px;line-height:1.4;color:var(--mut);background:var(--bg);padding:6px 14px;text-align:center}
 .stbar a{color:#06AAC4}
+.stbar b{color:var(--text,#e6ebf2);font-weight:600}
+.stbar-ref{background:none;border:0;color:#06AAC4;cursor:pointer;font:inherit;text-decoration:underline;padding:0}
 /* ===== Chat IA (pt90u) · ids/clases ch-* únicos ===== */
 #chb{position:fixed;right:16px;bottom:calc(12px + 52px + 14px + env(safe-area-inset-bottom));z-index:60;width:52px;height:52px;border-radius:50%;border:0;cursor:pointer;
   background:#000;color:#fff;box-shadow:0 0 0 1.5px #FF1179,0 6px 20px rgba(0,0,0,.5)}

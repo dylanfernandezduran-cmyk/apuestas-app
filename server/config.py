@@ -16,6 +16,10 @@ LEAGUES = {
     "ita.1": dict(path="soccer/ita.1", family="soccer", name="Serie A", sport="futbol", days=7),
     "ger.1": dict(path="soccer/ger.1", family="soccer", name="Bundesliga", sport="futbol", days=7),
     "uefa.champions": dict(path="soccer/uefa.champions", family="soccer", name="Champions League", sport="futbol", days=7),
+    # internaciones (ventana FIFA/UEFA): no estaban en la lista; ESPN slug real, sin The Odds API
+    "uefa.nations": dict(path="soccer/uefa.nations", family="soccer", name="Liga de Naciones UEFA", sport="futbol", days=7, intl=True),
+    "concacaf.nations.league": dict(path="soccer/concacaf.nations.league", family="soccer", name="Liga de Naciones CONCACAF", sport="futbol", days=7, intl=True),
+    "fifa.friendly": dict(path="soccer/fifa.friendly", family="soccer", name="Amistosos internacionales", sport="futbol", days=7, intl=True),
 }
 
 SPORTS = [
@@ -24,7 +28,7 @@ SPORTS = [
     dict(key="nba", name="NBA", emoji="🏀", leagues=["nba"]),
     dict(key="nhl", name="NHL", emoji="🏒", leagues=["nhl"]),
     dict(key="tenis", name="Tenis", emoji="🎾", leagues=["atp", "wta"]),
-    dict(key="futbol", name="Fútbol", emoji="⚽", leagues=["mex.1", "eng.1", "esp.1", "ita.1", "ger.1", "uefa.champions"]),
+    dict(key="futbol", name="Fútbol", emoji="⚽", leagues=["mex.1", "uefa.nations", "concacaf.nations.league", "fifa.friendly", "eng.1", "esp.1", "ita.1", "ger.1", "uefa.champions"]),
 ]
 
 # Parámetros del modelo por familia (supuestos a priori, documentados en README)

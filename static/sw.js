@@ -1,18 +1,20 @@
-/* Service worker local (LAN). En GitHub Pages NO se registra (NRNM_STATIC). Network-first HTML para no brickear. */
-const V = 'shell-v42';
-const SHELL = ['/', '/static/style.css?v=31', '/static/nrnm-core.js?v=1', '/static/extras.js?v=20', '/static/detalle.js?v=17', '/static/props.js?v=2', '/static/lineas.js?v=3', '/static/app.js?v=33', '/static/recdia.js?v=5', '/static/ticket.js?v=6', '/static/chat.js?v=16', '/static/brand/icons/icon-192.png', '/manifest.webmanifest'];
+/* Service worker local (LAN). En GitHub Pages NO se registra (NRNM_STATIC). Network-first HTML y JSON de datos. */
+const V = 'shell-v43';
+const SHELL = ['/', '/static/style.css?v=32', '/static/nrnm-core.js?v=1', '/static/extras.js?v=20', '/static/detalle.js?v=17', '/static/props.js?v=2', '/static/lineas.js?v=3', '/static/app.js?v=34', '/static/recdia.js?v=5', '/static/ticket.js?v=7', '/static/chat.js?v=16', '/static/brand/icons/icon-192.png', '/manifest.webmanifest'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => Promise.all(SHELL.map(u => c.add(u).catch(()=>null)))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'api-v1').map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'api-v1' && k !== 'data-v1').map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url);
   if (r.method !== 'GET' || u.origin !== location.origin) return;
-  if (u.pathname.startsWith('/api/')) {
+  const isDataJson = /\/data\/.*\.json$/.test(u.pathname);
+  if (u.pathname.startsWith('/api/') || isDataJson) {
     if (u.pathname === '/api/live' || u.pathname === '/api/health') return;
-    e.respondWith(fetch(r).then(res => { if (res.ok) { const c = res.clone(); caches.open('api-v1').then(ch => ch.put(r, c)); } return res; })
+    const bag = isDataJson ? 'data-v1' : 'api-v1';
+    e.respondWith(fetch(r, {cache: 'no-store'}).then(res => { if (res.ok) { const c = res.clone(); caches.open(bag).then(ch => ch.put(r, c)); } return res; })
       .catch(() => caches.match(r).then(m => m || new Response(JSON.stringify({detail: 'Sin conexión y sin datos guardados'}), {status: 503, headers: {'Content-Type': 'application/json'}}))));
     return;
   }

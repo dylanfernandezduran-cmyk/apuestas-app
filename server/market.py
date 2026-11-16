@@ -18,18 +18,41 @@ UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, 
 AN_URL = "https://api.actionnetwork.com/web/v2/scoreboard/publicbetting/{slug}"
 AN_BOOKS = {15: ("Consenso AN", "consensus"), 30: ("Apertura AN", "open"), 68: ("DraftKings", "book"), 69: ("FanDuel", "book"), 75: ("BetMGM", "book"),
             123: ("Caesars", "book"), 71: ("BetRivers", "book"), 79: ("bet365", "book"), 2988: ("Fanatics", "book"), 247: ("Unibet", "book")}
-AN_SLUG = {"mlb": "mlb", "nfl": "nfl", "nba": "nba", "nhl": "nhl", "eng.1": "soccer", "esp.1": "soccer", "ita.1": "soccer", "ger.1": "soccer", "uefa.champions": "soccer"}
+AN_SLUG = {"mlb": "mlb", "nfl": "nfl", "nba": "nba", "nhl": "nhl", "eng.1": "soccer", "esp.1": "soccer", "ita.1": "soccer", "ger.1": "soccer", "uefa.champions": "soccer", "uefa.nations": "soccer", "concacaf.nations.league": "soccer", "fifa.friendly": "soccer"}
 SPLIT_ORDER = [15, 68, 69, 75, 123, 71, 79, 2988, 247]
 
 # ---------------------------------------------------------------- Pinnacle (guest API pública)
 PIN_ON = os.environ.get("PINNACLE", "1") != "0"
 PIN_URL = "https://guest.api.arcadia.pinnacle.com/0.1"
 PIN_KEY = os.environ.get("PINNACLE_GUEST_KEY", "CmX2KcMrXuFmNg6YFbmTxE0y9CIrOi0R")   # llave 'guest' pública del sitio web (sin cuenta); configurable/desactivable
-PIN_SPORT = {"nba": 4, "nfl": 15, "nhl": 19, "mlb": 3, "mex.1": 29, "eng.1": 29, "esp.1": 29, "ita.1": 29, "ger.1": 29, "uefa.champions": 29, "atp": 33, "wta": 33}
+PIN_SPORT = {"nba": 4, "nfl": 15, "nhl": 19, "mlb": 3, "mex.1": 29, "eng.1": 29, "esp.1": 29, "ita.1": 29, "ger.1": 29, "uefa.champions": 29, "uefa.nations": 29, "concacaf.nations.league": 29, "fifa.friendly": 29, "atp": 33, "wta": 33}
 PIN_NAME = {"nba": "NBA", "nfl": "NFL", "nhl": "NHL", "mlb": "MLB", "mex.1": "Mexico - Liga MX", "eng.1": "England - Premier League", "esp.1": "Spain - La Liga",
-            "ita.1": "Italy - Serie A", "ger.1": "Germany - Bundesliga", "uefa.champions": "UEFA - Champions League"}
+            "ita.1": "Italy - Serie A", "ger.1": "Germany - Bundesliga", "uefa.champions": "UEFA - Champions League",
+            "uefa.nations": ["UEFA - Nations League A", "UEFA - Nations League B", "UEFA - Nations League C", "UEFA - Nations League D"],
+            "concacaf.nations.league": "CONCACAF - Nations League",
+            "fifa.friendly": "International - Friendlies"}
 
 THR_MAJ2, THR_MAJ3, THR_MOVE_PP, THR_SHARP = 55, 45, 1.5, 10
+
+
+def odds_ttl(base):
+    """Piso de TTL para cuotas en el build de Pages (ODDS_TTL_FLOOR), para no reconsultar en cada ciclo de 15 min."""
+    try:
+        floor = int(os.environ.get("ODDS_TTL_FLOOR", "0") or 0)
+    except ValueError:
+        floor = 0
+    return max(int(base), floor)
+
+def pin_wanted_names(league):
+    want = PIN_NAME.get(league)
+    if want is None:
+        return []
+    return list(want) if isinstance(want, (list, tuple)) else [want]
+
+def pin_league_ids(leagues, want):
+    names = set(want if isinstance(want, (list, tuple)) else [want])
+    return [l["id"] for l in (leagues or []) if l.get("name") in names][:8]
+
 
 # ---------------------------------------------------------------- nombres
 WEAK = {"new", "york", "los", "angeles", "san", "city", "united", "real", "de", "la", "st", "fc", "cf", "sc", "ac", "as", "afc", "club", "the", "calcio", "sv", "fk", "cd",
@@ -128,7 +151,7 @@ async def an_events(slug, d, week=None):
     params = {"bookIds": ",".join(str(b) for b in AN_BOOKS), "date": d.strftime("%Y%m%d")}
     if week: params["week"] = week
     url = AN_URL.format(slug=slug)
-    data = await get_json(url, ttl=240, params=params, headers=UA)
+    data = await get_json(url, ttl=odds_ttl(240), params=params, headers=UA)
     if not data: return [], None
     ts = fetched_at(url, params)
     out = []
@@ -191,7 +214,7 @@ async def pin_events(league):
     if not sid: return [], None
     lids = []
     if sid == 33:
-        ms = await _pin_get(f"/sports/{sid}/matchups", 300) or []
+        ms = await _pin_get(f"/sports/{sid}/matchups", odds_ttl(300)) or []
         seen = {}
         for x in ms:
             lg = x.get("league") or {}; nm = lg.get("name") or ""
@@ -199,12 +222,12 @@ async def pin_events(league):
                 seen[lg["id"]] = nm
         lids = list(seen)[:30]
     else:
-        ls = await _pin_get(f"/sports/{sid}/leagues?all=false", 3600) or []
-        want = PIN_NAME.get(league)
-        lids = [l["id"] for l in ls if l.get("name") == want][:1]
+        ls = await _pin_get(f"/sports/{sid}/leagues?all=false", odds_ttl(3600)) or []
+        want = pin_wanted_names(league)
+        lids = pin_league_ids(ls, want)
     if not lids: return [], None
     async def one(lid):
-        m, k = await asyncio.gather(_pin_get(f"/leagues/{lid}/matchups", 240), _pin_get(f"/leagues/{lid}/markets/straight", 240))
+        m, k = await asyncio.gather(_pin_get(f"/leagues/{lid}/matchups", odds_ttl(240)), _pin_get(f"/leagues/{lid}/markets/straight", odds_ttl(240)))
         return m or [], k or []
     res = await asyncio.gather(*[one(l) for l in lids])
     out = []; ts = None
