@@ -75,3 +75,12 @@ def test_ticket_locks_and_search_filters_present():
     tk = pathlib.Path("static/ticket.js").read_text(); ex = pathlib.Path("static/extras.js").read_text()
     assert "function tkLocks" in tk and "Correlación" in tk and "producto" in tk
     assert "function srchFilter" in ex and "data-srf" in ex
+
+def test_market_grid_pick_only_when_approved():
+    import pathlib
+    from server import validation as V
+    app = pathlib.Path("static/app.js").read_text()
+    assert "pk=side&&APPROVED" in app and "Lado del modelo" in app and "sin valor" in app
+    a = dict(game=dict(sport="nfl", state="pre"), picks=dict(published=False, lean={"label": "Rams ML", "ev": -3.0, "p_final": 0.56}, discard_reason="EV no positivo (-3.0%)"))
+    V._approve(a, {"score": 100})
+    assert a["picks"]["approved"] is False and "EV" in a["picks"]["locks"][0]["reason"]

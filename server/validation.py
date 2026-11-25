@@ -83,11 +83,32 @@ def validate(a, dq=None):
     return dict(state="VALIDADO", reasons=[f"EV {ev:+.1f}%, datos {dq['score']}/100, confianza {conf}"])
 
 
+def _approve(a, dq):
+    """picks.approved = el pick principal pasa TODOS los candados (server/policy.py). Sólo entonces la UI dice «PICK»."""
+    pk = a.get("picks") or {}; lean = pk.get("lean") or {}
+    if not pk: return
+    if not lean or not pk.get("published"):
+        pk["approved"] = False
+        pk["locks"] = [dict(key="consistency" if lean else "value", label="Publicación",
+                            reason=pk.get("policy_block") or pk.get("discard_reason") or "Sin pick publicado")]
+        return
+    from . import policy as POL, consistency as CS
+    from .record import MKT
+    g = a.get("game") or {}
+    it = dict(p_final=lean.get("p_final"), ev_pct=lean.get("ev"), sport=g.get("sport"), market=MKT.get(lean.get("market"), str(lean.get("market") or "").lower()),
+              live=g.get("state") not in (None, "pre"), divergence_high=lean.get("divergence_high"))
+    c = POL.check(it, POL.history(CS._rows), dq=dq.get("score"))
+    if lean.get("divergence_high"):
+        c["locks"].append(dict(key="consistency", label="Consistencia", reason="Divergencia alta modelo vs mercado (>10 pp)")); c["approved"] = False
+    pk["approved"] = c["approved"]; pk["locks"] = c["locks"]; pk["tier"] = c["tier"]
+
+
 def attach(a, league, eid):
     try:
         dq = data_quality(a)
         v = validate(a, dq)
         a["data_quality"] = dq; a["validation"] = v
+        _approve(a, dq)
         LAST[(league, str(eid))] = dict(dq=dq, validation=v, lean=((a.get("picks") or {}).get("lean") or {}).get("label"), ts=time.time())
     except Exception:
         pass

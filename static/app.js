@@ -424,7 +424,7 @@ function mkLeg(g,o,official){
     label:obLabel(o,g), p:o.p_final??null, official:!!official};
 }
 function marketBlocks(d){
-  const g=d.game, P=d.probs, l=d.picks&&d.picks.lean;
+  const g=d.game, P=d.probs, l=d.picks&&d.picks.lean, APPROVED=!!(d.picks&&d.picks.approved);
   let mk=(P&&P.markets||[]).filter(m=>m.outcomes&&m.outcomes.length);
   let fb=false; if(!mk.length){ mk=mkFromOdds(d); fb=mk.length>0; }
   if(!mk.length) return '';
@@ -443,12 +443,12 @@ function marketBlocks(d){
     return (o.p_final!=null&&dec)?(o.p_final*dec-1)*100:null;
   };
   const btn=o=>{
-    const pk=isPick(o), v=o.edge!=null&&o.edge>=3, rr=recFor(String(o.market||'').toLowerCase(),o.side,o.line);
+    const side=isPick(o), pk=side&&APPROVED, v=o.edge!=null&&o.edge>=3, rr=recFor(String(o.market||'').toLowerCase(),o.side,o.line);
     const pr=o.best&&(o.best.price_txt||(o.best.price!=null?am(o.best.price):null));
     const ev=evOf(o);
     const bits=[];
     if(o.p_final!=null) bits.push(pct(o.p_final,0));
-    if(ev!=null) bits.push((ev>=0?'+':'')+ev.toFixed(0)+'% EV');
+    if(ev!=null) bits.push((ev>=0?'+':'')+ev.toFixed(0)+'% EV'+(side&&!pk&&ev<=0?' · sin valor':''));
     else if(pk&&o.edge!=null) bits.push(sg(o.edge)+' pp');
     const book=o.best&&(o.best.book||'');
     const title=[pr?('Mejor cuota '+pr):'', book?('en '+book):'', o.best&&o.best.n_books>1?(o.best.n_books+' casas'):''].filter(Boolean).join(' · ');
@@ -456,8 +456,8 @@ function marketBlocks(d){
     let id='';
     if(leg&&typeof tkBtn==='function'){ id='t'+(++TK.n); TK.reg[id]=leg; }
     const on=leg&&TK.legs&&TK.legs.some(x=>tkKey(x)===tkKey(leg));
-    const aria=`${obLabel(o,g)}${pr?' '+pr:''}${pk?' (pick NRNM)':''}${book?' · '+book:''}`;
-    return `<button type="button" class="ob ${pk?'pick':''} ${v?'val':''} ${on?'on':''}" ${id?`data-tk="${id}"`:''} ${id?'':'disabled'} aria-label="${esc(aria)}" aria-pressed="${on?'true':'false'}" ${title?`title="${esc(title)}"`:''}><span class="ol">${esc(shortLbl(obLabel(o,g),g))}</span>${pk?'<span class="ob-pk">PICK</span>':''}<span class="or"><span class="oq mono">${esc(pr||'—')}</span>${bits.length?`<span class="op">${bits.join(' · ')}</span>`:''}</span></button>`;
+    const aria=`${obLabel(o,g)}${pr?' '+pr:''}${pk?' (pick NRNM)':side?' (lado del modelo, no aprobado)':''}${book?' · '+book:''}`;
+    return `<button type="button" class="ob ${pk?'pick':''} ${side&&!pk?'mside':''} ${v?'val':''} ${on?'on':''}" ${id?`data-tk="${id}"`:''} ${id?'':'disabled'} aria-label="${esc(aria)}" aria-pressed="${on?'true':'false'}" ${title?`title="${esc(title)}"`:''}><span class="ol">${esc(shortLbl(obLabel(o,g),g))}</span>${pk?'<span class="ob-pk">PICK</span>':side?`<span class="ob-md">Lado del modelo</span>`:''}<span class="or"><span class="oq mono">${esc(pr||'—')}</span>${bits.length?`<span class="op">${bits.join(' · ')}</span>`:''}</span></button>`;
   };
   const grid=(os,key)=>{
     const n = key==='ml'&&os.length===3 ? 3 : (os.length===1?1:2);
