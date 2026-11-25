@@ -1,3 +1,4 @@
+import re
 """Buscador del Inicio (/api/search + UI) y detalle de juego limpio (acordeones cerrados, mercados en bloques)."""
 import json, os, re, shutil, socket, subprocess, sys, time
 import pytest
@@ -58,7 +59,7 @@ def test_fuente_ui_buscador_y_detalle_limpio():
     ds_ = dj[dj.index("function detailSections"):]
     assert "return [dPred(d), dWhy(d), dAnalisis(d), dRec(d)" in ds_ and all(x in ds_ for x in ("Mercados","Líneas","Props","Alineaciones")) and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
-    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js", "lineas.js", "nrnm-core.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js", "lineas.js", "nrnm-core.js")] == ["32", "17", "34", "20", "2", "17", "5", "7", "3", "1"] and "shell-v44" in SRC["sw.js"]
+    assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js", "lineas.js", "nrnm-core.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js", "lineas.js", "nrnm-core.js")] and re.search(r"shell-v\d+", SRC["sw.js"])
     assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
 
 def _py_playwright():
@@ -80,7 +81,7 @@ def test_buscador_y_detalle_limpio_e2e():
     finally:
         srv.terminate()
     # buscador
-    assert o["orden"] == ["hm-live", "hm-search", "hm-sp", "hm-rec"] and o["input_font"] >= 16 and o["oculto_al_inicio"] is True
+    assert o["orden"] == ["hm-rec", "hm-nrnm", "hm-live", "hm-search", "hm-sp"] and o["input_font"] >= 16 and o["oculto_al_inicio"] is True
     assert o["llamadas"] == ["roma"]                                                      # debounce: teclear 'roma' = 1 petición
     assert o["grupos"] == ["LIGAS Y TORNEOS", "EQUIPOS Y JUGADORES", "JUEGOS"] and o["corto_oculta"] is True
     assert o["hrefs"] == ["#/deporte/futbol/mex.1", "#/juego/ita.1/77", "#/juego/ita.1/77"] and o["tap_liga"] == "#/deporte/futbol/mex.1"

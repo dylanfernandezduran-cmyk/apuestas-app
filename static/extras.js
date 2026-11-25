@@ -194,26 +194,22 @@ const liveRowHtml = g => {
 async function viewHome(){
   SPORTS = SPORTS || await api('/api/sports');
   const today = new Intl.DateTimeFormat('es-MX',{timeZone:TZ,weekday:'long',day:'numeric',month:'long'}).format(new Date());
-  $app.innerHTML = `<div class="hm-h"><div class="sub">${esc(today)} · CDMX</div><h1>Resumen del día</h1></div>
+  $app.innerHTML = `<div class="hm-h"><div class="sub">${esc(today)} · CDMX</div><h1>Centro de análisis</h1></div>
+   <section class="hm" id="hm-rec"><div class="skel">Cargando rendimiento…</div></section>
+   <section class="hm nb" id="hm-nrnm"><div class="nb-h"><h2>Picks NRNM</h2></div><div class="skel">Cargando picks…</div></section>
    <section class="hm" id="hm-live"><h3>En vivo ahora</h3><div class="skel">Buscando juegos en vivo…</div></section>
    <section class="hm" id="hm-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo o torneo" aria-label="Buscar juego, equipo, jugador o torneo"></label><div class="srch-r" hidden></div></section>
    <div class="hm snav" id="hm-sp" role="navigation" aria-label="Deportes">${SNAV_ORDER.map(k=>SPORTS.find(x=>x.key===k)).filter(Boolean).concat(SPORTS.filter(x=>!SNAV_ORDER.includes(x.key))).map(sportNavItem).join('')}</div>
-   <section class="hm" id="hm-rec"><h3>Récord acumulado <a href="#/record" class="more">Ver día →</a></h3><div class="skel">Cargando récord…</div></section>
    <div class="note">Datos reales de ESPN, MLB StatsAPI y Open-Meteo. Si algo no está disponible se muestra <b>${SD}</b>. Las probabilidades son <b>estimaciones de un modelo simple</b>, no certezas.</div>`;
   srchInit(document.getElementById('hm-search'));
+  if(typeof nrnmFill==='function') nrnmFill(document.getElementById('hm-nrnm'));
   let timer=null;
   const fillHome = async (first)=>{
     try{
       const h = await api('/api/home');
       const rec = h.record_main || h.record_all || h.record;
       const elr=document.getElementById('hm-rec');
-      if(elr && rec){
-        const kpi=(l,v,c='',ti='')=>`<div class="kpi"${ti}><div class="sub">${l}</div><div class="v mono ${c}">${v}</div></div>`;
-        elr.innerHTML = `<h3>Récord acumulado · pick principal <a href="#/record" class="more">Ver día →</a></h3>
-          <div class="kpis">${kpi('Muestra', rec.graded==null?SD:(rec.graded+' calificados'+(rec.total!=null?` / ${rec.total}`:'')))}${kpi('G-P-E', (rec.W||rec.L||rec.P)?`${rec.W}-${rec.L}${rec.P?'-'+rec.P:''}`:SD)}
-          ${kpi('ROI', rec.roi==null?SD:((rec.roi>0?'+':'')+rec.roi.toFixed(1)+'%'), rec.roi>0?'pos':rec.roi<0?'neg':'')}
-          ${kpi('CLV promedio', rec.clv_avg==null?SD:((rec.clv_avg>0?'+':'')+rec.clv_avg.toFixed(1)+'%'+(rec.clv_n?` · n=${rec.clv_n}`:'')), rec.clv_avg>0?'pos':rec.clv_avg<0?'neg':'', typeof tip==='function'?tip('CLV'):'')}</div>`;
-      }
+      if(elr && rec && first && typeof nbPerf==='function') elr.innerHTML=nbPerf(rec);
       const el=document.getElementById('hm-live'); if(!el) return;
       if(!el.querySelector('.hm-lh')) el.innerHTML='<h3 class="hm-lh"></h3><div class="hm-lb"></div>';
       el.querySelector('.hm-lh').innerHTML=`En vivo ahora${h.live.length?` <span class="badge b-live">${h.live.length}</span>`:''} ${updTag(h.now,h.live.length>0)}`;

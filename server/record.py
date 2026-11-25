@@ -38,6 +38,8 @@ def _c():
             try: c.execute(f"ALTER TABLE picks ADD COLUMN {col} {typ}")
             except Exception: pass
         c.execute("UPDATE picks SET open_line=line, open_odds=odds WHERE open_line IS NULL AND open_odds IS NULL")
+        # auditoría ROI: unidades sólo con cuota registrada (ver profit)
+        c.execute("UPDATE picks SET units=NULL WHERE odds IS NULL AND units IS NOT NULL")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_status ON picks(status, start_ts)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_game ON picks(league, eid)")
         c.execute("CREATE TABLE IF NOT EXISTS team_logos(league TEXT, team_id TEXT, logo TEXT, PRIMARY KEY(league, team_id))")
@@ -91,7 +93,7 @@ def extract(a, now=None):
                 return Q.same_pick(pred, c, _fam())
             except Exception:
                 return False
-        if published and lean and MKT.get(lean.get("market")) and lean.get("side") and _coherent(lean):
+        if published and lean and MKT.get(lean.get("market")) and lean.get("side") and lean.get("price") is not None and _coherent(lean):
             out.append(mk(market=MKT[lean["market"]], selection=lean["side"], line=lean.get("line"), label=lean["label"], odds=lean.get("price"),
                           book=(book if lean.get("price") is not None else None), p_model=lean.get("p_model"), p_final=lean.get("p_final"), p_nv=lean.get("p_nv"),
                           edge=lean.get("edge"), basis="modelo", type="main"))
@@ -101,6 +103,7 @@ def extract(a, now=None):
             sugg = [c for c in (pk.get("candidates") or []) if c is not lean and MKT.get(c.get("market")) and c.get("status") in ("PICK", "LEAN")]
         for c in sugg:
             if c is lean or not MKT.get(c.get("market")) or c.get("status") not in ("PICK", "LEAN"): continue
+            if c.get("price") is None: continue   # sin cuota no es pick
             if not _coherent(c): continue
             out.append(mk(market=MKT[c["market"]], selection=c["side"], line=c.get("line"), label=c["label"], odds=c.get("price"), book=(book if c.get("price") is not None else None),
                           p_model=c.get("p_model"), p_final=c.get("p_final"), p_nv=c.get("p_nv"), edge=c.get("edge"), basis="modelo", type="suggestion"))
@@ -473,6 +476,8 @@ def set_note(pid, note):
 def profit(status, odds):
     """Unidades ganadas/perdidas a 1u plano con la cuota registrada. None si no hay cuota (o es anulado/pendiente)."""
     if status in ("PENDIENTE", "ANULADO"): return None
+    # sin cuota no hay unidades: antes un perdido sin cuota restaba -1u y un ganado sin cuota sumaba 0 (sesgo del ROI)
+    if odds is None: return None
     if status == "PUSH": return 0.0
     if status == "PERDIDO": return -1.0
     if status == "MEDIO_PERDIDO": return -0.5
@@ -523,18 +528,25 @@ def summary(sport=None, typ=None, days=None, basis=None):
     rows = _rows(f"SELECT status, odds, open_odds, units, source FROM picks WHERE {' AND '.join(w)}", tuple(a))
     cnt = {s: 0 for s in STATUSES}
     units = 0.0; n_priced = 0; n_unpriced = 0; clvs = []
+    imps = []
+    pc = {s: 0 for s in STATUSES}   # sólo picks con cuota: misma muestra para acierto y ROI
     for r in rows:
         cnt[r["status"]] = cnt.get(r["status"], 0) + 1
         if r["status"] in DONE:
-            if r["units"] is None: n_unpriced += 1
-            else: units += r["units"]; n_priced += 1
+            u = profit(r["status"], r.get("odds"))
+            if u is None: n_unpriced += 1
+            else:
+                units += u; n_priced += 1; pc[r["status"]] += 1
+                if r["status"] in ("GANADO", "PERDIDO"): imps.append(1.0 / am_to_dec(int(r["odds"])))
             v = clv_pct(r.get("open_odds"), r.get("odds"))
             if v is not None: clvs.append(v)
-    W = cnt["GANADO"] + 0.5 * cnt["MEDIO_GANADO"]
-    L = cnt["PERDIDO"] + 0.5 * cnt["MEDIO_PERDIDO"]
-    P = cnt["PUSH"] + 0.5 * (cnt["MEDIO_GANADO"] + cnt["MEDIO_PERDIDO"])
+    W = pc["GANADO"] + 0.5 * pc["MEDIO_GANADO"]
+    L = pc["PERDIDO"] + 0.5 * pc["MEDIO_PERDIDO"]
+    P = pc["PUSH"] + 0.5 * (pc["MEDIO_GANADO"] + pc["MEDIO_PERDIDO"])
+    Wa = cnt["GANADO"] + 0.5 * cnt["MEDIO_GANADO"]; La = cnt["PERDIDO"] + 0.5 * cnt["MEDIO_PERDIDO"]
     graded = sum(cnt[s] for s in DONE)
     return dict(total=len(rows), graded=graded, pending=cnt["PENDIENTE"], void=cnt["ANULADO"], counts=cnt, W=W, L=L, P=P,
+                W_all=Wa, L_all=La, breakeven=(sum(imps) / len(imps) * 100 if imps else None), win_pct_all=(Wa / (Wa + La) * 100 if (Wa + La) else None),
                 win_pct=(W / (W + L) * 100 if (W + L) else None), units=round(units, 2), n_priced=n_priced, n_unpriced=n_unpriced,
                 roi=(units / n_priced * 100 if n_priced else None),
                 clv_avg=(round(sum(clvs) / len(clvs), 2) if clvs else None), clv_n=len(clvs),
@@ -568,7 +580,7 @@ def _agg(rows):
         elif s == "MEDIO_PERDIDO": L += .5; P += .5
         elif s == "PENDIENTE": pend += 1
         elif s == "ANULADO": void += 1
-        if s in DONE and r.get("units") is not None: u += r["units"]; npr += 1
+        if s in DONE and r.get("odds") is not None and r.get("units") is not None: u += r["units"]; npr += 1
         if s in DONE:
             v = clv_pct(r.get("open_odds"), r.get("odds"))
             if v is not None: clvs.append(v)

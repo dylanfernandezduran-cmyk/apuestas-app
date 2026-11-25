@@ -441,7 +441,7 @@ def _agg_rows(rows):
             P += 0.5
         else:
             continue
-        u = r.get("units")
+        u = r.get("units") if r.get("odds") is not None else None
         if u is None and r.get("odds") is not None:
             u = _profit(s, r.get("odds"))
         if u is None:

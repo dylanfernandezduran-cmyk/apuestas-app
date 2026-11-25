@@ -96,6 +96,7 @@ async def main_():
         # 5) resúmenes (después de analizar: picks registrados/actualizados en este ciclo)
         for sc in ("24h", "hoy", "manana", "72h"): await get(f"/api/picks?scope={sc}")
         await get("/api/picks/agreeing")
+        await get("/api/nrnm")
         await get("/api/picks/agreeing?include_live=1")
         await get("/api/picks/agreeing?include_live=0")
         await get("/api/home"); await get("/api/record?limit=80")

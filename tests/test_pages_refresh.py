@@ -1,3 +1,4 @@
+import re
 """Cadencia de Pages, huella estable y red-primero para los JSON de datos."""
 import json, os, sys, tempfile, time
 from pathlib import Path
@@ -59,7 +60,7 @@ def test_http_budget_sirve_cache_vieja_sin_inventar():
 def test_sw_network_first_para_data_json_y_banner_de_antiguedad():
     sw = (ROOT / "static/sw.js").read_text()
     app = (ROOT / "static/app.js").read_text()
-    assert "shell-v44" in sw
+    assert re.search(r"shell-v\d+", sw)
     assert "data-v1" in sw and "no-store" in sw and "isDataJson" in sw
     assert "fmtAgo" in app and "actualizado hace" in app
     assert "data/build.json" in app

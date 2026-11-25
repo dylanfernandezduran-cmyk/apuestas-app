@@ -307,6 +307,15 @@ async def player_prop(league: str, eid: str, aid: str, key: str, hist: int = 10)
     if not r: raise HTTPException(404, "Prop no disponible para este jugador")
     return r
 
+@app.get("/api/nrnm")
+async def nrnm_board(date: str = None):
+    """Tablero de inicio: picks registrados = Predicción NRNM, con métricas coherentes y récord real."""
+    from . import board as BOARD
+    d = (date or "").strip() or None
+    if d and len(d) != 10:
+        raise HTTPException(400, "date debe ser YYYY-MM-DD")
+    return BOARD.board(date=d)
+
 @app.get("/api/picks/agreeing")
 async def picks_agreeing(date: str = None, include_live: int = 1):
     """Picks registrados de hoy (o de `date`) que coinciden en mercado, lado y línea con la Predicción NRNM."""

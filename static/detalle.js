@@ -103,9 +103,10 @@ function dPicks(d){
   const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
   const cell=(k,v,cls='')=>`<div class="pc"><small>${k}</small><b class="mono ${cls}">${v}</b></div>`;
   const evTxt = l.ev==null?SD:sg(l.ev)+'%';
-  const edgeLbl = l.divergence_high ? 'Divergencia alta' : (l.edge==null?SD:sg(l.edge)+' pp');
-  const edgeCls = l.divergence_high ? 'k-a' : (l.edge>0?'k-t':'k-p');
-  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. final',pct(l.p_final,0)),cell(l.divergence_high?'Divergencia':('Edge <abbr'+((typeof tip==='function')?tip('edge'):'')+'>s/vig</abbr>'),edgeLbl,edgeCls),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',evTxt,l.ev>0?'k-t':l.ev<0?'k-p':''),cell('Confianza',esc(confLbl(c,p,l)))]
+  const _vt = vtgPP(l.p_final, l.price);
+  const edgeLbl = l.divergence_high ? 'Divergencia alta' : (_vt==null?SD:sg(_vt)+' pp');
+  const edgeCls = l.divergence_high ? 'k-a' : (_vt>0?'k-t':'k-p');
+  const cells = l.price_txt ? [cell('Cuota',esc(l.price_txt)),cell('Prob. NRNM',pct(l.p_final,1)),cell('Implícita',pct(impP(l.price),1)),cell(l.divergence_high?'Divergencia':('<abbr'+((typeof tip==='function')?tip('edge'):'')+'>Ventaja</abbr>'),edgeLbl,edgeCls),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',evTxt,l.ev>0?'k-t':l.ev<0?'k-p':''),cell('Confianza',esc(confLbl(c,p,l)))]
     : [cell('Cuota',SD),cell('Prob. modelo',pct(l.p_final!=null?l.p_final:l.p_model,0)),cell('Edge',SD),cell('<abbr'+((typeof tip==='function')?tip('EV'):'')+'>EV</abbr>',SD),cell('Confianza',esc(confLbl(c,p,l)))];
   const sig=l.signals&&l.signals.verdict&&l.signals.verdict!=='sin_dato' ? `<div class="sgl"><span class="${({a_favor:'k-t',en_contra:'k-p',mixto:'k-a'})[l.signals.verdict]||'mut'}">●</span> ${esc((VERD[l.signals.verdict]||[])[1]||'')}${l.signals.best?` · mejor precio <b class="mono">${esc(l.signals.best.price_txt)}</b> en ${esc(l.signals.best.book)}`:''}</div>` : '';
   const main = `<div class="mp2 ${p.status==='PICK'?'hot':''}"><div class="mph"><span class="mpk ${p.status==='PICK'?'k-p':p.status==='LEAN'?'k-a':'mut'}">${esc(st[1])}</span>${gb}</div>
@@ -136,7 +137,7 @@ function dPicksStrict(d){
   const card=(x,i)=>{ const rr=recFor(mktKey(x),x.side,x.line);
     const gb = rr ? (rr.status==='PENDIENTE'&&g.state==='in' ? (provBadge(PROV,rr.market,rr.selection)||gradeBadge(rr,true)) : gradeBadge(rr,true)) : '';
     return `<div class="mp2 hot"><div class="mph"><span class="mpk k-p">${i?'2.º PICK OFICIAL':'PICK OFICIAL'}</span><span class="scb mono">${x.score}/100</span>${gb}</div>
-    <div class="mpl">${esc(x.label)}</div><div class="pcs">${[cell('Cuota',esc(x.price_txt||SD)),cell('Prob. final',pct(x.p_final,0)),cell('Edge',sg(x.edge)+' pp',x.edge>0?'k-t':'k-p'),cell('Confianza',esc(confLbl(c,p,x)))].join('')}</div>
+    <div class="mpl">${esc(x.label)}</div><div class="pcs">${[cell('Cuota',esc(x.price_txt||SD)),cell('Prob. final',pct(x.p_final,0)),cell('Ventaja',(v=>v==null?SD:sg(v)+' pp')(vtgPP(x.p_final,x.price)),vtgPP(x.p_final,x.price)>0?'k-t':'k-p'),cell('Confianza',esc(confLbl(c,p,x)))].join('')}</div>
     ${parts(x)}${sigL(x)}${g.state==='pre'?`<div class="tkrow">${tkBtn(tkLegFromCand(g,Object.assign({official:true},x)))}</div>`:''}</div>`; };
   const l=p.lean;
   const none = `<div class="mp2"><div class="mph"><span class="mpk mut">SIN PICK OFICIAL</span></div><div class="mpl">Ningún mercado pasa el filtro estricto</div>

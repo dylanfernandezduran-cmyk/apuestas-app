@@ -10,6 +10,9 @@ const dayKey = iso => new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new 
 const pct = (p, d=1) => (p==null||isNaN(p)) ? SD : (p*100).toFixed(d)+'%';
 const am = v => v==null ? SD : (v>0?'+'+v:''+v);
 const sg = (v,d=1) => v==null ? SD : (v>0?'+':'')+v.toFixed(d);
+// coherencia: implícita y ventaja salen de la MISMA cuota que el EV (ventaja = p_final − 1/decimal, mismo signo que el EV)
+const impP = a => { a=Number(a); if(a==null||isNaN(a)||!a) return null; const d=a>0?1+a/100:1+100/(-a); return 1/d; };
+const vtgPP = (p, a) => { const i=impP(a); return (p==null||i==null)?null:(p-i)*100; };
 const num = (v,d=1) => v==null||isNaN(v) ? SD : Number(v).toFixed(d);
 
 const BK_KEY='nrnm_bankroll', BK_UNIT_KEY='nrnm_unit_pct', BK_DAILY_KEY='nrnm_daily_used';
@@ -115,7 +118,7 @@ const TIP = {
   SRS: 'Simple Rating System: margen promedio ajustado por rival y localía.',
   EV: 'Valor esperado al precio pagado: prob. final × momio decimal − 1.',
   CLV: 'Closing Line Value: (momio decimal de apertura / momio de cierre − 1) × 100. Positivo si el cierre se acortó (el mercado se movió a favor).',
-  edge: 'Diferencia (pp) entre la prob. final del modelo y la prob. del mercado sin vig.'
+  edge: 'Ventaja (pp) = prob. final NRNM − prob. implícita de la cuota (con vig). Tiene el mismo signo que el EV.'
 };
 const tip = k => ` title="${String(TIP[k]||'').replace(/"/g,'&quot;')}"`;
 const tipAbbr = (k, label) => `<abbr${tip(k)}>${label||k}</abbr>`;
@@ -298,9 +301,10 @@ const gradedBadge = x => (x&&x.status&&x.status!=='PENDIENTE') ? gradeBadge(x,fa
 const edgeTxt = e => e==null ? '' : `<span class="ed mono ${e>0?'pos':e<0?'neg':'mut'}">${sg(e)}pp</span>`;
 function sgrRow(b,g,rec){
   const rr=rec&&rec.find(x=>x.market===b.market&&x.selection===b.side);
-  return `<div class="sgr" title="${esc(b.title||'')}"><span class="mk">${esc(mkl(b))}</span><span class="lb">${esc(shortLbl(b.label,g))}${b.clipped?' <span title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''} ${gradedBadge(rr)}</span>${edgeTxt(b.edge)}
-    <span class="st mono">Mod ${b.p_model!=null?pct(b.p_model,0):SD} · Mkt ${b.p_nv!=null?pct(b.p_nv,0):SD}${b.best&&b.best.price_txt?' · '+esc(b.best.price_txt):''}</span></div>`;
+  return `<div class="sgr" title="${esc(b.title||'')}"><span class="mk">${esc(mkl(b))}</span><span class="lb">${esc(shortLbl(b.label,g))}${b.clipped?' <span title="Probabilidad del modelo recortada a ±20 pp del mercado">✂️</span>':''} ${gradedBadge(rr)}</span>${edgeTxt(vtgPP(b.p_final??b.p_model, b.best&&b.best.price))}
+    <span class="st mono">NRNM ${(b.p_final??b.p_model)!=null?pct(b.p_final??b.p_model,0):SD} · Impl. ${b.best&&b.best.price!=null?pct(impP(b.best.price),0):SD}${b.best&&b.best.price_txt?' · '+esc(b.best.price_txt):''}</span></div>`;
 }
+const _edgeV = b => { const v=vtgPP(b.p_final??b.p_model, b.best&&b.best.price); return v!=null?v:null; };
 const briefRows = (items,g,rec) => (items||[]).map(b=>sgrRow(b,g,rec)).join('');
 function briefBlock(g,items){
   if(!items||!items.length) return `<div class="pickline none">Probabilidades: ${SD}</div>`;
@@ -312,7 +316,7 @@ function briefBlock(g,items){
     line=`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(rm.label,g))}</span>${gradedBadge(rm)}</div>`+(inv?`<div class="sub">antes: ${esc(shortLbl(inv.label,g))} · invertido</div>`:'');
   } else {
     if(!main) main=items.slice().sort((a,b)=>(b.edge==null?-99:b.edge)-(a.edge==null?-99:a.edge))[0];
-    line=`<div class="pickline" title="${esc(main.title||'')} · ${esc(main.label)}"><span class="k">PICK</span><span class="t">${esc(shortLbl(main.label,g))}</span>${main.p_model!=null?`<span class="m mono">${pct(main.p_model,0)}</span>`:''}${main.edge!=null?`<span class="e mono ${main.edge>0?'pos':'neg'}">edge ${sg(main.edge)}pp</span>`:''}${gradedBadge(rm&&rm.market===main.market&&rm.selection===main.side?rm:null)}</div>`;
+    line=`<div class="pickline" title="${esc(main.title||'')} · ${esc(main.label)}"><span class="k">PICK</span><span class="t">${esc(shortLbl(main.label,g))}</span>${(main.p_final??main.p_model)!=null?`<span class="m mono">${pct(main.p_final??main.p_model,0)}</span>`:''}${(()=>{ const pr=main.best&&main.best.price, v=vtgPP(main.p_final??main.p_model,pr); return v!=null?`<span class="e mono ${v>0?'pos':'neg'}">${sg(v)} pp</span>`:''; })()}${gradedBadge(rm&&rm.market===main.market&&rm.selection===main.side?rm:null)}</div>`;
   }
   const rest=items.filter(b=>b!==main);
   if(!rest.length) return line;
@@ -748,11 +752,11 @@ async function viewPicks(scope){
     const conf=(r.confidence&&r.confidence.level)||l.conf_level;
     const title=(scope==='hoy'||!scope)?'Mejor pick de hoy':'Mejor pick';
     const evTxt=evv==null?SD:((evv>0?'+':'')+evv.toFixed(1)+'%');
-    const edgeTxt=l.edge==null?SD:(sg(l.edge)+' pp');
+    const _v=vtgPP(l.p_final,l.price); const edgeTxt=_v==null?SD:(sg(_v)+' pp');
     return `<div class="card pk-feat"><div class="feat-k">${title}</div>
       <p class="feat-title">${esc(l.label||'')} <span class="mono">${l.price_txt?esc(l.price_txt):''}</span></p>
       <div class="sub">${esc(g.league_name||'')} · ${matchup(g)} · ${fmtShort(g.date)} ${fmtTime(g.date)} CDMX</div>
-      <div class="pk-nums"><div class="pc"><small>Edge pp</small><b class="mono">${esc(edgeTxt)}</b></div>
+      <div class="pk-nums"><div class="pc"><small>Ventaja pp</small><b class="mono">${esc(edgeTxt)}</b></div>
         <div class="pc"><small>EV %</small><b class="mono ${evv>0?'pos':evv<0?'neg':''}">${evTxt}</b></div>
         <div class="pc"><small>Stake u</small><b class="mono">${esc(stak)}</b></div></div>
       ${capasChips(cap)}<div class="sub">${esc(conf?('Confianza '+conf):'Confianza: sin dato')} · ${cap.items[2].ok==null?'Estabilidad de línea: sin dato':(cap.items[2].ok?'Línea estable':'Línea inestable')}</div>
@@ -921,7 +925,7 @@ function viewInfo(){
   <details class="card kv" open><summary>Probabilidad final</summary>
     <p>pFinal = w · modelo recortado + (1−w) · mercado s/vig. El peso w crece con los juegos de muestra (n0 = 100) y no supera el 50%. El modelo se recorta a ±20 pp del mercado. Se publica el pick con alineación confirmada, 60 a 90 minutos antes, y se guarda la cuota de publicación y la de cierre para el CLV.</p></details>
   <details class="card kv"><summary>Edge y EV</summary>
-    <p>Edge = probabilidad final − probabilidad sin vig, en pp. El EV se calcula con el precio real (p · momio decimal − 1) y es lo que aparece en las tarjetas. Los picks se ordenan por EV y confianza, no por edge. Estados: PICK (edge ≥ 3 pp, EV ≥ 0, confianza media o alta), LEAN (edge ≥ 1 pp), PASS, REVISAR (divergencia de más de 10 pp entre modelo y mercado).</p></details>
+    <p>Ventaja = probabilidad final NRNM − probabilidad implícita de la cuota (con vig), en pp; tiene el mismo signo que el EV. Edge interno (filtros) = probabilidad final − probabilidad sin vig. El EV se calcula con el precio real (p · momio decimal − 1) y es lo que aparece en las tarjetas. Los picks se ordenan por EV y confianza, no por edge. Estados: PICK (edge ≥ 3 pp, EV ≥ 0, confianza media o alta), LEAN (edge ≥ 1 pp), PASS, REVISAR (divergencia de más de 10 pp entre modelo y mercado).</p></details>
   <details class="card kv"><summary>Casas y consenso</summary>
     <p>Se muestra el mejor precio disponible y el EV en cada casa («compra el mejor»). Fuentes públicas: ESPN, Action Network, Pinnacle, MLB StatsAPI y Open-Meteo, más el historial propio de líneas. Sin llave de API de pago. Si una casa no cotiza, se indica que no hay dato.</p></details>
   <details class="card kv"><summary>RLM y dinero</summary>

@@ -142,7 +142,7 @@ def test_layout_inicio_y_picks_por_deporte_e2e():
         o = json.loads(r.stdout.strip().splitlines()[-1])
     finally:
         srv.terminate()
-    assert o["secciones"] == ["hm-live", "hm-search", "hm-sp", "hm-rec"]                          # en vivo -> búsqueda -> deportes -> récord (sin duplicar picks)
+    assert o["secciones"] == ["hm-rec", "hm-nrnm", "hm-live", "hm-search", "hm-sp"]                          # en vivo -> búsqueda -> deportes -> récord (sin duplicar picks)
     rec_txt = o.get("hm_rec_text") or " ".join(o.get("texto_inicio_tiene") or [])
     assert "Récord" in rec_txt or "Record" in rec_txt                                      # resumen de récord en Inicio
     assert "Bajas confirmadas" not in (o.get("texto_inicio_tiene") or []) and "Bajas confirmadas" not in rec_txt
