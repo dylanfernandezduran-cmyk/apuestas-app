@@ -57,7 +57,7 @@ def test_fuente_ui_buscador_y_detalle_limpio():
         assert fn in dj
     assert "acc('🧠" not in js and "#app > .acc" not in css.split("Detalle premium (pt75u)")[-1]                  # sin acordeones en el detalle nuevo
     ds_ = dj[dj.index("function detailSections"):]
-    assert "return [dPred(d), dWhy(d), dAnalisis(d), dRec(d)" in ds_ and all(x in ds_ for x in ("Mercados","Líneas","Props","Alineaciones")) and "p.corners" in dj
+    assert "return [dPred(d), dWhy(d), dAnalisis(d), dRec(d)" in ds_ and all(x in ds_ for x in ("Picks","Mercado","Simulación","Estadísticas","Lesiones y alineaciones","Contexto y clima","Props")) and "p.corners" in dj
     v = lambda f, n: re.search(rf"{n}\?v=(\d+)", SRC[f]).group(1)
     assert [v("index.html", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js", "lineas.js", "nrnm-core.js")] == [v("sw.js", n) for n in ("style.css", "detalle.js", "app.js", "extras.js", "props.js", "chat.js", "recdia.js", "ticket.js", "lineas.js", "nrnm-core.js")] and re.search(r"shell-v\d+", SRC["sw.js"])
     assert SRC["index.html"].index("detalle.js") < SRC["index.html"].index("/app.js")                                   # detalle.js define los globales antes de app.js
@@ -87,7 +87,7 @@ def test_buscador_y_detalle_limpio_e2e():
     assert o["hrefs"] == ["#/deporte/futbol/mex.1", "#/juego/ita.1/77", "#/juego/ita.1/77"] and o["tap_liga"] == "#/deporte/futbol/mex.1"
     assert o["juego_home_first"].startswith("Roma vs Lazio")
     # detalle premium: secciones .ds en orden fijo (Predicción NRNM primero), sin acordeones ni bordes, títulos compactos en mayúsculas
-    ORDER = ["pred", "analisis", "rec", "picks", "prob", "odds", "mkt", "cmp", "pitch", "trd", "rcn", "h2h", "key", "mdl", "splits", "rlm", "move", "lin", "inj", "wx", "players"]
+    ORDER = ["pred", "analisis", "rec", "val", "picks", "prob", "cmp", "odds", "mkt", "splits", "hcp", "rlm", "move", "sim", "pitch", "trd", "rcn", "h2h", "key", "mdl", "adv", "lin", "inj", "players", "wx"]
     for k in ("soc", "nfl", "tenis"):
         d = o[k]
         assert d["keys"][0] == "pred" and d["accs"] == 0 and d["bordes"] == 0 and all(t == ["uppercase", True] for t in d["heads"])

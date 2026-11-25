@@ -474,12 +474,17 @@ function dAnalisis(d){
 
 function detailSections(d){
   const tn_=d.kind==='tennis';
-  const mercados=[dPicks(d), dProb(d), (marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')), dCmp(d), dPitch(d), dTrends(d), dRecent(d), dH2h(d), dKey(d), dModel(d)].join('');
-  const lineas=[dSplits(d), dRlm(d), movementSection(d)].join('')||'<div class="card mut">Sin movimientos de línea publicados para este juego.</div>';
+  window.__D=d;
+  const L=(typeof dVal==='function');
+  const picks=[L?dVal(d):'', dPicks(d), dProb(d), dCmp(d)].join('')||'<div class="card mut">Sin picks para este juego.</div>';
+  const mercado=[(marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')), dSplits(d), L?dHand(d):'', dRlm(d), movementSection(d)].join('')||'<div class="card mut">Sin mercado publicado para este juego.</div>';
+  const sim=(L?dSim(d):'')||'<div class="card mut">Sin modelo suficiente para simular este juego.</div>';
+  const stats=[dPitch(d), dTrends(d), dRecent(d), dH2h(d), dKey(d), dModel(d), L?dAdv(d):''].join('')||'<div class="card mut">Sin estadísticas.</div>';
   const props=dProps(d)||'<div class="card mut">Sin props para este juego.</div>';
-  const alin=[tn_?'':lineupsSection(d), dInj(d), dWx(d), dPlayers(d)].join('')||'<div class="card mut">Sin alineaciones ni lesiones publicadas.</div>';
-  const tabs=[['mercados','Mercados'],['lineas','Líneas'],['props','Props'],['alin','Alineaciones']];
-  const panes={mercados, lineas, props, alin};
+  const alin=[tn_?'':lineupsSection(d), dInj(d), dPlayers(d)].join('')||'<div class="card mut">Sin alineaciones ni lesiones publicadas.</div>';
+  const ctx=[dWx(d)].join('')||'<div class="card mut">Sin datos de contexto o clima para este juego.</div>';
+  const tabs=[['picks','Picks'],['mercado','Mercado'],['sim','Simulación'],['stats','Estadísticas'],['alin','Lesiones y alineaciones'],['ctx','Contexto y clima'],['props','Props']];
+  const panes={picks, mercado, sim, stats, alin, ctx, props};
   return [dPred(d), dWhy(d), dAnalisis(d), dRec(d),
     `<div id="d-tabs"><div class="ds-tabs" role="tablist">${tabs.map((x,i)=>`<button type="button" role="tab" data-dt="${x[0]}" class="${i?'':'on'}" aria-selected="${i? 'false':'true'}">${x[1]}</button>`).join('')}</div>`,
     tabs.map((x,i)=>`<div class="ds-pane" data-dt="${x[0]}" ${i?'hidden':''}>${panes[x[0]]}</div>`).join(''),

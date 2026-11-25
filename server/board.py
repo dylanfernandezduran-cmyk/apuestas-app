@@ -201,6 +201,42 @@ def calibration(rows):
                 note="Brier: 0 = perfecto, 0.25 = moneda al aire. Si el Brier del modelo es mayor que el del mercado sin vig, el mercado predice mejor.")
 
 
+def monthly(rows, fmt="%Y-%m"):
+    """Serie mensual (hora CDMX) de picks calificados con cuota: G-P-E, acierto, unidades y ROI. Sólo datos reales."""
+    from datetime import datetime, timedelta, timezone
+    from . import record as REC
+    tz = timezone(timedelta(hours=-6))
+    out = {}
+    for r in rows:
+        s = r["status"]
+        if r.get("odds") is None or not r.get("start_ts"):
+            continue
+        k = datetime.fromtimestamp(int(r["start_ts"]), tz).strftime(fmt)
+        a = out.setdefault(k, dict(month=k, W=0, L=0, P=0, u=0.0))
+        if s in ("GANADO", "MEDIO_GANADO"): a["W"] += 1
+        elif s in ("PERDIDO", "MEDIO_PERDIDO"): a["L"] += 1
+        else: a["P"] += 1
+        a["u"] += REC.profit(s, r["odds"]) or 0.0
+    res = []
+    for k in sorted(out):
+        a = out[k]; n = a["W"] + a["L"] + a["P"]; d = a["W"] + a["L"]
+        res.append(dict(month=k, day=k if fmt != "%Y-%m" else None, n=n, W=a["W"], L=a["L"], P=a["P"], hit=round(100 * a["W"] / d, 1) if d else None,
+                        units=round(a["u"], 2), roi=round(100 * a["u"] / n, 1) if n else None))
+    return res
+
+
+def parlays():
+    """Tickets (parlays en papel) calificados. Vacío si no hay muestra."""
+    try:
+        rs = CS._rows("SELECT status, units, dec FROM tickets WHERE status IN ('GANADO','PERDIDO','PUSH')")
+    except Exception:
+        return None
+    if not rs: return dict(n=0)
+    W = sum(1 for r in rs if r["status"] == "GANADO"); L = sum(1 for r in rs if r["status"] == "PERDIDO")
+    u = sum((r.get("units") or 0.0) for r in rs)
+    return dict(n=len(rs), W=W, L=L, hit=round(100 * W / (W + L), 1) if W + L else None, units=round(u, 2), roi=round(100 * u / len(rs), 1))
+
+
 def record_coincident():
     """Récord real de picks registrados que coincidían con la predicción guardada del juego (pick vigente al inicio)."""
     rows = CS._rows("SELECT * FROM picks WHERE status IN ('GANADO','PERDIDO','PUSH','MEDIO_GANADO','MEDIO_PERDIDO')")
@@ -219,7 +255,7 @@ def record_coincident():
     last = sorted(ok, key=lambda r: r.get("start_ts") or 0)[-10:]
     streak = "".join("G" if r["status"] in ("GANADO", "MEDIO_GANADO") else "P" if r["status"] in ("PERDIDO", "MEDIO_PERDIDO") else "E" for r in last)
     return dict(coincident=_agg(ok), coincident_value=_agg(ok_val), main=_agg(mains), last10=streak,
-                calibration=calibration(rows),
+                calibration=calibration(rows), monthly=monthly(rows), daily=monthly(rows, "%Y-%m-%d")[-45:], parlays=parlays(),
                 note="Récord real calificado con el marcador final. CLV = cuota de apertura vs cuota vigente al inicio. Unidades a 1u por pick.")
 
 
@@ -234,6 +270,8 @@ def board(now=None, date=None):
     except Exception:
         pass
     rows = CS._rows("SELECT * FROM picks WHERE status='PENDIENTE' AND start_ts>=? AND start_ts<? ORDER BY start_ts", (lo, hi))
+    from . import policy as POL
+    H = POL.history(CS._rows)
     cache, items, n_reg, n_mis, mism = {}, [], len(rows), 0, []
     for r in rows:
         pred = CS._load_pred(r["league"], r["eid"], cache)
@@ -254,16 +292,33 @@ def board(now=None, date=None):
             continue
         it = _item(r, now)
         if it:
+            from . import validation as VAL
+            vv = VAL.LAST.get((r["league"], str(r["eid"])))
+            if vv:
+                it["data_quality"] = vv["dq"]["score"]; it["dq_missing"] = vv["dq"]["missing"]
+                # el estado se valida sobre el pick del análisis; si este pick no es ese, se valida con sus propias cifras
+                st = vv["validation"]["state"] if vv.get("lean") == it["pick"] else None
+                it["validation"] = st
+                it["validation_reasons"] = vv["validation"]["reasons"] if st else []
+            if not it.get("validation"):
+                it["validation"] = "PASAR" if it["ev_pct"] <= 0 else ("INCIERTO" if it["divergence_high"] or it["confidence"] not in ("Alta", "Media") else "VALIDADO")
+                it.setdefault("validation_reasons", ["EV ≤ 0 (sin valor)"] if it["ev_pct"] <= 0 else [])
+            pol = POL.check(it, H, now=now, consistent=True, dq=it.get("data_quality"), updated_at=r.get("updated_at") or r.get("created_at"))
+            it["tier"] = pol["tier"]; it["locks"] = pol["locks"]; it["approved"] = pol["approved"]
+            if not pol["approved"] and it.get("validation") == "VALIDADO":
+                it["validation"] = "INCIERTO"; it["validation_reasons"] = [l["reason"] for l in pol["locks"]]
             items.append(it)
     items.sort(key=_key)
-    val = [i for i in items if i["value"]]
-    rest = [i for i in items if not i["value"]]
+    # recomendaciones = sólo los que pasan TODOS los candados; el resto queda registrado y se califica (auditoría)
+    val = [i for i in items if i["approved"]]
+    blocked = [i for i in items if not i["approved"] and i["value"]]
+    rest = [i for i in items if not i["approved"] and not i["value"]]
     try:
         rec = record_coincident()
     except Exception as e:
         rec = dict(error=type(e).__name__)
     res = dict(date=day, now=now, n_registered=n_reg, n_mismatch=n_mis, n_coincident=len(items),
-               n=len(val), items=val, no_value=rest, mismatches=mism, record=rec,
+               n=len(val), items=val, blocked=blocked, no_value=rest, policy=POL.config(), mismatches=mism, record=rec,
                formula="Ventaja = Prob. NRNM − implícita de la cuota. EV = Prob. NRNM × cuota decimal − 1. Mismos números, mismo signo.",
                note=CS.AGREE_NOTE)
     _cache.clear(); _cache[ck] = res

@@ -488,7 +488,8 @@ async def _analyze(league, eid):
                 lam_home=mdl.get("lam_home"), lam_away=mdl.get("lam_away"), pitcher_adj=extra if league == "mlb" else None,
                 qb_adj=extra if league == "nfl" else None, qb_total_adj=extra_total if league == "nfl" else None,
                 qb_out=qb_out,
-                rating_home=mdl.get("rating_home"), rating_away=mdl.get("rating_away"), top_scores=mdl.get("mat_top"), key_injuries=key_names)
+                rating_home=mdl.get("rating_home"), rating_away=mdl.get("rating_away"), top_scores=mdl.get("mat_top"), key_injuries=key_names,
+                sigma=mdl.get("sigma"), tsigma=mdl.get("tsigma"), form_adj=mdl.get("form_adj"))
     out["model"] = mout
     if game["state"] == "pre":
         cor = None

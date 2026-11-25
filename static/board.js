@@ -11,8 +11,10 @@ function nbCard(it){
   if(it.live) tags.push('<span class="badge b-live">● En juego</span>');
   if(it.type==='main') tags.push('<span class="badge b-pick">Principal</span>');
   if(it.divergence_high) tags.push(`<span class="divf" title="Modelo crudo vs mercado sin vig: ${it.divergence_pp} pp">Divergencia alta</span>`);
-  return `<a class="nb-card${it.value?'':' nb-off'}" href="${it.href}">
-    <div class="nb-top"><span class="nb-meta">${esc(it.sport_name)} · ${esc((it.kickoff_cdmx||'').replace(/^\d+ \w+, /,''))}</span>${tags.join('')}<span class="nb-ev ${evc}">EV ${nbSign(it.ev_pct,1,'%')}</span></div>
+  if(it.tier) tags.push(`<span class="tier t-${esc(it.tier.key)}">${esc(it.tier.label)}</span>`);
+  const locks=(it.locks||[]);
+  return `<a class="nb-card${it.approved?'':' nb-off'}" href="${it.href}">
+    <div class="nb-top"><span class="nb-meta">${esc(it.sport_name)} · ${esc((it.kickoff_cdmx||'').replace(/^\d+ \w+, /,''))}</span>${tags.join('')}${it.validation&&typeof valBadge==='function'?valBadge(it.validation):''}${it.data_quality!=null?`<span class="nb-dq" title="Calidad de datos">DQ ${it.data_quality}</span>`:''}<span class="nb-ev ${evc}">EV ${nbSign(it.ev_pct,1,'%')}</span></div>
     <div class="nb-game">${esc(it.game)}</div>
     <div class="nb-pick"><b>${esc(it.pick)}</b><span class="nb-mk">${esc(it.market_name)}</span><span class="nb-odds mono">${esc(it.odds_txt)}<small>${esc(it.book||'')}</small></span></div>
     <div class="nb-stats">
@@ -22,6 +24,7 @@ function nbCard(it){
       <div><span>Confianza</span><b>${esc(it.confidence==='no aplica'?'—':it.confidence)}</b></div>
     </div>
     <div class="nb-line"><span>Apertura → actual</span><span class="mono">${lineTxt}</span>${moved?'<i class="nb-mv">movió</i>':''}</div>
+    ${locks.length?`<div class="nb-locks">${locks.map(l=>`<span title="${esc(l.reason)}"><b>🔒 ${esc(l.label)}</b> ${esc(l.reason)}</span>`).join('')}</div>`:''}
   </a>`;
 }
 function nbPerf(rec){
@@ -47,6 +50,19 @@ function nbCal(c){
   return `<details class="nb-cal"><summary>Rendimiento del modelo · calibración (Brier, log loss, cubetas)</summary>
     ${bk}${tb('Total',[c.overall])}${tb('Por deporte',c.by_sport||[])}${tb('Por mercado',c.by_market||[])}<p class="nb-foot">${esc(c.note||'')}</p></details>`;
 }
+function nbLab(r){
+  const D=r.daily||[], M=r.monthly||[]; if(!D.length&&!M.length) return '';
+  let cum=0; const pts=D.map(x=>(cum+=x.units, {d:x.day||x.month, c:cum, n:x.n}));
+  const W=320,H=90, lo=Math.min(0,...pts.map(p=>p.c)), hi=Math.max(0,...pts.map(p=>p.c)), rg=(hi-lo)||1;
+  const X=i=>pts.length>1?i*(W-8)/(pts.length-1)+4:W/2, Y=v=>H-6-(v-lo)/rg*(H-12);
+  const path=pts.map((p,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(p.c).toFixed(1)}`).join(' ');
+  const last=pts.length?pts[pts.length-1].c:0;
+  const chart=pts.length>1?`<svg viewBox="0 0 ${W} ${H+12}" class="lab-svg" role="img" aria-label="Unidades acumuladas"><line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="z"/><path d="${path}" class="${last>=0?'up':'dn'}"/>${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.c)}" r="5" class="hit"><title>${p.d}: ${nbSign(p.c,2,'u')} (${p.n} picks)</title></circle>`).join('')}<text x="2" y="${H+10}" class="ax">${esc(pts[0].d)}</text><text x="${W-2}" y="${H+10}" class="ax" text-anchor="end">${esc(pts[pts.length-1].d)}</text></svg>`:'';
+  const mt=M.length?`<div class="cal-w"><table class="cal"><tr><th>Mes</th><th>n</th><th>G-P-E</th><th>Acierto</th><th>Unid.</th><th>ROI</th></tr>${M.map(m=>`<tr><td>${esc(m.month)}</td><td class="mono">${m.n}</td><td class="mono">${m.W}-${m.L}${m.P?'-'+m.P:''}</td><td class="mono ${m.hit>=52.4?'pos':'neg'}">${m.hit==null?'—':m.hit.toFixed(1)+'%'}</td><td class="mono ${m.units>0?'pos':'neg'}">${nbSign(m.units,2,'u')}</td><td class="mono ${m.roi>0?'pos':'neg'}">${m.roi==null?'—':nbSign(m.roi,1,'%')}</td></tr>`).join('')}</table></div>`:'';
+  const pl=r.parlays||{};
+  return `<div class="nb-lab"><div class="nb-h2">Performance Lab <small class="mut">unidades acumuladas · todos los picks con cuota</small></div>${chart}${mt}
+    <div class="sub">Parlays: ${pl.n?`${pl.W}-${pl.L} · ${nbSign(pl.units,2,'u')} · ROI ${nbSign(pl.roi,1,'%')}`:'sin tickets calificados todavía'} · Props: sin picks de props calificados en el récord todavía.</div></div>`;
+}
 function nbRec(r){
   if(!r||r.error) return '';
   const k=(l,v,c='')=>`<div class="nb-k"><span>${l}</span><b class="mono ${c}">${v}</b></div>`;
@@ -58,17 +74,18 @@ function nbRec(r){
   return `<div class="nb-rec"><div class="nb-h2">Récord real <a class="more" href="#/record">Ver récord →</a></div>
     ${row('Coinciden y EV+',r.coincident_value)}${row('Coinciden (todos)',r.coincident)}${row('Pick principal',r.main)}
     ${r.last10?`<div class="nb-streak"><span>Últimos ${r.last10.length}</span>${[...r.last10].map(c=>`<i class="s-${c}">${c}</i>`).join('')}</div>`:''}
-    ${nbCal(r.calibration)}<p class="nb-foot">${esc(r.note||'')}</p></div>`;
+    ${nbLab(r)}${nbCal(r.calibration)}<p class="nb-foot">${esc(r.note||'')}</p></div>`;
 }
 async function nrnmFill(el){
   if(!el) return;
   let d; try{ d=await api('/api/nrnm'); }catch(e){ el.innerHTML=`<div class="nb-h"><h2>Picks NRNM</h2></div><div class="nb-empty">${SD}: ${esc(e.message)}</div>`; return; }
-  const items=d.items||[], off=d.no_value||[];
+  const items=d.items||[], off=(d.blocked||[]).concat(d.no_value||[]), pol=d.policy||{};
   const head=`<div class="nb-h"><div><h2>Picks NRNM</h2><div class="sub">Pick registrado = Predicción NRNM (mercado, lado y línea) · ${typeof agoTxt==='function'?esc(agoTxt(d.now)):''}</div></div><span class="nb-n mono">${items.length}</span></div>`;
-  const empty=`<div class="nb-empty"><b>Hoy no hay picks con valor.</b> ${d.n_coincident?`${d.n_coincident} pick${d.n_coincident===1?'':'s'} coincide${d.n_coincident===1?'':'n'} con la predicción, pero con EV ≤ 0 o divergencia alta.`:'Ningún pick registrado coincide con la predicción todavía.'} No se inventa ninguno.</div>`;
-  const offB = off.length?`<details class="nb-offw"><summary>Coinciden pero sin valor (${off.length}) · no se recomiendan</summary>${off.map(nbCard).join('')}</details>`:'';
+  const empty=`<div class="nb-empty"><div class="nb-e0">0</div><b>Hoy no hay picks aprobados.</b><span>${d.n_coincident?`${d.n_coincident} pick${d.n_coincident===1?'':'s'} coincide${d.n_coincident===1?'':'n'} con la predicción, pero no pas${d.n_coincident===1?'a':'an'} todos los candados.`:'Ningún pick registrado coincide con la predicción todavía.'} Un día sin picks también es una decisión: no se fuerza ninguno.</span></div>`;
+  const offB = off.length?`<details class="nb-offw"><summary>Bloqueados por candados (${off.length}) · se registran y califican, no se recomiendan</summary>${off.map(nbCard).join('')}</details>`:'';
+  const polB = pol.min_prob!=null?`<p class="nb-foot">Candados: probabilidad ≥ ${Math.round(pol.min_prob*100)}% · EV &gt; 0 · datos frescos y calidad ≥ ${pol.min_dq} · ≥ ${pol.min_hist} picks calificados por deporte y mercado · cubeta no sobreestimada (&gt; ${pol.cal_over_pp} pp) · coincide con la predicción · antes del inicio · &lt; ${Math.round(pol.audit_prob*100)}% (si no, auditoría especial).</p>`:'';
   const mm=(d.mismatches||[]);
   const mmB = mm.length?`<details class="nb-offw"><summary>Registrados que ya no coinciden (${mm.length}) · no se muestran como pick</summary>${mm.map(m=>`<a class="nb-mm" href="${m.href}"><b>${esc(m.game)}</b><span>Registrado: ${esc(m.registered)} · Predicción actual: ${esc(m.prediction||SD)}</span><span class="mut">${esc(m.explain)}</span></a>`).join('')}</details>`:'';
-  el.innerHTML = head + (items.length?`<div class="nb-list">${items.map(nbCard).join('')}</div>`:empty) + offB + mmB +
+  el.innerHTML = head + (items.length?`<div class="nb-list">${items.map(nbCard).join('')}</div>`:empty) + offB + mmB + polB +
     `<p class="nb-foot">${esc(d.formula||'')} ${esc(d.note||'')}</p>` + nbRec(d.record);
 }

@@ -38,6 +38,7 @@ def cover_matrix(mat, f, t):
 # we use a conservative mid-range (4.5 pts of margin against the team, ~2 pts off the total).
 NFL_QB_OUT_MARGIN = 4.5
 NFL_QB_OUT_TOTAL = 2.0
+NBA_FORM_COEF = 0.262        # pts de margen por pt de forma ajustada (backtest walk-forward NBA, ver data/backtest_nba_factors.json)
 DIVERGENCE_HIGH = 0.10          # |p_model_raw − p_nv| > 10 pp → bandera, no PICK/estrella
 CONF_RANK = {"Alta": 2, "Media": 1, "Baja": 0}
 
@@ -46,7 +47,10 @@ def margin_model(R, hid, aid, neutral=False, extra_margin=0.0, extra_total=0.0):
     rh, ra = R["rating"].get(hid), R["rating"].get(aid)
     if rh is None or ra is None: return None
     hfa = 0.0 if neutral else R["hfa"]
-    mu = rh - ra + hfa + extra_margin
+    form_adj = 0.0
+    if R.get("form"):
+        form_adj = NBA_FORM_COEF * (R["form"].get(hid, 0.0) - R["form"].get(aid, 0.0))
+    mu = rh - ra + hfa + extra_margin + form_adj
     sigma = fam["sigma"]
     l = R["lg_pts"]
     exp_total = ((R["off"][hid] + R["def"][aid]) / 2) + ((R["off"][aid] + R["def"][hid]) / 2) + extra_total
@@ -55,7 +59,7 @@ def margin_model(R, hid, aid, neutral=False, extra_margin=0.0, extra_total=0.0):
     p_home = 1 - norm_cdf((0 - mu) / sigma)
     n_h, n_a = R["n"].get(hid, 0), R["n"].get(aid, 0)
     sample = min(1.0, min(n_h, n_a) / fam["n_full"])
-    return dict(kind="margen", mu=mu, sigma=sigma, tsigma=fam["tsigma"], exp_total=exp_total, p_home=p_home, p_away=1 - p_home,
+    return dict(kind="margen", mu=mu, sigma=sigma, form_adj=form_adj, tsigma=fam["tsigma"], exp_total=exp_total, p_home=p_home, p_away=1 - p_home,
                 p_draw=None, hfa=hfa, rating_home=rh, rating_away=ra, n_home=n_h, n_away=n_a, sample=sample,
                 cover=lambda t: cover_normal(mu, sigma, t),
                 total=lambda t: cover_normal(exp_total, fam["tsigma"], t))

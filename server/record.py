@@ -116,6 +116,11 @@ def extract(a, now=None):
             out.append(mk(market=MKT[lean["market"]], selection=lean["side"], line=lean.get("line"), label=lean["label"], odds=lean.get("price"),
                           book=(book if lean.get("price") is not None else None), p_model=lean.get("p_model"), p_final=lean.get("p_final"), p_nv=lean.get("p_nv"),
                           edge=lean.get("edge"), basis="modelo", type="main"))
+        elif pk.get("policy_block") and lean and MKT.get(lean.get("market")) and lean.get("side") and lean.get("price") is not None and _coherent(lean):
+            # bloqueado por política: queda en la base y se califica (auditoría), nunca como principal
+            out.append(mk(market=MKT[lean["market"]], selection=lean["side"], line=lean.get("line"), label=lean["label"], odds=lean.get("price"),
+                          book=book, p_model=lean.get("p_model"), p_final=lean.get("p_final"), p_nv=lean.get("p_nv"),
+                          edge=lean.get("edge"), basis="modelo", type="suggestion"))
         # sugerencias 1: del filtro (ya coherentes) o candidatos PICK/LEAN distintos del principal
         sugg = list(pk.get("suggestions") or [])
         if not sugg:

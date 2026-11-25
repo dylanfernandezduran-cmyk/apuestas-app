@@ -696,9 +696,18 @@ def agreeing_picks(now=None, date=None, include_live=True):
             similar=_similar_brief(r),
             href=f"#/juego/{r.get('league')}/{r.get('eid')}",
         ))
+    try:
+        from . import policy as POL
+        H = POL.history(_rows)
+        for it in items:
+            pc = POL.check(dict(p_final=it.get("p_final"), ev_pct=it.get("ev"), sport=it.get("sport"), market=it.get("market"), live=it.get("live")), H, now=now)
+            it["approved"], it["locks"], it["tier"] = pc["approved"], pc["locks"], pc["tier"]
+    except Exception:
+        pass
     def _key(it):
         ev = it.get("ev")
         return (
+            not it.get("approved", True),
             ev is None,
             -(ev if ev is not None else 0),
             -_CONF_RANK.get(it.get("confidence") or "", 0),
@@ -749,6 +758,8 @@ def format_agreeing_text(report):
         conf = it.get("confidence") or "sin dato"
         lines.append(f"{i}. [{typ}] {pick} ({cuota}) — {game} · {sport} · {when}{live}")
         lines.append(f"   pFinal {pfs} · EV {evs} · confianza {conf}")
+        if it.get("locks"):
+            lines.append("   🔒 No se recomienda: " + "; ".join(l["reason"] for l in it["locks"]))
         if it.get("signals"):
             lines.append(f"   Señales: {it['signals']}")
         else:
@@ -807,7 +818,8 @@ def format_agreeing_html(report):
             f"<li><b>[{typ}] {pick}</b> ({cuota}) — "
             f"<a href=\"{href}\">{game}</a> · {sport} · {when}{live}<br>"
             f"pFinal {esc(pfs)} · EV {esc(evs)} · confianza {conf}<br>"
-            f"Señales: {sig}<br>{sim_s}</li>"
+            f"Señales: {sig}<br>{sim_s}"
+            + ("<br>🔒 No se recomienda: " + esc("; ".join(l["reason"] for l in it["locks"])) if it.get("locks") else "") + "</li>"
         )
     parts.append("</ol>")
     parts.append(f"<p class=\"ch-mut\">{esc(AGREE_NOTE)}</p>")

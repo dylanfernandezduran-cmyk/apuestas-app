@@ -958,3 +958,34 @@ table.cal thead{display:table-header-group!important}table.cal tbody{display:tab
 table.cal tr{display:table-row!important}
 table.cal th,table.cal td{display:table-cell!important;position:static!important;width:auto!important;font-size:11.5px}
 table.cal th,table.cal td{padding:5px 4px}
+/* NRNM Lab v3: validación, simulación, avanzadas */
+.vb{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:999px;text-transform:uppercase;white-space:nowrap}
+.vb-validado{background:rgba(var(--grn-rgb),.16);color:#3fd6ea}.vb-incierto{background:rgba(var(--amb-rgb),.15);color:#f5b942}
+.vb-esperar{background:rgba(var(--live-rgb),.16);color:#7fb0ff}.vb-pasar{background:rgba(255,255,255,.06);color:var(--mut)}
+.nb-dq{font-size:10.5px;color:var(--mut);font-family:ui-monospace,monospace}
+.vrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.dq-h{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.dq-b,.pbar{height:6px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.dq-b i,.pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#FF1179,#ff5aa8);transition:width .35s ease}
+.dq-c{display:flex;flex-wrap:wrap;gap:4px 10px;margin:8px 0 4px;font-size:11.5px}.dq-c .ok{color:var(--tx)}.dq-c .no{color:var(--mut);text-decoration:line-through}
+.sim-ctl{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px;font-size:12px}
+.sim-ctl label{display:flex;flex-direction:column;gap:4px;color:var(--mut)}.sim-ctl input[type=range]{accent-color:#FF1179;width:100%}
+.sim-ctl output{font-family:ui-monospace,monospace;color:var(--tx)}
+@media(max-width:480px){.sim-ctl{grid-template-columns:1fr 1fr}.sim-ctl .pill{grid-column:1/-1}}
+.sim-sc{display:flex;justify-content:space-around;align-items:center;text-align:center;margin:4px 0 12px}.sim-sc div{display:flex;flex-direction:column}.sim-sc b{font-size:28px;font-weight:800}
+.sim-r{display:grid;grid-template-columns:minmax(90px,1.2fr) 2fr 52px auto;gap:8px;align-items:center;font-size:12.5px;margin:6px 0}.sim-r small{font-size:10.5px}
+.sim-h{margin:12px 0 4px}.sim-svg{width:100%;height:auto;display:block}.sim-svg .hb{fill:rgba(255,255,255,.16)}.sim-svg .hb-on{fill:rgba(var(--acc-rgb),.75)}
+.sim-svg .hl{stroke:#fff;stroke-width:1.2;stroke-dasharray:3 3}.sim-svg .ax{fill:var(--mut);font-size:9px}
+.ds-tabs{scrollbar-width:none}.ds-tabs::-webkit-scrollbar{display:none}.ds-tabs button{white-space:nowrap;min-height:34px}
+.ds-pane{animation:dsIn .22s ease}@keyframes dsIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.ds-pane{animation:none}.dq-b i,.pbar i{transition:none}}
+.nb-lab{margin:12px 0}.lab-svg{width:100%;height:auto;display:block;margin:6px 0}.lab-svg path{fill:none;stroke-width:2;stroke-linejoin:round}
+.lab-svg path.up{stroke:#3fd6ea}.lab-svg path.dn{stroke:#FF1179}.lab-svg .z{stroke:rgba(255,255,255,.18);stroke-dasharray:3 3}
+.lab-svg .hit{fill:transparent}.lab-svg .hit:hover{fill:rgba(255,255,255,.5)}.lab-svg .ax{fill:var(--mut);font-size:9px}
+.tier{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--mut);white-space:nowrap}
+.tier.t-bloqueado{background:rgba(var(--red-rgb),.14);color:#ff5aa8}.tier.t-moderada{color:#cfd6e0}.tier.t-favorable{background:rgba(var(--grn-rgb),.12);color:#3fd6ea}
+.tier.t-elevada,.tier.t-muy_elevada{background:rgba(var(--grn-rgb),.2);color:#7ff0ff}.tier.t-auditoria{background:rgba(var(--amb-rgb),.16);color:#f5b942}
+.nb-locks{display:flex;flex-direction:column;gap:3px;margin-top:8px;font-size:11.5px;color:var(--mut)}.nb-locks b{color:#ff5aa8;font-weight:700}
+.nb-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:22px 14px}.nb-empty span{color:var(--mut);font-size:13px;max-width:420px}
+.nb-e0{font:800 34px/1 Inter,system-ui,sans-serif;color:var(--acc);letter-spacing:-.02em}
+.nb-lab .nb-h2 small{display:block;font-weight:400;font-size:11px;margin-top:2px}

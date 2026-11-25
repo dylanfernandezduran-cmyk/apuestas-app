@@ -124,6 +124,19 @@ def _margin(R):
         n = len(lst)
         off[t] = (pf + k * lg) / (n + k); dfn[t] = (pa + k * lg) / (n + k)
     R["off"], R["def"] = off, dfn
+    # NBA: forma reciente ajustada por rival (últimos 10): margen + rating del rival − localía, menos su rating.
+    # Backtest (data/backtest_nba_factors.json): mejora Brier y log loss fuera de muestra en 2025-26 y 2026-27.
+    if R.get("league") == "nba":
+        form = {}
+        for t, lst in tg.items():
+            l = sorted(lst, key=lambda g: g["date"])[-10:]
+            if len(l) < 3: form[t] = 0.0; continue
+            s = 0.0
+            for g in l:
+                if g["home"] == t: s += g["hs"] - g["as_"] - (0 if g["neutral"] else hfa) + R["rating"].get(g["away"], 0.0)
+                else: s += g["as_"] - g["hs"] + (0 if g["neutral"] else hfa) + R["rating"].get(g["home"], 0.0)
+            form[t] = s / len(l) - R["rating"].get(t, 0.0)
+        R["form"] = form
 
 def _soccer(R):
     gl = R["games"]; S = SOCCER

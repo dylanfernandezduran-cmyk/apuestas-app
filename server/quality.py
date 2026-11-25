@@ -759,6 +759,17 @@ def panel(out, cand, pred=None):
                 n_required=MIN_PRESENT, min_agree=MIN_AGREE)
 
 
+def policy_block(cand):
+    """Candado de probabilidad: < MIN_PROB = Bloqueado; ≥ AUDIT_PROB = Auditoría especial (no se aprueba solo)."""
+    from .config import MIN_PROB, AUDIT_PROB
+    p = (cand or {}).get("p_final")
+    if p is None: return None
+    p = float(p); p = p / 100 if p > 1 else p
+    if p < MIN_PROB: return f"Bloqueado: prob. NRNM {p*100:.1f}% < {MIN_PROB*100:.0f}% (se registra y califica para auditoría, no se recomienda)"
+    if p >= AUDIT_PROB: return f"Auditoría especial: prob. NRNM {p*100:.1f}% ≥ {AUDIT_PROB*100:.0f}% (requiere revisión manual)"
+    return None
+
+
 def publish_reason(cand, analysis, conf, status):
     """None si se puede publicar; si no, motivo en español."""
     ev = cand.get("ev") if cand else None
@@ -802,6 +813,7 @@ def apply(out):
     pred = out.get("pred")
     if not picks:
         return out
+    picks.pop("policy_block", None)
     fam = _fam(out)
     cands = list(picks.get("candidates") or [])
     conf = picks.get("confidence") or {}
@@ -856,6 +868,11 @@ def apply(out):
             published = True
             status = cand.get("status") if cand.get("status") in ("PICK", "LEAN") else "PICK"
             lean = cand
+            # política configurable (config.MIN_PROB / AUDIT_PROB): se registra y califica igual, pero no se recomienda
+            pb = policy_block(cand)
+            if pb:
+                published = False; reason = pb; status = "PASS"
+                picks["policy_block"] = pb
         else:
             published = False
             status = "REVISAR" if (raw_status == "REVISAR" or cand.get("status") == "REVISAR") else "PASS"

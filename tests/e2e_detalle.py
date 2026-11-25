@@ -54,7 +54,7 @@ async def main():
               nombres:[...document.querySelectorAll('.gh2 .hs .n')].map(n=>n.innerText), bloques:[...document.querySelectorAll('.mkb-t')].map(h=>h.innerText),
               bordes:S.filter(s=>parseFloat(getComputedStyle(s).borderTopWidth)>0).length, h:document.documentElement.scrollHeight,
               heads:S.slice(0,3).map(s=>[getComputedStyle(s.querySelector('.ttl')).textTransform, parseFloat(getComputedStyle(s.querySelector('.ttl')).letterSpacing)>0])}})()""")
-        ORDER = ["pred","rec","picks","prob","odds","mkt","cmp","pitch","trd","rcn","h2h","key","mdl","splits","rlm","move","lin","inj","wx","players"]
+        ORDER = ["pred", "rec", "val", "picks", "prob", "cmp", "odds", "mkt", "splits", "hcp", "rlm", "move", "sim", "pitch", "trd", "rcn", "h2h", "key", "mdl", "adv", "lin", "inj", "players", "wx"]
         out["soc"] = await detalle(M.with_pred(SOC), "mex.1", "401876909")
         out["nfl"] = await detalle(M.with_pred(NFL), "nfl", "401873036")
         out["tenis"] = await detalle(M.with_pred(M.tennis(state="pre")), "atp", "1")

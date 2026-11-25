@@ -44,3 +44,12 @@ EDGE_PICK = 3.0   # puntos porcentuales para PICK
 EDGE_LEAN = 1.0   # puntos porcentuales para lean ligero
 MIN_EV_MARGIN = 0.02  # margen de seguridad para "precio máximo"
 TZ = "America/Mexico_City"
+
+# Política de publicación (candados). Configurable por variable de entorno.
+import os as _os
+MIN_PROB = float(_os.environ.get("NRNM_MIN_PROB", "0.50"))      # prob. NRNM mínima para recomendar (debajo: Bloqueado)
+AUDIT_PROB = float(_os.environ.get("NRNM_AUDIT_PROB", "0.90"))  # desde aquí: Auditoría especial (no se aprueba solo)
+MIN_HIST = int(_os.environ.get("NRNM_MIN_HIST", "30"))          # picks calificados mínimos por deporte+mercado
+CAL_OVER_PP = float(_os.environ.get("NRNM_CAL_OVER_PP", "3.0")) # cubeta sobreestimada si real − predicha < −X pp (n ≥ MIN_HIST)
+STALE_H = float(_os.environ.get("NRNM_STALE_H", "6"))           # cuota sin refrescar en más de X horas = dato viejo
+MIN_DQ = int(_os.environ.get("NRNM_MIN_DQ", "40"))              # calidad de datos mínima

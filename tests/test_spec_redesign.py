@@ -231,7 +231,7 @@ def test_screens_nav_footer_tokens_and_copy():
     assert "Ticket ·" in tk and ">Ver<" in tk or "Ver</button>" in tk
     # detalle tabs + Mi pick
     det = src("static", "detalle.js")
-    for tab in ("Mercados", "Líneas", "Props", "Alineaciones"):
+    for tab in ("Picks", "Mercado", "Simulación", "Estadísticas", "Lesiones y alineaciones", "Contexto y clima", "Props"):
         assert tab in det
     assert "compra el mejor" in det
     # IA es botón flotante (no vive en el nav); la nav es una píldora flotante

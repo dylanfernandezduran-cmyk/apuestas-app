@@ -1,0 +1,15 @@
+{
+ "fecha": "2026-11-25",
+ "muestra": {"temporadas": ["2025-26 (1231 juegos)", "2026-27 hasta 25 nov (261 juegos)"], "evaluados": 1335, "entrenamiento": "741 juegos antes del 15 feb 2026", "prueba": "594 juegos (411 de feb-abr 2026 + 183 de 2026-27)"},
+ "modelo_base": "SRS encogido (k=12) + localía + normal sigma 12.5 (el del app)",
+ "metodo": "walk-forward: cada juego usa sólo juegos previos; coeficientes por mínimos cuadrados sobre el margen en entrenamiento; Brier y log loss de P(gana local) en prueba",
+ "resultados": {
+  "base":       {"prueba_2026": [0.1774, 0.5355], "prueba_2027": [0.2142, 0.6185]},
+  "forma_rival_ajustada_10j": {"coef": 0.262, "prueba_2026": [0.1729, 0.5233], "prueba_2027": [0.2110, 0.6116], "decision": "SE QUEDA (mejora Brier y log loss en ambos)"},
+  "back_to_back": {"coef": -1.201, "prueba_2026": [0.1767, 0.5339], "prueba_2027": [0.2150, 0.6206], "decision": "FUERA (empeora 2026-27)"},
+  "dias_descanso": {"coef": 0.544, "prueba_2026": [0.1771, 0.5347], "prueba_2027": [0.2144, 0.6194], "decision": "FUERA (empeora 2026-27)"},
+  "bajas_minutos_titulares": {"coef": -2.967, "prueba_2026": [0.1639, 0.4945], "prueba_2027": [0.2195, 0.6313], "decision": "FUERA por ahora (mejora mucho en feb-abr 2026, cuando hay descansos de fin de temporada, pero empeora 2026-27)"},
+  "net_rating_por_posesion_ritmo_50pct": {"prueba_2026": [0.1770, 0.5344], "prueba_2027": [0.2136, 0.6178], "con_forma": "no agrega nada sobre forma (0.2113/0.6124 vs 0.2110/0.6116)", "decision": "FUERA del margen; se muestra como estadística"}
+ },
+ "nota": "Brier y log loss: menor es mejor. Bajas: minutos promedio (/48) de jugadores con >=20 min y >=5 juegos que no jugaron."
+}

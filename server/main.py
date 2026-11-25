@@ -289,6 +289,9 @@ async def game(league: str, eid: str):
             REC.record_analysis(r)
     except Exception:
         pass
+    from . import validation as VAL, advanced as ADV, consensus as CONS
+    VAL.attach(r, league, eid)
+    await asyncio.gather(ADV.attach(r, league), CONS.attach(r, league))
     return r
 
 @app.get("/api/props/{league}/{eid}")
