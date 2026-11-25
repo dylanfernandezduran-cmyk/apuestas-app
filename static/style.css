@@ -1015,3 +1015,31 @@ table.cal th,table.cal td{padding:5px 4px}
 .ob{min-width:0}.ob .op{white-space:normal;text-align:right;overflow-wrap:break-word}
 .ob.mside .op{max-width:100%}
 .ob .or{flex:0 1 auto;min-width:0;max-width:64%}.ob.mside{height:auto;min-height:44px;padding-top:6px;padding-bottom:4px}
+/* v43: probabilidad oficial NRNM, donas y brillo magenta suave */
+.glow{box-shadow:0 0 0 1px rgba(255,17,121,.18),0 0 18px -6px rgba(255,17,121,.45)}
+.ds{box-shadow:0 0 16px -10px rgba(255,17,121,.55)}
+.ofw{display:grid;gap:10px}
+.ofc{background:#0b0b0d;border:1px solid #2a0f1d;border-radius:14px;padding:10px 12px}
+.ofh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ofk{display:block;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 4px}
+.dn-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.dn{display:flex;flex-direction:column;align-items:center;min-width:96px;text-align:center}
+.dn b{font-size:12.5px;margin-top:2px;overflow-wrap:anywhere}.dn small{font-size:10.5px;color:#ff5aa5}
+.dn-s{width:84px;height:84px;filter:drop-shadow(0 0 6px rgba(255,17,121,.55))}
+.dn-bg{fill:none;stroke:#1d1d22;stroke-width:8}
+.dn-fg{fill:none;stroke:#FF1179;stroke-width:8;stroke-linecap:round}
+.dn-t{fill:#fff;font:700 14px ui-monospace,monospace}
+.ofr{display:flex;justify-content:space-between;font-size:13px;padding:2px 0;border-bottom:1px dashed #1c1c20}
+.ofv{margin-top:8px;font-size:13px;line-height:1.4}
+.vb-aprobado{background:rgba(255,17,121,.18);color:#ff5aa5;border:1px solid #ff1179}
+.vdims{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px}
+.vdim{background:#0b0b0d;border:1px solid #222;border-radius:10px;padding:6px 8px;min-width:0}
+.vdim small{display:block;font-size:10.5px;color:var(--mut)}.vdim b{font-size:15px}.vdim .sub{display:block;font-size:10.5px;overflow-wrap:anywhere}
+@media (max-width:380px){.vdims{grid-template-columns:1fr}}
+.glow-svg{filter:drop-shadow(0 0 5px rgba(255,17,121,.45))}
+.calc .ideal{stroke:#777;stroke-dasharray:4 4;stroke-width:1.2}.calc .cdot{fill:#FF1179}.calc path.up{fill:none;stroke:#FF1179;stroke-width:2}
+.calc .cb-n{fill:rgba(255,17,121,.28)}
+.lkw{display:flex;gap:10px;align-items:center;margin:6px 0 10px;flex-wrap:wrap}
+.lkg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;flex:1 1 200px;min-width:0}
+.lk{background:#0b0b0d;border:1px solid #2a0f1d;border-radius:10px;padding:6px 8px;box-shadow:0 0 12px -8px rgba(255,17,121,.6);min-width:0}
+.lk small{display:block;font-size:10.5px;color:var(--mut)}.lk b{font-size:15px}.lk .sub{display:block;font-size:10.5px}

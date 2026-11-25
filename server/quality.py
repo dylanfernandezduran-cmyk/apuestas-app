@@ -11,9 +11,9 @@ from . import core as CORE
 from . import model as M
 
 SIGNALS = (
-    ("modelo", "Modelo (pFinal)"),
+    ("modelo", "Modelo (probabilidad oficial NRNM)"),
     ("movimiento", "Movimiento de línea"),
-    ("rlm", "RLM / dinero inteligente"),
+    ("rlm", "RLM / dinero profesional"),
     ("tendencias", "Tendencias"),
     ("lesiones", "Lesiones y alineaciones"),
     ("fisico", "Contexto físico / clima"),
@@ -215,25 +215,28 @@ def ev_as_pct(ev):
 
 
 def _modelo(cand, pred):
+    """Dos conceptos separados: «Favorito deportivo» (probabilidad oficial) y «Valor» (EV al precio disponible)."""
     pf = cand.get("p_final")
     pnv = cand.get("p_nv")
     pm = cand.get("p_model")
     ev = cand.get("ev")
-    figs = dict(p_final=pf, p_nv=pnv, p_model=pm, ev=ev, edge=cand.get("edge"))
     w = ((pred or {}).get("winner") or {})
-    bits = [f"pFinal del pick {_pct(pf)}", f"modelo {_pct(pm)}", f"mercado s/vig {_pct(pnv)}"]
-    if ev is not None:
-        bits.append(f"EV {ev_as_pct(ev):+.1f}%")
-    if w.get("side") is not None:
-        bits.append(f"ganador (mismo pFinal del juego): {w['side']} ({_pct(w.get('p'))})")
     if pf is None:
-        return _sig("modelo", "sin_dato", "pFinal: sin dato", figs)
-    # a favor si este lado es el de mayor pFinal (o, en totales, pFinal > 0.5)
+        return _sig("modelo", "sin_dato", "Probabilidad oficial: sin dato", dict(p_final=pf, p_nv=pnv, p_model=pm, ev=ev, edge=cand.get("edge")))
     if cand.get("market") == "ML" and w.get("side"):
-        ok = cand.get("side") == w["side"]
+        fav = cand.get("side") == w["side"]
     else:
-        ok = float(pf) >= 0.5
-    return _sig("modelo", "a_favor" if ok else "en_contra", " · ".join(bits), figs)
+        fav = float(pf) >= 0.5
+    evp = ev_as_pct(ev) if ev is not None else None
+    val = evp is not None and evp > 0
+    figs = dict(p_final=pf, p_nv=pnv, p_model=pm, ev=ev, edge=cand.get("edge"), favorito=fav, valor=(val if evp is not None else None))
+    bits = [f"Favorito deportivo: {'sí' if fav else 'no'} (prob. oficial NRNM {_pct(pf)})",
+            f"Valor: {'EV+ ' + format(evp, '+.1f') + '%' if val else ('sin valor (EV ' + format(evp, '+.1f') + '%)' if evp is not None else 'sin cuota')}",
+            f"entradas: modelo {_pct(pm)} · mercado s/vig {_pct(pnv)}"]
+    if w.get("side") is not None:
+        bits.append(f"ganador del juego (misma prob. oficial): {w['side']} ({_pct(w.get('p'))})")
+    verd = "a_favor" if (fav and val) else ("mixto" if (fav or val) else "en_contra")
+    return _sig("modelo", verd, " · ".join(bits), figs)
 
 
 def _moves_for(out, cand):
@@ -387,11 +390,9 @@ def _rlm(cand, out):
             if t <= 100:
                 pass
             gap = m - t
-            if gap >= 10 and m >= 50:
-                return _sig("rlm", "a_favor", " · ".join(parts) + " · más dinero que tickets en este lado", figs)
-            if gap <= -10 and t >= 55:
-                return _sig("rlm", "a_favor", " · ".join(parts) + " · posible RLM (más tickets que dinero)", figs)
-            return _sig("rlm", "neutral", " · ".join(parts), figs)
+            if gap >= 15 and m >= 50:
+                return _sig("rlm", "a_favor", " · ".join(parts) + f" · dinero profesional: % dinero − % apuestas = +{gap:.0f} pp", figs)
+            return _sig("rlm", "neutral", " · ".join(parts) + " · sin RLM ni dinero − apuestas ≥ 15 pp: no se etiqueta como dinero profesional", figs)
         except (TypeError, ValueError):
             pass
     return _sig("rlm", "sin_dato", " · ".join(parts) or "% apuestas / % dinero / RLM: sin dato", figs)

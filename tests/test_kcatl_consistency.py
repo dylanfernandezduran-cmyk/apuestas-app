@@ -137,9 +137,9 @@ def test_modelo_distinguishes_pick_pfinal_from_winner():
     lean = dict(market="Spread", side="home", line=3.0, p_final=0.49, p_model=0.50, p_nv=0.52, ev=-4.3)
     sig = Q._modelo(lean, pred)
     detail = sig["detail"]
-    assert "pFinal del pick 49.0%" in detail
-    assert "ganador (mismo pFinal del juego): away (60.8%)" in detail
-    assert "pFinal 49.0%" not in detail.split("del pick")[0]  # no va suelto al inicio
+    assert "prob. oficial NRNM 49.0%" in detail and "Favorito deportivo: no" in detail and "Valor: sin valor" in detail
+    assert "ganador del juego (misma prob. oficial): away (60.8%)" in detail
+    assert "pFinal 49.0%" not in detail
     assert not C.analysis_winner_conflict(detail, pred)
     # el wording viejo sí se detecta
     legacy = "pFinal 49.0% · modelo 50.0% · mercado s/vig 52.0% · ganador pFinal: away (60.8%)"

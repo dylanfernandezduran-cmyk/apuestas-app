@@ -49,7 +49,7 @@ def _unit(odds_total_line, spread_line):
     if spread_line is not None: return "sets" if abs(spread_line) <= 2.5 else "juegos"
     return None
 
-def build(game, mdl, odds, mk, w=None):
+def build(game, mdl, odds, mk, w=None, off=None):
     sport = game.get("sport"); soccer = sport == "futbol"
     books = (mk or {}).get("books") or []
     cons = (mk or {}).get("consensus_nv") or {}
@@ -69,6 +69,10 @@ def build(game, mdl, odds, mk, w=None):
             price = best["price"] if best else None
             c = M._cand(mkt, side, o["label"], price, p_model, p_ref, w, line=line)
             o.update(p_model=c["p_model"], clipped=c["clipped"], p_final=c["p_final"], fair_txt=c["fair_txt"], edge=c["edge"], ev=c["ev"])
+            po = off(mkt, side, line) if off else None
+            if po is not None:          # Probabilidad oficial NRNM (la misma de EV, candados y picks)
+                c2 = M._cand(mkt, side, o["label"], price, po, p_ref, 1.0, line=line)
+                o.update(p_final=c2["p_final"], fair_txt=c2["fair_txt"], edge=c2["edge"], ev=c2["ev"], p_official=True)
         return o
 
     # ---------------- ML / 1X2

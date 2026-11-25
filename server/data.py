@@ -507,6 +507,9 @@ async def _analyze(league, eid):
             odds.setdefault("nv", {})["btts"] = dict(yes=nvb[0], no=nvb[1])
     if game["state"] == "pre":
         cands = M.build_candidates(mdl, odds, H["name"], A["name"])
+        from . import official as OFF
+        mdl_cal, cal_info = OFF.calibrate(mdl, cands, fam)
+        OFF.apply(cands, mdl_cal, fam)
         dec = M.decide(cands, mdl, H["name"], A["name"])
         conf = M.confidence(mdl, odds, flags, fam)
         M.apply_confidence(cands, conf)
@@ -520,10 +523,11 @@ async def _analyze(league, eid):
         p_view = Q.pfinal_view(out["picks"]["candidates"], mdl, odds, fam)
         out["p_view"] = p_view
         cor = out.pop("_cor", None)
-        out["pred"] = PRED.build(game, mdl, odds, fam, cor, picks=None, p_view=p_view)
+        out["pred"] = PRED.build(game, mdl_cal, odds, fam, cor, picks=None, p_view=p_view)
+        out["official"] = OFF.summary(mdl, mdl_cal, cal_info, out["picks"]["candidates"], M.blend_weight(mdl))
         if ST.ENABLED: ST.finalize(out["picks"], out["pred"])
-        Q.finalize(out, mdl, odds, fam, corners=cor, game=game)
-        out["probs"] = PR.build(game, mdl, odds, mk)
+        Q.finalize(out, mdl_cal, odds, fam, corners=cor, game=game)
+        out["probs"] = PR.build(game, mdl, odds, mk, off=OFF.lookup(out["picks"]["candidates"], mdl_cal, fam))
     else:
         out["picks"] = None
         gaps.append("Picks no disponibles: el juego ya empezó o terminó (las cuotas ya no son pre-juego)")

@@ -185,7 +185,7 @@ function dSplits(d){
   return ds('splits','% apuestas y % dinero',body,{right:tag2('Action Network'), info:`% apuestas = proporción de tickets; % dinero = proporción del monto apostado. Cubre las casas de EE. UU. que reporta la fuente, no el mercado total. Fuente: ${esc(mk.splits_src||'Action Network')} · ${tsFmt(mk.splits_ts)}.`});
 }
 
-// ---- 5. RLM y dinero inteligente
+// ---- 5. RLM y dinero profesional
 function dRlm(d){
   const mk=d.market, g=d.game; if(!mk) return '';
   const sg_=mk.signals||{}, names={ml:'Moneyline',spread:'Spread',total:'Total'};
@@ -193,11 +193,12 @@ function dRlm(d){
   const items=['ml','spread','total'].filter(m=>sg_[m]&&sg_[m].tickets).map(m=>{
     const s=sg_[m], pub=s.public_side, chips=[];
     if(s.rlm) chips.push(`<span class="tg2 k-p">RLM → ${lab(s.rlm_side)}</span>`);
-    else if(s.move_dir==='con') chips.push(`<span class="tg2">Línea con el público</span>`);
+    else if(s.move_dir==='con'||s.move_dir==='contra') chips.push(`<span class="tg2">Movimiento de línea</span>`);
     else chips.push(`<span class="tg2">Sin movimiento clave</span>`);
-    if(s.sharp_side) chips.push(`<span class="tg2 k-t">Dinero → ${lab(s.sharp_side)} +${s.sharp_diff} pp</span>`);
+    if(s.sharp_side) chips.push(`<span class="tg2 k-t">Dinero profesional → ${lab(s.sharp_side)} (dinero − apuestas +${s.sharp_diff} pp)</span>`);
+    if(!s.rlm&&!s.sharp_side) chips.push(`<span class="tg2 mut">Sin señal de dinero profesional</span>`);
     return `<div class="rl2"><div class="rl2t"><b>${names[m]}</b><span class="mt">${pub?`público: ${lab(pub)} ${s.tickets[pub]}%`:'sin lado público claro'}</span></div><div class="rl2c">${chips.join('')}</div>${s.move_text?`<div class="mt">${esc(s.move_text)}</div>`:''}</div>`; }).join('');
-  return ds('rlm','RLM y dinero inteligente',items,{right:tag2('Indicador'), info:'RLM (movimiento inverso de línea): el público (≥55% de tickets; ≥45% y mayoría en 3 vías) está de un lado pero la línea o el precio se mueve en su contra (≥0.25 pts o ≥1.5 pp s/vig entre apertura y actual). “Dinero” = el % de dinero supera al % de tickets por ≥10 pp en un lado. Son indicadores que a veces fallan; no garantizan resultado.'});
+  return ds('rlm','RLM y dinero profesional',items,{right:tag2('Indicador'), info:'RLM (movimiento inverso de línea): el público (≥55% de tickets; ≥45% y mayoría en 3 vías) está de un lado pero la línea o el precio se mueve en su contra (≥0.25 pts o ≥1.5 pp s/vig entre apertura y actual). «Dinero profesional» sólo se marca con RLM o si el % de dinero supera al % de apuestas por ≥15 pp; cualquier otro cambio es sólo «Movimiento de línea». Son indicadores que a veces fallan; no garantizan resultado.'});
 }
 
 // ---- 6/7. Movimiento de líneas y Cuotas actuales: ver movementSection / marketSection / oddsSection (app.js), envueltas con ds()
@@ -446,11 +447,11 @@ function dWhy(d){
 
 function dAnalisis(d){
   const an=d.analysis||(d.picks&&d.picks.analysis); if(!an||!an.signals||!an.signals.length) return '';
-  const V={a_favor:['✅','A favor','pos'],en_contra:['⚠️','En contra','neg'],mixto:['↔️','Mixto','amb'],neutral:['➖','Neutral','mut'],sin_dato:['🕳️','Sin dato','mut']};
+  const V={a_favor:['✅','Respalda el lado','pos'],en_contra:['⚠️','En contra del lado','neg'],mixto:['↔️','Mixto','amb'],neutral:['➖','Neutral','mut'],sin_dato:['🕳️','Sin dato','mut']};
   const am=o=>o==null?'sin dato':(o>0?'+'+o:String(o));
   const fig=s=>{
     const f=s.figures||{}, bits=[];
-    if(f.p_final!=null) bits.push('pFinal '+(f.p_final*100).toFixed(1)+'%');
+    if(f.p_final!=null) bits.push('prob. oficial '+(f.p_final*100).toFixed(1)+'%');
     if(f.p_model!=null) bits.push('modelo '+(f.p_model*100).toFixed(1)+'%');
     if(f.p_nv!=null) bits.push('mercado s/vig '+(f.p_nv*100).toFixed(1)+'%');
     if(f.ev!=null){ const evp=Math.abs(f.ev)<=1?f.ev*100:f.ev; bits.push('EV '+(evp>=0?'+':'')+evp.toFixed(1)+'%'); }
@@ -463,8 +464,9 @@ function dAnalisis(d){
     return bits.length?`<div class="an-fig mono">${bits.map(x=>esc(String(x))).join(' · ')}</div>`:'';
   };
   const rows=an.signals.map(s=>{
-    const v=V[s.verdict]||V.sin_dato;
-    return `<div class="an-row"><div class="an-h"><span class="${v[2]}">${v[0]} <b>${esc(s.label)}</b> · ${v[1]}</span></div>
+    const v=V[s.verdict]||V.sin_dato, F=s.figures||{};
+    const mv = s.key==='modelo'&&F.favorito!=null ? ` · <span class="tg2 ${F.favorito?'k-t':'mut'}">Favorito deportivo: ${F.favorito?'sí':'no'}</span> <span class="tg2 ${F.valor?'k-t':'k-p'}">Valor: ${F.valor?'EV+':'sin valor'}</span>` : ` · ${v[1]}`;
+    return `<div class="an-row"><div class="an-h"><span class="${s.key==='modelo'&&F.favorito!=null?'':v[2]}">${s.key==='modelo'&&F.favorito!=null?'':v[0]+' '}<b>${esc(s.label)}</b>${mv}</span></div>
       <div class="sub">${esc(s.detail||'sin dato')}</div>${fig(s)}</div>`;
   }).join('');
   const pk=d.picks||{}, pub=pk.published, why=pk.discard_reason;
@@ -477,7 +479,7 @@ function detailSections(d){
   const tn_=d.kind==='tennis';
   window.__D=d;
   const L=(typeof dVal==='function');
-  const picks=[L?dVal(d):'', dPicks(d), dProb(d), dCmp(d)].join('')||'<div class="card mut">Sin picks para este juego.</div>';
+  const picks=[(typeof dOfficial==='function'?dOfficial(d):''), L?dVal(d):'', dPicks(d), dProb(d), dCmp(d)].join('')||'<div class="card mut">Sin picks para este juego.</div>';
   const mercado=[(marketSection(d)||((d.odds&&d.odds.src==='espn')?oddsSection(d):'')), dSplits(d), L?dHand(d):'', dRlm(d), movementSection(d)].join('')||'<div class="card mut">Sin mercado publicado para este juego.</div>';
   const sim=(L?dSim(d):'')||'<div class="card mut">Sin modelo suficiente para simular este juego.</div>';
   const stats=[dPitch(d), dTrends(d), dRecent(d), dH2h(d), dKey(d), dModel(d), L?dAdv(d):''].join('')||'<div class="card mut">Sin estadísticas.</div>';

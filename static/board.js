@@ -50,6 +50,17 @@ function nbCal(c){
   return `<details class="nb-cal"><summary>Rendimiento del modelo · calibración (Brier, log loss, cubetas)</summary>
     ${bk}${tb('Total',[c.overall])}${tb('Por deporte',c.by_sport||[])}${tb('Por mercado',c.by_market||[])}<p class="nb-foot">${esc(c.note||'')}</p></details>`;
 }
+function nbCalChart(c){
+  const B=((c||{}).buckets||[]).filter(b=>b.n>0&&b.pred!=null&&b.real!=null); if(!B.length) return '';
+  const W=300,H=170,P=26, lo=Math.max(0,Math.floor(Math.min(...B.map(b=>Math.min(b.pred,b.real)))/10)*10-0), hi=Math.min(100,Math.ceil(Math.max(...B.map(b=>Math.max(b.pred,b.real)))/10)*10), rg=(hi-lo)||10;
+  const X=v=>P+(v-lo)/rg*(W-P-6), Y=v=>H-P-(v-lo)/rg*(H-P-6), mx=Math.max(...B.map(b=>b.n));
+  const pth=B.map((b,i)=>`${i?'L':'M'}${X(b.pred).toFixed(1)},${Y(b.real).toFixed(1)}`).join(' ');
+  const bars=B.map(b=>`<rect x="${(X(b.pred)-5).toFixed(1)}" y="${(H-P-(b.n/mx)*28).toFixed(1)}" width="10" height="${((b.n/mx)*28).toFixed(1)}" class="cb-n"><title>${esc(b.label)}: ${b.n} picks</title></rect>`).join('');
+  return `<div class="cal-t">Calibración: probabilidad predicha vs acierto real</div><svg viewBox="0 0 ${W} ${H}" class="lab-svg glow-svg calc" role="img" aria-label="Gráfica de calibración">
+    ${bars}<line x1="${X(lo)}" y1="${Y(lo)}" x2="${X(hi)}" y2="${Y(hi)}" class="ideal"/><path d="${pth}" class="up"/>${B.map(b=>`<circle cx="${X(b.pred).toFixed(1)}" cy="${Y(b.real).toFixed(1)}" r="4" class="cdot"><title>${esc(b.label)} · predicha ${b.pred.toFixed(1)}% · real ${b.real.toFixed(1)}% · n ${b.n}</title></circle>`).join('')}
+    <text x="${P}" y="${H-8}" class="ax">${lo}%</text><text x="${W-6}" y="${H-8}" class="ax" text-anchor="end">${hi}% predicha</text><text x="2" y="${Y(hi)+4}" class="ax">${hi}%</text></svg>
+    <p class="nb-foot">Línea punteada = calibración ideal (predicha = real). Puntos debajo = el modelo sobreestima. Barras = picks por cubeta.</p>`;
+}
 function nbLab(r){
   const D=r.daily||[], M=r.monthly||[]; if(!D.length&&!M.length) return '';
   let cum=0; const pts=D.map(x=>(cum+=x.units, {d:x.day||x.month, c:cum, n:x.n}));
@@ -57,10 +68,18 @@ function nbLab(r){
   const X=i=>pts.length>1?i*(W-8)/(pts.length-1)+4:W/2, Y=v=>H-6-(v-lo)/rg*(H-12);
   const path=pts.map((p,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(p.c).toFixed(1)}`).join(' ');
   const last=pts.length?pts[pts.length-1].c:0;
-  const chart=pts.length>1?`<svg viewBox="0 0 ${W} ${H+12}" class="lab-svg" role="img" aria-label="Unidades acumuladas"><line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="z"/><path d="${path}" class="${last>=0?'up':'dn'}"/>${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.c)}" r="5" class="hit"><title>${p.d}: ${nbSign(p.c,2,'u')} (${p.n} picks)</title></circle>`).join('')}<text x="2" y="${H+10}" class="ax">${esc(pts[0].d)}</text><text x="${W-2}" y="${H+10}" class="ax" text-anchor="end">${esc(pts[pts.length-1].d)}</text></svg>`:'';
+  const area=pts.length>1?`${path} L${X(pts.length-1).toFixed(1)},${Y(0).toFixed(1)} L${X(0).toFixed(1)},${Y(0).toFixed(1)} Z`:'';
+  const chart=pts.length>1?`<svg viewBox="0 0 ${W} ${H+12}" class="lab-svg glow-svg" role="img" aria-label="Unidades acumuladas"><defs><linearGradient id="labg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF1179" stop-opacity=".55"/><stop offset="1" stop-color="#FF1179" stop-opacity="0"/></linearGradient></defs><path d="${area}" class="ar" style="fill:url(#labg);stroke:none"/><line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="z"/><path d="${path}" class="${last>=0?'up':'dn'}"/>${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.c)}" r="5" class="hit"><title>${p.d}: ${nbSign(p.c,2,'u')} (${p.n} picks)</title></circle>`).join('')}<text x="2" y="${H+10}" class="ax">${esc(pts[0].d)}</text><text x="${W-2}" y="${H+10}" class="ax" text-anchor="end">${esc(pts[pts.length-1].d)}</text></svg>`:'';
   const mt=M.length?`<div class="cal-w"><table class="cal"><tr><th>Mes</th><th>n</th><th>G-P-E</th><th>Acierto</th><th>Unid.</th><th>ROI</th></tr>${M.map(m=>`<tr><td>${esc(m.month)}</td><td class="mono">${m.n}</td><td class="mono">${m.W}-${m.L}${m.P?'-'+m.P:''}</td><td class="mono ${m.hit>=52.4?'pos':'neg'}">${m.hit==null?'—':m.hit.toFixed(1)+'%'}</td><td class="mono ${m.units>0?'pos':'neg'}">${nbSign(m.units,2,'u')}</td><td class="mono ${m.roi>0?'pos':'neg'}">${m.roi==null?'—':nbSign(m.roi,1,'%')}</td></tr>`).join('')}</table></div>`:'';
   const pl=r.parlays||{};
-  return `<div class="nb-lab"><div class="nb-h2">Performance Lab <small class="mut">unidades acumuladas · todos los picks con cuota</small></div>${chart}${mt}
+  // máximo drawdown (pico → valle de las unidades acumuladas, por día)
+  let pk=0, mdd=0; pts.forEach(p=>{ pk=Math.max(pk,p.c); mdd=Math.min(mdd,p.c-pk); });
+  const co=(r.calibration||{}).overall||{}, mn=r.main||{};
+  const dn=(typeof donut==='function'&&co.hit_pct!=null)?donut(co.hit_pct/100,'Acierto',co.n+' calificados'):'';
+  const kp=(l,v,sub,c='')=>`<div class="lk"><small>${l}</small><b class="mono ${c}">${v}</b>${sub?`<span class="sub">${sub}</span>`:''}</div>`;
+  const f3=x=>x==null?SD:x.toFixed(3);
+  const kpis=`<div class="lkw">${dn}<div class="lkg">${kp('Brier',f3(co.brier),'mercado '+f3(co.brier_market),co.brier!=null&&co.brier_market!=null?(co.brier<=co.brier_market?'pos':'neg'):'')}${kp('Log loss',f3(co.logloss),'menor = mejor')}${kp('Máx. drawdown',pts.length?nbSign(mdd,2,'u'):SD,'pico → valle, por día',mdd<0?'neg':'')}${kp('CLV',mn.clv_avg==null?SD:nbSign(mn.clv_avg,2,'%'),'pick principal',mn.clv_avg>0?'pos':mn.clv_avg<0?'neg':'')}</div></div>`;
+  return `<div class="nb-lab"><div class="nb-h2">Performance Lab <small class="mut">unidades acumuladas · todos los picks con cuota</small></div>${kpis}${chart}${nbCalChart(r.calibration)}${mt}
     <div class="sub">Parlays: ${pl.n?`${pl.W}-${pl.L} · ${nbSign(pl.units,2,'u')} · ROI ${nbSign(pl.roi,1,'%')}`:'sin tickets calificados todavía'} · Props: sin picks de props calificados en el récord todavía.</div></div>`;
 }
 function nbRec(r){

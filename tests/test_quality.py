@@ -236,8 +236,8 @@ def test_modelo_pick_pfinal_label_is_not_the_game_winner():
                 score=dict(home=22, away=24), spread=dict(side="home", line=3.0),
                 total=dict(side="under", line=47.5))
     sig = Q._modelo(_cand(market="Spread", side="home", line=3.0, p_final=.49, p_model=.50, p_nv=.52, ev=-4.3), pred)
-    assert "pFinal del pick 49.0%" in sig["detail"]
-    assert "ganador (mismo pFinal del juego): away (60.8%)" in sig["detail"]
+    assert "prob. oficial NRNM 49.0%" in sig["detail"]
+    assert "ganador del juego (misma prob. oficial): away (60.8%)" in sig["detail"]
 
 
 def test_apply_clamps_alta_on_pass_negative_ev():

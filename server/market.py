@@ -32,7 +32,7 @@ PIN_NAME = {"nba": "NBA", "nfl": "NFL", "nhl": "NHL", "mlb": "MLB", "mex.1": "Me
             "concacaf.nations.league": "CONCACAF - Nations League",
             "fifa.friendly": "International - Friendlies"}
 
-THR_MAJ2, THR_MAJ3, THR_MOVE_PP, THR_SHARP = 55, 45, 1.5, 10
+THR_MAJ2, THR_MAJ3, THR_MOVE_PP, THR_SHARP = 55, 45, 1.5, 15   # dinero profesional sólo con RLM o % dinero − % apuestas ≥ 15 pp
 
 
 def odds_ttl(base):
@@ -543,10 +543,10 @@ def cand_signals(c, mk):
             if s["rlm_side"] == side: out["tags"].append(("rlm_for", "RLM a favor: línea se mueve contra el público hacia este lado")); score_pos += 1
             elif s["public_side"] == side: out["tags"].append(("rlm_against", "RLM en contra: este es el lado público y la línea se mueve en su contra")); score_neg += 1
         elif s.get("move_dir") == "con" and s["public_side"] == side:
-            out["tags"].append(("move_with", "Línea se mueve con el público en este lado"))
+            out["tags"].append(("move_with", "Movimiento de línea (con el público; no es dinero profesional)"))
         if s.get("sharp_side"):
-            if s["sharp_side"] == side: out["tags"].append(("sharp_for", f"Dinero > tickets (+{s['sharp_diff']} pp): lado con dinero 'más grande'")); score_pos += 1
-            else: out["tags"].append(("sharp_against", f"El dinero > tickets está en el lado contrario (+{s['sharp_diff']} pp)")); score_neg += 1
+            if s["sharp_side"] == side: out["tags"].append(("sharp_for", f"Dinero profesional: % dinero − % apuestas = +{s['sharp_diff']} pp en este lado")); score_pos += 1
+            else: out["tags"].append(("sharp_against", f"Dinero profesional en el lado contrario (% dinero − % apuestas = +{s['sharp_diff']} pp)")); score_neg += 1
         out["verdict"] = ("mixto" if score_pos and score_neg else "a_favor" if score_pos else "en_contra" if score_neg else "neutral")
     # mejor precio a la misma línea
     best = None

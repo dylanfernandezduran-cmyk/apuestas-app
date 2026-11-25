@@ -6,7 +6,11 @@ function dVal(d){
   const bar = q ? `<div class="dq"><div class="dq-h"><span>Calidad de datos</span><b class="mono">${q.score}/100</b></div><div class="dq-b"><i style="width:${q.score}%"></i></div>
     <div class="dq-c">${q.checks.map(c=>`<span class="${c.ok?'ok':'no'}">${c.ok?'✓':'✕'} ${esc(c.label)}${c.detail?' · '+esc(c.detail):''}</span>`).join('')}</div>
     ${q.sigma_eff?`<div class="sub">Incertidumbre del margen (σ efectiva): ±${q.sigma_eff} pts</div>`:''}</div>` : '';
-  return ds('val','Validación del pick', `${v?`<div class="vrow">${valBadge(v.state)}<span class="sub">${esc((v.reasons||[]).join(' · '))}</span></div>`:''}${bar}`,
+  const l=(d.picks||{}).lean||{}, w=((d.pred||{}).winner)||{};
+  const fav=l.market==='ML'?(w.side?l.side===w.side:l.p_final>=.5):l.p_final>=.5;
+  const dim=(t,val,txt,cls)=>`<div class="vdim"><small>${t}</small><b class="mono ${cls||''}">${val}</b><span class="sub">${txt}</span></div>`;
+  const dims = l.p_final!=null ? `<div class="vdims">${q?dim('Calidad de datos',q.score+'/100',q.level==='alta'?'Alta':q.level==='media'?'Media':'Baja',q.score>=70?'k-t':q.score>=40?'k-a':'k-p'):''}${dim('Probabilidad',(l.p_final*100).toFixed(1)+'%',(fav?'Favorito deportivo':'No es el favorito')+' · '+esc(l.label||''),fav?'k-t':'mut')}${dim('Rentabilidad',l.ev==null?SD:(l.ev>0?'+':'')+l.ev.toFixed(1)+'% EV',l.ev>0?'Con valor':'Sin valor al precio disponible',l.ev>0?'k-t':'k-p')}</div>` : '';
+  return ds('val','Validación del pick', `${dims}${v?`<div class="vrow">${valBadge(v.state)}<span class="sub">${esc((v.reasons||[]).join(' · '))}</span></div>`:''}${bar}`,
     {info:'VALIDADO: EV>0, datos completos y confianza Media/Alta. INCIERTO: divergencia alta, datos incompletos o confianza baja. ESPERAR: alineación o jugador clave sin confirmar. PASAR: sin cuota, sin valor (EV≤0) o datos insuficientes.'});
 }
 // ---- Monte Carlo
@@ -14,9 +18,11 @@ function mbRng(seed){ let a=seed>>>0; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t
 function mbNorm(r){ let u=0,v=0; while(!u) u=r(); while(!v) v=r(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 function mbPois(r,l){ if(l<=0) return 0; if(l>30) return Math.max(0,Math.round(l+Math.sqrt(l)*mbNorm(r))); const L=Math.exp(-l); let k=0,p=1; do{ k++; p*=r(); }while(p>L); return k-1; }
 function simRun(d, o){
-  const m=d.model||{}, sp=(d.game||{}).sport, N=20000, r=mbRng(20261125);
+  const cal=(d.official||{}).cal, sp=(d.game||{}).sport, N=20000, r=mbRng(20261125);
+  // centrada en la Probabilidad oficial NRNM: medias calibradas (misma distribución que el modelo oficial)
+  const m=cal?Object.assign({},d.model||{},{exp_margin:cal.exp_margin,exp_total:cal.exp_total,lam_home:cal.kind==='poisson'?cal.lam_home:null,lam_away:cal.kind==='poisson'?cal.lam_away:null,sigma:cal.sigma||(d.model||{}).sigma,tsigma:cal.tsigma||(d.model||{}).tsigma}):(d.model||{});
   const pace=o.pace||1, eff=o.eff||0;
-  const pois = sp==='nhl'||sp==='mlb'||sp==='futbol'||m.lam_home!=null;
+  const pois = cal ? cal.kind==='poisson' : (sp==='nhl'||sp==='mlb'||sp==='futbol'||m.lam_home!=null);
   let lh=m.lam_home, la=m.lam_away;
   if(pois && (lh==null||la==null)){ const T=(m.exp_total||0)*pace, M=(m.exp_margin||0)+eff; lh=Math.max(.05,(T+M)/2); la=Math.max(.05,(T-M)/2); }
   else if(pois){ lh*=pace; la*=pace; }
@@ -32,7 +38,7 @@ function simRun(d, o){
     if(sLine!=null){ const x=mg+sLine; if(Math.abs(x)<1e-9) cpush++; else if(x>0) cov++; }
     if(tLine!=null){ if(Math.abs(t-tLine)<1e-9) opush++; else if(t>tLine) ov++; }
   }
-  return {N, pois, h:sh/N, a:sa/N, hw:hw/N, aw:aw/N, dr:dr/N, cov:sLine!=null?cov/N:null, cpush:cpush/N, ov:tLine!=null?ov/N:null, opush:opush/N, sLine, tLine, tots, mars};
+  return {N, pois, cal:!!cal, h:sh/N, a:sa/N, hw:hw/N, aw:aw/N, dr:dr/N, cov:sLine!=null?cov/N:null, cpush:cpush/N, ov:tLine!=null?ov/N:null, opush:opush/N, sLine, tLine, tots, mars};
 }
 function simHist(arr, line, lab){
   if(!arr.length) return '';
@@ -56,13 +62,13 @@ function simHtml(d, o){
   return `<div class="sim-sc"><div><span class="sub">${esc(an)}</span><b class="mono">${R.a.toFixed(dec)}</b></div><span class="sub">marcador proyectado</span><div><span class="sub">${esc(hn)}</span><b class="mono">${R.h.toFixed(dec)}</b></div></div>
     ${lines.join('')}
     ${simHist(R.tots,R.tLine,'Distribución del total')}${simHist(R.mars,R.sLine!=null?-R.sLine:null,'Distribución del margen (local − visita)')}
-    <div class="sub">${R.N.toLocaleString('es-MX')} simulaciones · ${R.pois?'Poisson por equipo':'normal (margen y total)'} con medias y varianzas del modelo NRNM${R.pois&&!soc?'; en empate se va a tiempo extra (no modelado)':''}. «mkt» = prob. del mercado sin vig. Es una estimación, no garantía.</div>`;
+    <div class="sub">${R.N.toLocaleString('es-MX')} simulaciones · ${R.pois?'Poisson por equipo':'normal (margen y total)'} con ${R.cal?'medias <b>calibradas a la Probabilidad oficial NRNM</b> (margen '+((d.official.cal.exp_margin>0?'+':'')+d.official.cal.exp_margin.toFixed(1))+', total '+d.official.cal.exp_total.toFixed(1)+'; modelo crudo '+(d.official.cal.raw_margin!=null?((d.official.cal.raw_margin>0?'+':'')+d.official.cal.raw_margin.toFixed(1)):'—')+' / '+(d.official.cal.raw_total!=null?d.official.cal.raw_total.toFixed(1):'—')+'), por eso no contradice a la probabilidad oficial':'medias y varianzas del modelo NRNM'}${R.pois&&!soc?'; en empate se va a tiempo extra (no modelado)':''}. «mkt» = prob. del mercado sin vig. Es una estimación, no garantía.</div>`;
 }
 function dSim(d){
   const m=d.model; if(!m||(m.exp_total==null&&m.lam_home==null)) return '';
   const nba=(d.game||{}).sport==='nba';
   const ctr=nba?`<div class="sim-ctl"><label>Ritmo <input type="range" min="-10" max="10" step="1" value="0" data-sim="pace"><output>0%</output></label><label>Eficiencia local <input type="range" min="-6" max="6" step="0.5" value="0" data-sim="eff"><output>0</output></label><button type="button" class="pill" data-sim="reset">Restablecer</button></div>`:'';
-  return ds('sim','Simulación Monte Carlo', `${ctr}<div id="sim-out">${simHtml(d,{})}</div>`, {info:'Simula el juego 20,000 veces con la media y la desviación del modelo. En NBA puedes mover el ritmo (± % de posesiones → total) y la eficiencia del local (± puntos de margen) para ver el «qué pasaría si».'});
+  return ds('sim','Simulación Monte Carlo', `${ctr}<div id="sim-out">${simHtml(d,{})}</div>`, {info:'Simula el juego 20,000 veces con la distribución calibrada a la Probabilidad oficial NRNM (la misma de EV, candados y picks). En NBA puedes mover el ritmo (± % de posesiones → total) y la eficiencia del local (± puntos de margen) para ver el «qué pasaría si».'});
 }
 document.addEventListener('input', e=>{
   const s=e.target.closest('[data-sim]'); if(!s || !window.__D) return;
@@ -90,4 +96,53 @@ function dHand(d){
   const g=d.game||{}, nm=s=>esc((g[s]||{}).abbr||(g[s]||{}).name||s);
   const row=s=>`<div class="sim-r"><span>${nm(s)} ${esc(c[s].line||'')}</span><div class="pbar"><i style="width:${c[s].pct}%"></i></div><b class="mono">${c[s].pct}%</b><small class="mut mono">${c[s].picks!=null?c[s].picks+' picks':''}</small></div>`;
   return ds('hcp','Consenso de handicappers', `${row('away')}${row('home')}<div class="sub">Fuente: <a href="${esc(c.src_url)}" target="_blank" rel="noopener">${esc(c.src)}</a>${c.n?` · ${c.n} picks`:''}. ${esc(c.note||'')}</div>`);
+}
+
+// ---- Probabilidad oficial NRNM por mercado (una sola probabilidad; las demás son entradas)
+function donut(p, lab, sub){
+  const v=p==null?0:Math.max(0,Math.min(1,p)), R=34, C=2*Math.PI*R;
+  return `<div class="dn"><svg viewBox="0 0 84 84" class="dn-s" role="img" aria-label="${esc(lab)} ${p==null?'sin dato':(v*100).toFixed(1)+'%'}"><circle cx="42" cy="42" r="${R}" class="dn-bg"/><circle cx="42" cy="42" r="${R}" class="dn-fg" stroke-dasharray="${(v*C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 42 42)"/><text x="42" y="46" text-anchor="middle" class="dn-t">${p==null?'—':(v*100).toFixed(1)+'%'}</text></svg><b>${esc(lab)}</b>${sub?`<small>${sub}</small>`:''}</div>`;
+}
+const amFromP = p => p==null||p<=0||p>=1 ? null : (p>=.5 ? -Math.round(100*p/(1-p)) : Math.round(100*(1-p)/p));
+const amTxt = v => v==null?SD:(v>0?'+'+v:''+v);
+function impAm(o){ if(o==null) return null; return o<0? -o/(-o+100) : 100/(o+100); }
+function dOfficial(d){
+  const O=d.official, P=d.picks, g=d.game; if(!O||!P||!P.candidates||g.state!=='pre') return '';
+  const R=(d.model&&(d.model.exp_total!=null||d.model.lam_home!=null))?simRun(d,{}):null;
+  const nm=s=>s==='over'?'Más':s==='under'?'Menos':s==='draw'?'Empate':esc(tAbbr(g[s]));
+  const pc=x=>x==null?SD:(x*100).toFixed(1)+'%';
+  const mk=[['ML','Ganador (moneyline)'],['Spread','Hándicap'],['Total','Total']];
+  const lean=P.lean||{}, val=d.validation||{};
+  const cards=mk.map(([k,ttl])=>{
+    const cs=P.candidates.filter(c=>c.market===k&&c.p_final!=null); if(!cs.length) return '';
+    const best=cs.slice().sort((a,b)=>(b.ev??-999)-(a.ev??-999))[0];
+    const two=cs.slice().sort((a,b)=>({home:0,over:0,draw:1,away:2,under:2})[a.side]-({home:0,over:0,draw:1,away:2,under:2})[b.side]);
+    const lbl=c=>k==='ML'?nm(c.side):k==='Spread'?`${nm(c.side)} ${c.line>0?'+':''}${c.line}`:`${nm(c.side)} de ${c.line}`;
+    const fav=cs.slice().sort((a,b)=>b.p_final-a.p_final)[0];
+    let sim=null;
+    if(R){ if(k==='ML') sim=best.side==='home'?R.hw/((R.hw+R.aw+R.dr)||1):best.side==='away'?R.aw:R.dr;
+      else if(k==='Spread'&&R.cov!=null&&R.sLine===(best.side==='home'?best.line:-best.line)){ const ch=R.cov/((1-R.cpush)||1); sim=best.side==='home'?ch:1-ch; }
+      else if(k==='Total'&&R.ov!=null&&R.tLine===best.line){ const ov=R.ov/((1-R.opush)||1); sim=best.side==='over'?ov:1-ov; } }
+    const imp=impAm(best.price), edge=imp==null?null:(best.p_final-imp)*100, fair=amFromP(best.p_final);
+    const isLean=lean.market===best.market&&lean.side===best.side&&lean.line===best.line;
+    const isFav=best===fav, hasVal=best.ev!=null&&best.ev>0;
+    const st=isLean&&P.approved?'APROBADO':(hasVal&&val.state==='ESPERAR'?'ESPERAR':'PASAR');
+    const locks=isLean&&!P.approved?(P.locks||[]).map(x=>x.reason).filter(Boolean).join('; '):'';
+    const FV=k==='ML'?'Favorito deportivo':'Lado más probable', NF=k==='ML'?'No es el favorito deportivo':'No es el lado más probable';
+    const why=(isFav?(hasVal?FV+' y con valor al precio disponible.':FV+', pero sin valor al precio disponible.'):(hasVal?NF+', pero tiene valor al precio disponible.':NF+' y no tiene valor al precio disponible.'))
+      +(st==='APROBADO'?' Pasa todos los candados.':st==='ESPERAR'?' Esperar: '+(val.reasons||[]).join('; '):(locks?' 🔒 '+locks:(hasVal&&!isLean?' No es el pick principal del juego.':'')));
+    const vtg=st==='APROBADO'?'vb-aprobado':st==='ESPERAR'?'vb-esperar':'vb-pasar';
+    const cell=(k2,v,c='')=>`<div class="pc"><small>${k2}</small><b class="mono ${c}">${v}</b></div>`;
+    return `<div class="ofc glow"><div class="ofh"><b>${ttl}</b><span class="vb ${vtg}">${st}</span></div>
+      <div class="ofd"><small class="ofk">Probabilidad final</small><div class="dn-row">${two.map(c=>donut(c.p_final,lbl(c),c===best?'evaluado':'')).join('')}</div></div>
+      <div class="ofi"><small class="ofk">Consenso de modelos (entradas, no se suman aparte)</small>
+        <div class="ofr"><span>Modelo estadístico</span><b class="mono">${pc(best.p_model_raw!=null?best.p_model_raw:best.p_model)}</b></div>
+        <div class="ofr"><span>Monte Carlo (calibrado)</span><b class="mono">${pc(sim)}</b></div>
+        <div class="ofr"><span>Mercado sin vig</span><b class="mono">${pc(best.p_nv)}</b></div></div>
+      <div class="pcs">${cell('Momio disponible',esc(best.price_txt||SD))}${cell('Momio justo',amTxt(fair))}${cell('Edge',edge==null?SD:(edge>0?'+':'')+edge.toFixed(2)+' pp',edge>0?'k-t':'k-p')}${cell('ROI esperado',best.ev==null?SD:(best.ev>0?'+':'')+best.ev.toFixed(1)+'%',best.ev>0?'k-t':'k-p')}</div>
+      <div class="ofv"><small class="ofk">Veredicto NRNM · ${esc(lbl(best))}</small><div>${esc(why)}</div></div></div>`;
+  }).join('');
+  if(!cards) return '';
+  return ds('oficial','Probabilidad oficial NRNM',`<div class="ofw">${cards}</div><div class="sub">${esc(O.explain||'')} Edge = prob. final − prob. implícita del momio disponible. ROI esperado = prob. final × momio decimal − 1.</div>`,
+    {info:'Una sola probabilidad por mercado: es la que usan EV, candados, picks, parlay y chat. Modelo estadístico, Monte Carlo y mercado sin vig se muestran sólo como entradas. «Favorito deportivo» = mayor probabilidad; «Valor» = EV positivo al momio disponible. Son conceptos distintos.'});
 }

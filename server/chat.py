@@ -36,6 +36,7 @@ SYSTEM = (
     "6. En parlays avisa que el EV es un tope y que las piernas no son independientes.\n"
     "7. Si la persona parece perseguir pérdidas o subir el stake por encima de lo planeado, sugiere pausar y bajar el monto.\n"
     "Sólo llama «pick» o «recomendación» a lo que tenga aprobado=true (pasó TODOS los candados). Si aprobado=false, preséntalo como «Lado del modelo», con su EV y el motivo_bloqueo; nunca como recomendación. Días sin picks aprobados son válidos.\n"
+    "Usa UNA sola probabilidad por mercado: la «Probabilidad oficial NRNM» (p_final). El modelo crudo, el mercado sin vig y la simulación son sólo entradas; no los presentes como probabilidades rivales. Separa «Favorito deportivo» (mayor probabilidad) de «Valor» (EV>0 al momio disponible): un favorito puede no tener valor. Sólo habla de dinero profesional/sharp con RLM o % dinero − % apuestas ≥ 15 pp; si no, di «Movimiento de línea».\n"
     "Nunca contradigas la predicción ni el pick registrado del juego. Recomienda primero PICK y luego LEAN. PASS/SIN_LINEA no son recomendación. No menciones ningún «filtro estricto».\n"
     "8. El ganador del juego es consistencia.ganador_pfinal (mismo pFinal de la carta). "
     "El pFinal del pick (hándicap/total) NO es el ganador. Si consistencia.contradicciones no está vacío, dilo y quédate con la predicción. "
