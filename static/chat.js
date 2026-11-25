@@ -547,8 +547,8 @@ function chRender(){
   const _bk=typeof BK==='function'?BK():{bankroll:'',unit_pct:1};
   const sug=['Picks que concuerdan','Props NBA','Alineaciones','Armar ticket'].concat(chCurGame()?['Lesiones de este juego','Props de este juego']:[]);
   p.innerHTML=`<div class="ch-h"><b>Analista NRNM · datos reales</b><span>IA con datos reales</span><button type="button" class="ch-x" aria-label="Cerrar">✕</button></div>
-    <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):'<div class="ch-a">Hola, pregúntame por picks, un equipo, lesiones, props o el récord. Uso sólo los datos de la app.</div>'}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
-    <div class="ch-s">${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>
+    <div class="ch-m" id="chm">${CH.msgs.length?CH.msgs.map(m=>`<div class="ch-${m.r}">${m.h}${m.s?`<small>${m.s}</small>`:''}</div>`).join(''):`<div class="ch-wel"><div class="ch-wel-t">¿Qué analizamos hoy?</div><div class="ch-wel-s">Respondo sólo con datos reales de la app: picks, líneas, lesiones, alineaciones, props y récord.</div><div class="ch-wel-g">${['Picks que concuerdan','Mejor pick de hoy','Récord del modelo','Picks NBA hoy','Props NBA','Armar ticket'].map(x=>`<button type="button" class="ch-sg">${esc(x)}</button>`).join('')}</div></div>`}${CH.busy?'<div class="ch-a ch-dots"><i></i><i></i><i></i></div>':''}</div>
+    <div class="ch-s"${CH.msgs.length?'':' hidden'}>${sug.map(s=>`<button type="button" class="ch-sg">${esc(s)}</button>`).join('')}</div>
     <div class="ch-bk"><label>Bankroll <input id="ch-bk" type="number" min="0" step="1" value="${_bk.bankroll||''}" placeholder="opcional"></label>
     <label>1u % <input id="ch-u" type="number" min="0.1" max="5" step="0.1" value="${_bk.unit_pct}"></label></div>
     <form class="ch-f"><input id="chi" type="text" autocomplete="off" placeholder="Escribe tu pregunta…" maxlength="400"><button type="submit" aria-label="Enviar">➤</button></form>`;

@@ -146,7 +146,7 @@ def test_layout_inicio_y_picks_por_deporte_e2e():
     rec_txt = o.get("hm_rec_text") or " ".join(o.get("texto_inicio_tiene") or [])
     assert "Récord" in rec_txt or "Record" in rec_txt                                      # resumen de récord en Inicio
     assert "Bajas confirmadas" not in (o.get("texto_inicio_tiene") or []) and "Bajas confirmadas" not in rec_txt
-    assert o["nav"] == ["⚾ MLB", "🏈 NFL", "🏀 NBA", "🏒 NHL", "⚽ Fútbol", "🎾 Tenis"] or [x.replace("\n", " ") for x in o["nav"]] == ["⚾ MLB", "🏈 NFL", "🏀 NBA", "🏒 NHL", "⚽ Fútbol", "🎾 Tenis"]
+    assert [x.replace("\n", " ").strip() for x in o["nav"]] == ["MLB", "NFL", "NBA", "NHL", "Fútbol", "Tenis"]   # íconos SVG propios + nombre
     assert o["nav_href"] == [f"#/deporte/{k}" for k in ("mlb", "nfl", "nba", "nhl", "futbol", "tenis")] and o["tap_nfl"] == "#/deporte/nfl"
     assert o["nav_estilo"]["bw"] == "0px" and o["nav_estilo"]["bg"] in ("rgba(0, 0, 0, 0)", "transparent") and o["nav_estilo"]["sh"] == "none"   # sin cajas
     assert o["nav_vivo"] == ["nba"] and o["rec_tab"] is True                           # punto de "en vivo"; la pestaña Récord sigue

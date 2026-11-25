@@ -144,6 +144,7 @@ function carPatch(root, games){
     tr.innerHTML=games.map(g=>`<div class="car-slide" data-gid="${esc(g.id)}">${liveRowHtml(g)}</div>`).join('');
     const k=Math.max(0,want.indexOf(curId));
     tr.scrollLeft=k*tr.clientWidth;
+    { const nv=root.querySelector('.car-nav'); if(nv) nv.classList.toggle('many', games.length>6); }
     root.querySelector('.car-dots').innerHTML=games.map((g,j)=>`<button type="button" data-i="${j}" aria-label="Juego ${j+1} de ${games.length}"></button>`).join('');
     root.querySelector('.car-nav').classList.toggle('one',games.length<2);
   }
@@ -182,7 +183,15 @@ function srchInit(root){
 
 // ---------- navegación minimalista de deportes (inicio): emoji arriba, nombre abajo, sin cajas
 const SNAV_ORDER = ['mlb','nfl','nba','nhl','futbol','tenis'];
-const sportNavItem = s => `<a href="#/deporte/${s.key}" data-sp="${s.key}"><span class="em">${s.emoji}</span><span class="nm">${esc(s.name)}</span></a>`;
+const SP_SVG = {
+  mlb:'<circle cx="12" cy="12" r="8.5"/><path d="M7.2 5.6c1.6 1.7 2.4 3.9 2.4 6.4s-.8 4.7-2.4 6.4M16.8 5.6c-1.6 1.7-2.4 3.9-2.4 6.4s.8 4.7 2.4 6.4"/>',
+  nfl:'<ellipse cx="12" cy="12" rx="9.5" ry="5.6" transform="rotate(-35 12 12)"/><path d="M9.2 14.8l5.6-5.6M10.6 11.4l2 2M12.4 9.6l2 2M8.8 13.2l2 2"/>',
+  nba:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5v17M6 6c2.2 1.8 3.4 3.8 3.4 6S8.2 16.2 6 18M18 6c-2.2 1.8-3.4 3.8-3.4 6s1.2 4.2 3.4 6"/>',
+  nhl:'<path d="M5 3.5l6 11.5h7.5"/><path d="M11 15l-1.5 2.5H4"/><ellipse cx="17" cy="19" rx="3.5" ry="1.3"/>',
+  futbol:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.6l3.6 2.6-1.4 4.2H9.8l-1.4-4.2z"/><path d="M12 3.5v4.1M15.6 10.2l4-1.3M14.2 14.4l2.4 3.4M9.8 14.4l-2.4 3.4M8.4 10.2l-4-1.3"/>',
+  tenis:'<circle cx="12" cy="12" r="8.5"/><path d="M5.2 6.8c2.6 1.4 4 3.2 4 5.2s-1.4 3.8-4 5.2M18.8 6.8c-2.6 1.4-4 3.2-4 5.2s1.4 3.8 4 5.2"/>'};
+const spIcon = (k, em) => SP_SVG[k] ? `<svg class="spi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SP_SVG[k]}</svg>` : (em||'');
+const sportNavItem = s => `<a href="#/deporte/${s.key}" data-sp="${s.key}"><span class="em">${spIcon(s.key,s.emoji)}</span><span class="nm">${esc(s.name)}</span></a>`;
 
 // ---------- resumen del día (inicio)
 const liveRowHtml = g => {

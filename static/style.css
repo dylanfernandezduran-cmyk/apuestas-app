@@ -923,3 +923,31 @@ table.cal td:first-child,table.cal th:first-child{text-align:left}
 :root{--mut:#9aa5b4}
 .nb-foot{color:#7d8794}
 .pf-h span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pf-h .more{white-space:nowrap}
+/* nav inferior con etiquetas, más alta */
+.bnav{height:64px!important;padding:6px 8px!important;border-radius:22px!important;border-color:#1a1a1a!important}
+.bnav a,.bnav button{flex-direction:column;gap:3px;width:62px!important;height:52px!important;border-radius:16px!important;color:#a3adbb!important}
+.bnav a.on,.bnav button.on{color:#fff!important;background:rgba(255,17,121,.16)!important}
+.bnav a.on .ic{color:#FF1179}
+.bnav .lbl{font-size:10px;font-weight:600;letter-spacing:.01em;line-height:1}
+.bnav .nav-dot{top:5px!important;right:14px!important}
+@media(max-width:360px){.bnav a,.bnav button{width:54px!important}}
+:root{--nav-h:64px}
+/* iconos de deporte SVG */
+.snav a .em{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:#0e0e0f;color:#e6ebf2;font-size:24px}
+.snav a .spi{width:24px;height:24px}
+.snav a.lv .em{color:#FF1179}
+.snav a.lv .em::after{right:3px;top:3px}
+.snav a:hover .em{background:#151517}
+/* menos bordes */
+.card{border-color:#151515}
+.kpi{border-color:#151515}
+.pill .spi,.pgrp .spi{width:16px;height:16px;vertical-align:-3px}
+.pill .em{display:inline-flex}
+.car-nav.many .car-dots{display:none}
+.car-nav.many .car-n{position:static}
+.ch-wel{padding:18px 6px 8px}
+.ch-wel-t{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.ch-wel-s{color:#a3adbb;font-size:13px;margin:6px 0 14px;line-height:1.5}
+.ch-wel-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ch-wel-g .ch-sg{min-height:48px;border-radius:14px;border:1px solid rgba(255,17,121,.28);background:rgba(255,17,121,.07);color:#fff;font:600 13px/1.2 inherit;text-align:left;padding:10px 12px;cursor:pointer}
+.ch-s[hidden]{display:none}

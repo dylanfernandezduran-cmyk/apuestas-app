@@ -201,7 +201,7 @@ async function viewSports(){
   let home=null;
   try{ home=await api('/api/home'); }catch(e){ $app.innerHTML=errBox(e.message); const b=document.getElementById('retry'); if(b) b.onclick=()=>route(); return; }
   if(seq!==ROUTE_SEQ) return;
-  const chips=`<div class="pills">${(SPORTS||[]).map(s=>`<a class="pill" href="#/deporte/${s.key}"><span class="em">${s.emoji||''}</span> ${esc(s.name)}</a>`).join('')}</div>`;
+  const chips=`<div class="pills">${(SPORTS||[]).map(s=>`<a class="pill" href="#/deporte/${s.key}"><span class="em">${spIcon(s.key,s.emoji)}</span> ${esc(s.name)}</a>`).join('')}</div>`;
   const search=`<section class="hm" id="sp-search"><label class="srch"><span class="ico" aria-hidden="true">🔍</span><input type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Buscar juego, equipo o torneo" aria-label="Buscar juego, equipo, jugador o torneo"></label><div class="srch-r" hidden></div></section>`;
   const live=(home.live&&home.live.length)?`<div class="card" id="sp-live"><h2>En vivo ahora <span class="badge b-live">${home.live.length}</span></h2>${home.live.slice(0,8).map(g=>{
     const href=`#/juego/${encodeURIComponent(g.league)}/${encodeURIComponent(g.id||g.eid)}`;
@@ -773,7 +773,7 @@ async function viewPicks(scope){
     const its=published.filter(r=>r.game.sport===k).map((r,i)=>[r,i]).sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(x=>x[0]);
     if(!its.length) return;
     const sp=(SPORTS||[]).find(x=>x.key===k)||{name:k,emoji:''}, nPick=its.filter(r=>r.has_odds&&r.status!=='PASS').length;
-    html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${sp.emoji}</span> ${esc(sp.name)} <span class="n mono">${its.length}${nPick?` · ${nPick} con ventaja`:''}</span></h2>`+its.slice(0,30).map(card).join('');
+    html+=`<h2 class="pgrp" data-sport="${k}"><span class="em">${spIcon(k,sp.emoji)}</span> ${esc(sp.name)} <span class="n mono">${its.length}${nPick?` · ${nPick} con ventaja`:''}</span></h2>`+its.slice(0,30).map(card).join('');
   });
   if(discarded.length){
     const dcard=r=>{ const l=r.lean||{}, g=r.game;
