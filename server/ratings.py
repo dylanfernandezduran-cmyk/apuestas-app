@@ -81,6 +81,16 @@ async def build(league: str):
         R["team_games"][g["home"]].append(g); R["team_games"][g["away"]].append(g)
     if fam == "soccer": _soccer(R)
     else: _margin(R)
+    if league == "nfl":
+        try:
+            from . import nflepa
+            tab = await nflepa.table()
+            d = await get_json(f"{ESPN}/{cfg['path']}/teams", ttl=86400, params={"limit": 200})
+            ab = {t["team"]["abbreviation"]: str(t["team"]["id"]) for t in d["sports"][0]["leagues"][0]["teams"]}
+            if tab:
+                R["epa"] = {ab[k]: v for k, v in tab.items() if k in ab}
+        except Exception:
+            pass
     _ratings[league] = R
     return R
 

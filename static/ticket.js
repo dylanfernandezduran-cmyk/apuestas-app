@@ -72,6 +72,17 @@ function tkCombine(L){
   const p=(pIndep!=null&&n>=2)?pIndep*Math.pow(1-h,n-1):pIndep;
   return {d, p, pIndep, ev:p!=null?p*d-1:null, evIndep:pIndep!=null?pIndep*d-1:null, h, estimated:n>=2&&pIndep!=null, same};
 }
+// candados del ticket (misma política que server/policy.py): probabilidad conjunta = producto de piernas
+function tkLocks(L, cb){
+  const MP=(window.NRNM_POLICY&&window.NRNM_POLICY.min_prob)||0.5, out=[];
+  if(L.length<2) return out;
+  if(cb.same) out.push(['Correlación','Hay piernas del mismo juego: la probabilidad conjunta real no es el producto; no se aprueba.']);
+  else out.push(['Correlación','Evaluado con la probabilidad conjunta (producto de piernas'+(cb.h?`, con descuento de ${Math.round(cb.h*100)}% por pierna extra`:'')+').']);
+  const low=L.filter(l=>l.p!=null&&l.p<MP); if(low.length) out.push(['Probabilidad',`${low.length} pierna${low.length>1?'s':''} con prob. < ${Math.round(MP*100)}%: ${low.map(l=>l.label).join(', ')}.`]);
+  if(L.some(l=>l.p==null)) out.push(['Datos','Alguna pierna no tiene probabilidad del modelo: no se puede calcular la conjunta.']);
+  if(cb.ev!=null&&cb.ev<=0) out.push(['Valor',`EV con la prob. conjunta ${(cb.ev*100).toFixed(1)}% ≤ 0.`]);
+  return out;
+}
 function tkOpen(){
   const L=TK.legs, cb=tkCombine(L), d=cb.d, p=cb.p, ev=cb.ev, ck=tkCheck(L);
   const row=(l,i)=>`<div class="tkl"><div class="tkl-t"><b>${esc(l.label)}</b><span class="sub">${esc(l.kind==='prop'?(l.player||'Prop'):l.home+' vs '+l.away)} · ${fmtShort(new Date(l.start_ts*1000).toISOString())} ${fmtTime(new Date(l.start_ts*1000).toISOString())}</span>
@@ -81,6 +92,7 @@ function tkOpen(){
     ${L.length?L.map(row).join(''):'<div class="sub">Ticket vacío.</div>'}
     <div class="kpis s tkk"><div class="kpi"><div class="sub">Momio combinado</div><div class="v mono">${tkAm(d)}</div></div><div class="kpi"><div class="sub">Prob. modelo${cb.estimated?' (est.)':''}</div><div class="v mono">${p==null?'—':(p*100).toFixed(1)+'%'}</div></div>
       <div class="kpi"><div class="sub">Prob. implícita</div><div class="v mono">${(100/d).toFixed(1)}%</div></div><div class="kpi"><div class="sub">Producto de piernas</div><div class="v mono">${cb.pIndep==null?'—':(cb.pIndep*100).toFixed(1)+'%'}</div></div><div class="kpi"><div class="sub">Prob. de perder</div><div class="v mono neg">${p==null?'—':((1-p)*100).toFixed(1)+'%'}</div></div><div class="kpi"><div class="sub"${typeof tip==='function'?tip('EV'):''}>EV por 1u (tope)</div><div class="v mono ${ev>0?'pos':ev<0?'neg':''}">${ev==null?'—':(ev>0?'+':'')+ev.toFixed(2)+'u'}</div></div></div>
+    ${(()=>{ const lk=tkLocks(L,cb), blocking=lk.filter(x=>!(x[0]==='Correlación'&&!cb.same)); return L.length>1?`<div class="tk-st ${blocking.length?'no':'ok'}"><b>${blocking.length?'🔒 Ticket bloqueado':'✓ Pasa los candados'}</b> · prob. conjunta ${cb.pIndep==null?'—':(cb.pIndep*100).toFixed(1)+'% (producto)'}${cb.p!=null&&cb.estimated?` · ${(cb.p*100).toFixed(1)}% con descuento`:''}${lk.map(x=>`<div class="sub">🔒 <b>${esc(x[0])}</b>: ${esc(x[1])}</div>`).join('')}</div>`:''; })()}
     ${ck.err.map(x=>`<div class="tkw err">⛔ ${esc(x)}</div>`).join('')}${ck.warn.map(x=>`<div class="tkw">⚠️ ${esc(x)}</div>`).join('')}
     <div class="sub" style="margin:6px 0">El EV por 1u está marcado como <b>tope</b>: supone independencia y acumula el error del modelo.${cb.same?' Incluye piernas del mismo juego (correlacionadas; evítalas).':''} Paper trading: no se apuesta dinero. ${L.length>3?'Más piernas = mucho menos probable.':''}</div>
     <input id="tkn" class="tkin" maxlength="60" placeholder="Nombre del ticket (opcional)">

@@ -154,6 +154,18 @@ function carPatch(root, games){
 
 // ---------- buscador del inicio: juegos, equipos, jugadores (tenis), ligas y torneos (GET /api/search, con debounce y cancelación)
 const srchWhen = x => x.state==='in' ? '<b class="srl">● En vivo</b>' : x.state==='post' ? 'Final' : `${esc(fmtShort(x.date))} ${esc(fmtTime(x.date))}`;
+const SRF={type:'all', sp:'all', st:'all'};
+function srchFilter(r){
+  const okSp=x=>SRF.sp==='all'||x.sport===SRF.sp, okSt=x=>SRF.st==='all'||(SRF.st==='live'?x.state==='in':SRF.st==='pre'?x.state==='pre':x.state==='post');
+  return {q:r.q, leagues:(SRF.type==='all'||SRF.type==='leagues')&&SRF.st==='all'?(r.leagues||[]).filter(okSp):[],
+    teams:(SRF.type==='all'||SRF.type==='teams')?(r.teams||[]).filter(x=>okSp(x)&&okSt(x)):[],
+    games:(SRF.type==='all'||SRF.type==='games')?(r.games||[]).filter(x=>okSp(x)&&okSt(x)):[]};
+}
+function srchChips(){
+  const c=(k,v,l)=>`<button type="button" class="pill${SRF[k]===v?' on':''}" data-srf="${k}:${v}">${l}</button>`;
+  return `<div class="srf">${c('type','all','Todo')}${c('type','games','Juegos')}${c('type','teams','Equipos')}${c('type','leagues','Ligas')}<span class="srf-sep"></span>${c('st','all','Cualquier hora')}${c('st','live','En vivo')}${c('st','pre','Próximos')}${c('st','post','Finales')}</div>
+    <div class="srf">${c('sp','all','Todos')}${['mlb','nfl','nba','nhl','futbol','tenis'].map(k=>c('sp',k,spIcon(k,'')+' '+({mlb:'MLB',nfl:'NFL',nba:'NBA',nhl:'NHL',futbol:'Fútbol',tenis:'Tenis'})[k])).join('')}</div>`;
+}
 function srchHtml(r){
   const gl = x => `#/juego/${encodeURIComponent(x.league)}/${encodeURIComponent(x.id)}`;
   const parts = [];
@@ -164,7 +176,9 @@ function srchHtml(r){
   return parts.join('') || `<div class="sr-none">Sin resultados para «${esc(r.q)}».</div>`;
 }
 function srchInit(root){
-  const inp=root.querySelector('input'), box=root.querySelector('.srch-r'); let tm=0, seq=0, ac=null;
+  const inp=root.querySelector('input'), box=root.querySelector('.srch-r'); let tm=0, seq=0, ac=null, last=null;
+  const paint=()=>{ if(last) box.innerHTML=srchChips()+`<div class="srf-res">${srchHtml(srchFilter(last))}</div>`; };
+  box.addEventListener('click',e=>{ const b=e.target.closest('[data-srf]'); if(!b) return; e.preventDefault(); const [k,v]=b.dataset.srf.split(':'); SRF[k]=v; paint(); });
   const run = async q=>{
     const me=++seq; if(ac) ac.abort(); ac=new AbortController();
     box.hidden=false; box.innerHTML='<div class="sr-none">Buscando…</div>';
@@ -172,7 +186,7 @@ function srchInit(root){
     try{
       const r = await fetch('/api/search?q='+encodeURIComponent(q),{signal:ac.signal}); if(!r.ok) throw new Error(r.statusText);
       const d = await r.json(); if(me!==seq) return;
-      box.innerHTML = srchHtml(d);
+      last=d; paint();
     }catch(e){ if(me===seq && e.name!=='AbortError') box.innerHTML=`<div class="sr-none">${SD}: no se pudo buscar. Reintenta.</div>`; }
   };
   inp.addEventListener('input',()=>{ clearTimeout(tm); const q=inp.value.trim();

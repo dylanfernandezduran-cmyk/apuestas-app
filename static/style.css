@@ -177,7 +177,7 @@ table.prob td:not(:first-child){text-align:right}
   .hide-m{display:none}
   .two{grid-template-columns:1fr}
   .pill{min-height:40px}
-  .hero .tl{--s:44px!important}.hero .n{font-size:14.5px}
+  .hero .tl{--s:64px!important}.hero .n{font-size:14.5px}
   .game{padding:var(--s3)}
   .tm{min-height:36px}
   .stats{grid-template-columns:repeat(3,1fr)}
@@ -272,7 +272,7 @@ ul.plays{list-style:none;margin:6px 0 4px;padding:0}ul.plays li{display:grid;gri
 .tl img{display:block;width:78%;height:78%;object-fit:contain}
 .tl.ph img{width:100%;height:100%;object-fit:cover;object-position:50% 12%}
 .tl.ini::after{content:attr(data-i)}
-.mu{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;max-width:100%}.mu .tl{--s:16px}.vs{color:var(--mut);opacity:.8}
+.mu{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;max-width:100%}.mu .tl{--s:20px}.vs{color:var(--mut);opacity:.8}
 .rl-m{margin:2px 0 3px;font-size:13px}.rec-r .rl-m .mu{margin-right:2px}
 /* carrusel en vivo */
 .car{overflow:hidden;border-radius:var(--r,14px)}
@@ -989,3 +989,11 @@ table.cal th,table.cal td{padding:5px 4px}
 .nb-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:22px 14px}.nb-empty span{color:var(--mut);font-size:13px;max-width:420px}
 .nb-e0{font:800 34px/1 Inter,system-ui,sans-serif;color:var(--acc);letter-spacing:-.02em}
 .nb-lab .nb-h2 small{display:block;font-weight:400;font-size:11px;margin-top:2px}
+.tk-st{margin:8px 0;padding:8px 10px;border-radius:10px;font-size:12.5px;background:rgba(255,255,255,.04)}.tk-st.no{background:rgba(var(--red-rgb),.10)}.tk-st.ok{background:rgba(var(--grn-rgb),.10)}
+.tk-st .sub{margin-top:3px}
+.srf{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 10px 0}.srf::-webkit-scrollbar{display:none}
+.srf .pill{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:12px;height:30px;min-height:30px;padding:0 11px}.srf .pill .spi{width:14px;height:14px}
+.srf-sep{flex:0 0 1px;background:rgba(255,255,255,.12);margin:4px 2px}
+.srf-res{animation:dsIn .18s ease}
+.hs .tl{filter:drop-shadow(0 4px 14px rgba(0,0,0,.5))}
+.hero .tl img{width:100%;height:100%;object-fit:contain}

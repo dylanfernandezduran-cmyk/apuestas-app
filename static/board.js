@@ -79,7 +79,7 @@ function nbRec(r){
 async function nrnmFill(el){
   if(!el) return;
   let d; try{ d=await api('/api/nrnm'); }catch(e){ el.innerHTML=`<div class="nb-h"><h2>Picks NRNM</h2></div><div class="nb-empty">${SD}: ${esc(e.message)}</div>`; return; }
-  const items=d.items||[], off=(d.blocked||[]).concat(d.no_value||[]), pol=d.policy||{};
+  const items=d.items||[], off=(d.blocked||[]).concat(d.no_value||[]), pol=d.policy||{}; if(d.policy) window.NRNM_POLICY=d.policy;
   const head=`<div class="nb-h"><div><h2>Picks NRNM</h2><div class="sub">Pick registrado = Predicción NRNM (mercado, lado y línea) · ${typeof agoTxt==='function'?esc(agoTxt(d.now)):''}</div></div><span class="nb-n mono">${items.length}</span></div>`;
   const empty=`<div class="nb-empty"><div class="nb-e0">0</div><b>Hoy no hay picks aprobados.</b><span>${d.n_coincident?`${d.n_coincident} pick${d.n_coincident===1?'':'s'} coincide${d.n_coincident===1?'':'n'} con la predicción, pero no pas${d.n_coincident===1?'a':'an'} todos los candados.`:'Ningún pick registrado coincide con la predicción todavía.'} Un día sin picks también es una decisión: no se fuerza ninguno.</span></div>`;
   const offB = off.length?`<details class="nb-offw"><summary>Bloqueados por candados (${off.length}) · se registran y califican, no se recomiendan</summary>${off.map(nbCard).join('')}</details>`:'';

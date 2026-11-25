@@ -96,7 +96,7 @@ console.log(JSON.stringify({ini:[initials('Newcastle United'),initials('L. Darde
 
 def test_logos_y_carrusel_usados_en_toda_la_app():
     app, ex, css = SRC["app.js"], SRC["extras.js"], SRC["style.css"]
-    assert "badge(t,22)" in app and "badge(t,56)" in app and "recMatch(r)" in app and "matchup(g)" in app           # tarjetas, héroe, récord, picks
+    assert "badge(t,30)" in app and "badge(t,76)" in app and "recMatch(r)" in app and "matchup(g)" in app           # tarjetas, héroe, récord, picks
     assert "badge(x,30)" in ex and "id=\"hm-rec\"" in ex                                                         # carrusel en vivo + récord en inicio (sin duplicar picks)
     assert "scroll-snap-type:x mandatory" in css and "scroll-snap-align:center" in css and ".car-dots" in css and ".tl.ini::after" in css
     assert "carPatch(lb," in ex and "data-gid" in ex and re.search(r"\.car-n.*textContent=`\$\{i\+1\}/\$\{n\}`", ex.replace("\n", " ")) is not None

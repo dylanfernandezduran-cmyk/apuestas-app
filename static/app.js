@@ -287,7 +287,7 @@ const imgSrc = (u,w) => (typeof window!=='undefined'&&window.NRNM_STATIC) ? u : 
 const initials = n => { const w=String(n||'').replace(/\(.*?\)/g,' ').split(/[\s.\-]+/).filter(Boolean); if(!w.length) return '?'; return (w.length>1 ? w[0][0]+w[w.length-1][0] : w[0].slice(0,2)).toUpperCase(); };
 const badge = (t,s) => { s=s||22; t=t||{}; const u=t.logo, ini=initials(t.name||t.short), ph=u&&/\/headshots\//.test(u);
   return `<span class="tl${u?'':' ini'}${ph?' ph':''}" style="--s:${s}px" data-i="${esc(ini)}">${u?`<img src="${esc(imgSrc(u,s*2))}" width="${s}" height="${s}" loading="lazy" decoding="async" alt="" onerror="this.parentNode.classList.add('ini');this.remove()">`:''}</span>`; };
-const matchup = (g,short) => sides(g).map(sd=>`<span class="mu">${badge(g[sd],16)}<span>${esc(short?(g[sd].short||g[sd].name):g[sd].name)}</span></span>`).join(` <span class="vs">${vsMark(g)}</span> `);
+const matchup = (g,short) => sides(g).map(sd=>`<span class="mu">${badge(g[sd],20)}<span>${esc(short?(g[sd].short||g[sd].name):g[sd].name)}</span></span>`).join(` <span class="vs">${vsMark(g)}</span> `);
 const tn = t => (t&&(t.abbr||t.short))||((t&&t.name)||'').split(' ').slice(-1)[0];
 const shortLbl = (l,g) => { let x=String(l||''); if(!g) return x.replace(/\s*\((visitante|local)\)/g,'').trim();
   [g.away,g.home].forEach(t=>{ if(!t) return; const last=((t.name||'').split(/\s+/).filter(Boolean).slice(-1)[0]||''); const short=(t.short&&t.short.length>2?t.short:last)||tn(t);
@@ -341,7 +341,7 @@ function gameCard(g){
   GAMES[g.id]=g;
   const sc = g.state!=='pre', o=g.odds;
   const team=(t,side)=>{ const ml=o&&o.ml?o.ml[side]:null;
-    return `<div class="tm">${badge(t,22)}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(g.sport==='tenis'?(t.sets||[]).join(' '):(t.score??''))}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
+    return `<div class="tm">${badge(t,30)}<span class="nm" title="${esc(t.name)}">${esc(t.name)}</span><span class="rc">${esc(t.record||'')}</span>${sc?`<span class="sc mono ${t.winner?'pos':''}">${esc(g.sport==='tenis'?(t.sets||[]).join(' '):(t.score??''))}</span>`:''}${ml!=null?`<span class="ml mono">${am(ml)}</span>`:''}</div>`; };
   const where=[g.note||g.league_name, g.venue].filter(Boolean).map(esc).join(' · ');
   const live=g.state==='in', chips=[injChip(g), `<span class="wxc" data-id="${esc(g.id)}"></span>`].filter(Boolean).join('');
   const tennisWd = g.wd ? `<div class="sub" style="margin-top:6px">⚠️ ${esc(g.wd)}</div>` : '';
@@ -357,7 +357,7 @@ function gameCard(g){
 // ------------------------------------------------------------ juego
 // ---- detalle limpio: encabezado, pick principal, mercados en bloques y todo lo técnico en acordeones cerrados
 function heroSide(g,d,sd){ const t=g[sd], ten=d.kind==='tennis';
-  return `<div class="hs">${badge(t,56)}<div class="n">${esc(t.name)}</div><div class="sub">${esc(t.record||'')}${ten&&t.rank&&!t.record?`#${t.rank} ranking`:''}</div>${ten&&g.state!=='pre'?`<div class="big mono hsets">${esc((t.sets||[]).join(' '))}</div>`:''}</div>`; }
+  return `<div class="hs">${badge(t,76)}<div class="n">${esc(t.name)}</div><div class="sub">${esc(t.record||'')}${ten&&t.rank&&!t.record?`#${t.rank} ranking`:''}</div>${ten&&g.state!=='pre'?`<div class="big mono hsets">${esc((t.sets||[]).join(' '))}</div>`:''}</div>`; }
 function heroMid(g,d){
   const live=g.state==='in', ten=d.kind==='tennis', sd=sides(g);
   if(g.state==='pre') return `<div class="hm-d">${esc(fmtShort(g.date))}</div><div class="hm-t mono">${esc(fmtTime(g.date))}</div><div class="sub">CDMX</div>`;

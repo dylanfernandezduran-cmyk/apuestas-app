@@ -80,8 +80,9 @@ function dAdv(d){
   const g=d.game||{}; const cols=a.cols||[];
   const nm=s=>esc((g[s]||{}).abbr||(g[s]||{}).name||s);
   const head=`<tr><th></th>${cols.map(c=>`<th>${esc(c[1])}</th>`).join('')}</tr>`;
-  const tr=s=>`<tr><td>${nm(s)}</td>${cols.map(c=>{ const v=(a.sides[s]||{})[c[0]]; return `<td class="mono">${v==null?'—':v}</td>`; }).join('')}</tr>`;
-  return ds('adv','Estadística avanzada', `<div class="cal-w"><table class="cal">${head}${tr('away')}${tr('home')}</table></div><div class="sub">${esc(a.note||'')}</div>`);
+  const tr=s=>`<tr><td>${nm(s)}</td>${cols.map(c=>{ const v=(a.sides[s]||{})[c[0]]; return `<td class="mono">${v==null?'—':esc(String(v))}</td>`; }).join('')}</tr>`;
+  const src=a.src?` Fuente: ${a.src_url?`<a href="${esc(a.src_url)}" target="_blank" rel="noopener">${esc(a.src)}</a>`:esc(a.src)}.`:'';
+  return ds('adv','Estadística avanzada', `<div class="cal-w"><table class="cal">${head}${tr('away')}${tr('home')}</table></div><div class="sub">${esc(a.note||'')}${src}</div>`);
 }
 // ---- consenso público de handicappers (Covers), citado
 function dHand(d){

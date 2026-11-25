@@ -50,10 +50,84 @@ async def nba(game):
     return dict(cols=COLS, sides=sides, src="ESPN (estadísticas de equipo)",
                 note="Temporada actual · ESPN. Ritmo = posesiones estimadas por juego; ORtg/DRtg por 100 posesiones (DRtg aproximado con posesiones propias). Sólo informativo: el backtest no mejoró al sumar net rating al modelo.")
 
+# ---- NFL: EPA/jugada (nflverse)
+async def nfl(game):
+    R = await ratings.get_ratings("nfl", wait=False)
+    E = (R or {}).get("epa")
+    if not E: return None
+    sides = {}
+    for s in ("home", "away"):
+        v = E.get(str(((game or {}).get(s) or {}).get("id") or ""))
+        if not v: return None
+        sides[s] = dict(off=v["off"], deff=v["deff"], net=v["net"], pass_off=v["pass_off"], games=v["games"], plays=v["plays"])
+    return dict(cols=[("off", "EPA/jug of."), ("deff", "EPA/jug perm."), ("net", "EPA neta"), ("pass_off", "EPA/pase"), ("games", "JJ")],
+                sides=sides, src="nflverse (play-by-play)", src_url="https://github.com/nflverse/nflverse-data/releases/tag/pbp",
+                note="Temporada regular actual, pases + carreras. Defensa: EPA permitida (menos es mejor). La EPA neta entra al modelo de margen (backtest: mejora Brier y log loss fuera de muestra en 2025 y 2026).")
+
+# ---- MLB: Baseball Savant (xERA del abridor, xwOBA del equipo)
+SAV_P = "https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year={y}&position=&team=&min=1&csv=true"
+SAV_T = "https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter-team&year={y}&position=&team=&min=q&csv=true"
+_SAV = {}
+
+def _norm(x):
+    import unicodedata
+    x = unicodedata.normalize("NFKD", x or "").encode("ascii", "ignore").decode().lower()
+    return " ".join(x.replace(".", " ").replace("-", " ").split())
+
+def parse_csv(txt):
+    import csv, io
+    return list(csv.DictReader(io.StringIO(txt.lstrip("\ufeff"))))
+
+async def _savant(kind, year):
+    from .cache import fetch_bytes
+    k = (kind, year); c = _SAV.get(k)
+    import time as _t
+    if c and _t.time() - c[0] < 6 * 3600: return c[1]
+    res = await fetch_bytes((SAV_P if kind == "p" else SAV_T).format(y=year), headers={"User-Agent": "Mozilla/5.0"})
+    rows = parse_csv(res[0].decode("utf-8", "replace")) if res else []
+    _SAV[k] = (_t.time(), rows); return rows
+
+def _f(x):
+    try: return float(x)
+    except Exception: return None
+
+async def mlb(r):
+    from datetime import datetime
+    g = r.get("game") or {}
+    try: year = int((g.get("date") or "")[:4]) or datetime.now().year
+    except Exception: year = datetime.now().year
+    pit, tea = await _savant("p", year), await _savant("t", year)
+    if not pit and not tea: return None
+    P = r.get("pitchers") or {}
+    sides = {}
+    for s in ("home", "away"):
+        t = g.get(s) or {}; nick = _norm((t.get("name") or "").split()[-1] if t.get("name") else "")
+        tr = next((x for x in tea if _norm(x.get("team")) and _norm(x.get("team")).split()[-1] == nick), None)
+        o = dict(xwoba=_f(tr.get("est_woba")) if tr else None, woba=_f(tr.get("woba")) if tr else None, pitcher=None, xera=None, era=None)
+        pn = (P.get(s) or {}).get("name")
+        if pn:
+            o["pitcher"] = pn
+            want = _norm(pn)
+            for x in pit:
+                ln, _, fn = (x.get("last_name, first_name") or "").partition(",")
+                if _norm(f"{fn} {ln}") == want:
+                    o["xera"], o["era"] = _f(x.get("xera")), _f(x.get("era")); break
+        sides[s] = o
+    if not any(v["xwoba"] or v["xera"] for v in sides.values()): return None
+    return dict(cols=[("xwoba", "xwOBA eq."), ("woba", "wOBA eq."), ("pitcher", "Abridor"), ("xera", "xERA"), ("era", "ERA")], sides=sides,
+                src="Baseball Savant", src_url="https://baseballsavant.mlb.com/leaderboard/expected_statistics",
+                note=f"Temporada {year} · Statcast. Sólo informativo (no entra al modelo: no hay backtest con datos al momento de cada juego). wRC+ (FanGraphs) no disponible: la fuente bloquea el acceso.")
+
 async def attach(r, league):
     try:
-        if league == "nba" and not r.get("advanced"):
-            a = await nba(r.get("game"))
-            if a: r["advanced"] = a
+        if r.get("advanced"): return
+        a = None
+        if league == "nba": a = await nba(r.get("game"))
+        elif league == "nfl": a = await nfl(r.get("game"))
+        elif league == "mlb": a = await mlb(r)
+        elif (r.get("game") or {}).get("sport") == "futbol":
+            from . import xg as XG
+            a = await XG.soccer(r, league)
+        if a: r["advanced"] = a
     except Exception:
         pass

@@ -51,3 +51,27 @@ def test_policy_tiers_and_locks(monkeypatch):
     assert Q.policy_block({"p_final": 0.48}).startswith("Bloqueado") and Q.policy_block({"p_final": 0.55}) is None
     assert Q.policy_block({"p_final": 0.91}).startswith("Auditor")
     assert P.config()["min_prob"] == 0.50
+
+def test_nfl_epa_parse_and_model():
+    import gzip, io
+    from server import nflepa, model
+    csvtxt = "game_id,season_type,play_type,epa,posteam,defteam\n" + "\n".join([
+        "g1,REG,pass,0.5,KC,LA", "g1,REG,run,-0.1,KC,LA", "g1,REG,pass,0.2,LA,KC", "g1,REG,punt,3,LA,KC", "g1,PRE,pass,9,KC,LA"])
+    raw = gzip.compress(csvtxt.encode())
+    t = nflepa.parse(raw)
+    assert set(t) == {"KC", "LAR"} and t["KC"]["off"] == 0.2 and t["KC"]["deff"] == 0.2 and t["LAR"]["deff"] == 0.2
+    assert t["KC"]["games"] == 1 and abs(t["KC"]["net_shrunk"] - 0.0) < 1e-9
+    assert model.NFL_EPA_COEF == 16.0
+
+def test_xg_table():
+    from server import xg
+    d = {"teams": {"1": {"title": "Arsenal", "history": [{"xG": "2.0", "xGA": "1.0", "scored": "2", "missed": "0"}, {"xG": "1.0", "xGA": "0.5", "scored": "1", "missed": "1"}]}}}
+    t = xg.table(d)
+    assert t["arsenal"]["xg"] == 1.5 and t["arsenal"]["xga"] == 0.75 and t["arsenal"]["n"] == 2
+    assert xg._find(t, {"name": "Arsenal"})["title"] == "Arsenal"
+
+def test_ticket_locks_and_search_filters_present():
+    import pathlib
+    tk = pathlib.Path("static/ticket.js").read_text(); ex = pathlib.Path("static/extras.js").read_text()
+    assert "function tkLocks" in tk and "Correlación" in tk and "producto" in tk
+    assert "function srchFilter" in ex and "data-srf" in ex

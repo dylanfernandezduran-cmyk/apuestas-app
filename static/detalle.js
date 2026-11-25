@@ -249,7 +249,7 @@ function dTrends(d){
   const tile=(lbl,s)=>`<div class="ht ${heat(s)}"><b>${s&&s.n?esc(s.text):SD}</b><small>${lbl}</small></div>`;
   const blocks=sides(g).map(sd=>{ const T=g[sd], t=d.teams&&d.teams[T.id]; if(!t||!t.overall||!t.overall.n) return '';
     const frm=(t.form||[]).slice(-6).map(x=>`<span class="wl s ${x}">${x==='W'?'G':x==='L'?'P':'E'}</span>`).join('');
-    return `<div class="tr"><div class="trh">${badge(T,18)}<b>${tAbbr(T)}</b>${t.streak?`<span class="tg2 ${t.streak[0]==='W'?'k-t':t.streak[0]==='L'?'k-p':''}">${esc(String(t.streak).replace('W','G').replace('L','P').replace('D','E'))}</span>`:''}<span class="frm">${frm}</span></div>
+    return `<div class="tr"><div class="trh">${badge(T,24)}<b>${tAbbr(T)}</b>${t.streak?`<span class="tg2 ${t.streak[0]==='W'?'k-t':t.streak[0]==='L'?'k-p':''}">${esc(String(t.streak).replace('W','G').replace('L','P').replace('D','E'))}</span>`:''}<span class="frm">${frm}</span></div>
       <div class="hts">${tile('Temporada',t.overall)}${tile(sd==='home'?'Local':'Visita',t[sd])}${tile('Últ. 5',t.last5)}${tile('Últ. 10',t.last10)}</div></div>`; }).join('');
   const lines=(d.trends||[]).length?`<ul class="tl2">${d.trends.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'';
   const ats=(d.ats||[]).length?`<div class="fine">ATS (ESPN): ${d.ats.map(a=>esc(a.team)+' '+a.records.map(r=>esc(r.displayValue||r.summary)).join(' / ')).join(' · ')}</div>`:'';
@@ -303,7 +303,7 @@ function dInj(d){
     const es=S.entries||[], rt=S.returning||[]; if(!es.length&&!rt.length) return '';
     const c=S.counts||{}; const first=es.slice(0,4), rest=es.slice(4);
     const chips=[c.out?`<span class="tg2 k-p">${c.out} baja${c.out>1?'s':''}</span>`:'',(c.doubt||c.dtd)?`<span class="tg2 k-a">${(c.doubt||0)+(c.dtd||0)} duda${(c.doubt||0)+(c.dtd||0)>1?'s':''}</span>`:'',rt.length?`<span class="tg2 k-t">${rt.length} regresa${rt.length>1?'n':''}</span>`:''].join('');
-    return `<div class="ijb"><div class="mh">${badge(T,18)}<b>${esc(T.name)}</b><span class="chs">${chips}</span></div>${first.map(e=>row(e,T)).join('')}${rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">Ver ${rest.length} más</div><div class="sg">${rest.map(e=>row(e,T)).join('')}</div></div>`:''}${rt.map(r=>ret(r,T)).join('')}</div>`; }).join('');
+    return `<div class="ijb"><div class="mh">${badge(T,24)}<b>${esc(T.name)}</b><span class="chs">${chips}</span></div>${first.map(e=>row(e,T)).join('')}${rest.length?`<div class="gp"><div class="tg" role="button" tabindex="0">Ver ${rest.length} más</div><div class="sg">${rest.map(e=>row(e,T)).join('')}</div></div>`:''}${rt.map(r=>ret(r,T)).join('')}</div>`; }).join('');
   const since=f.tracking_since?` Seguimiento propio desde ${esc(fmtDMH(f.tracking_since))} CDMX: «Regresa» = el jugador salió del reporte de ESPN o mejoró de estado en los últimos 10 días (no confirma que jugará).`:'';
   return ds('inj','Lesiones y suspensiones',body,{right:f.fetched?tag2('ESPN · '+esc(fmtHMS(f.fetched))):'', info:'Baja = Out / reserva de lesionados / suspendido · Dudoso · Duda leve = cuestionable / día a día. ★ = líder estadístico del equipo.'+since});
 }
@@ -381,7 +381,7 @@ function dH2h(d){
 function dKey(d){
   const g=d.game; if(d.kind==='tennis'||!d.leaders) return '';
   const blk=T=>{ const l=(d.leaders||{})[T.id]; if(!l||!l.length) return '';
-    return `<div><div class="mh">${badge(T,18)}<b>${tAbbr(T)}</b></div>${l.slice(0,5).map(x=>`<div class="kp"><small>${esc(x.cat)}</small><b>${esc(x.name)}</b><span class="mt">${esc(x.value)}</span></div>`).join('')}</div>`; };
+    return `<div><div class="mh">${badge(T,24)}<b>${tAbbr(T)}</b></div>${l.slice(0,5).map(x=>`<div class="kp"><small>${esc(x.cat)}</small><b>${esc(x.name)}</b><span class="mt">${esc(x.value)}</span></div>`).join('')}</div>`; };
   const body=sides(g).map(s=>blk(g[s])).join('');
   return body.trim()?ds('key','Jugadores clave',`<div class="two">${body}</div>`,{info:'Líderes estadísticos de cada equipo según ESPN.'}):'';
 }
