@@ -148,7 +148,7 @@ const units = u => u==null ? '—' : (u>0?'+':'')+Number(u).toFixed(2)+'u';
 const oddsTxt = r => r.odds==null ? 'sin cuota' : am(r.odds)+(r.book?' · '+esc(r.book):'');
 const SPORT_EM = {mlb:'⚾',nfl:'🏈',nba:'🏀',nhl:'🏒',tenis:'🎾',futbol:'⚽'};
 
-function setNavDot(name, on){
+function setNavDot(name, on){ name=(typeof NAV_ALIAS!=='undefined'&&NAV_ALIAS[name])||name;
   const a=document.querySelector('#bnav [data-n="'+name+'"]'); if(!a) return;
   let d=a.querySelector('.nav-dot'); if(!d){ d=document.createElement('i'); d.className='nav-dot'; a.appendChild(d); }
   d.hidden=!on;
@@ -162,7 +162,8 @@ async function refreshNavDots(){
   }catch(e){}
 }
 
-function setNav(n){ document.querySelectorAll('#bnav a, #bnav button, header nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on && a.parentElement){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
+const NAV_ALIAS={sports:'partidos',record:'rendimiento',lineas:'inicio'};
+function setNav(n){ n=NAV_ALIAS[n]||n; document.querySelectorAll('#bnav a, #bnav button, header nav a').forEach(a=>{ const on=a.dataset.n===n; a.classList.toggle('on',on); if(on && a.parentElement){ const nv=a.parentElement; nv.scrollLeft=Math.max(0,a.offsetLeft-(nv.clientWidth-a.offsetWidth)/2); } }); }
 
 // ------------------------------------------------------------ rutas
 let ROUTE_SEQ = 0;
@@ -174,7 +175,10 @@ async function route(){
   try{
     if(h[0]!=='ia' && typeof chOpen==='function') chOpen(false);
     if(!h[0]||h[0]===''||h[0]==='inicio'){ setNav('inicio'); refreshNavDots(); return await viewHome(); }
-    if(h[0]==='picks'){ setNav('picks'); return await viewPicks(h[1]||'hoy'); }
+    if(h[0]==='picks'){ setNav('picks'); if(typeof viewRadar==='function'&&(!h[1]||h[1]==='radar')) return await viewRadar(h[2],h[3]); return await viewPicks(h[1]==='clasica'?(h[2]||'hoy'):(h[1]||'hoy')); }
+    if(h[0]==='partidos'&&typeof viewPartidos==='function'){ setNav('partidos'); return await viewPartidos(h[1],h[2]); }
+    if(h[0]==='parlays'&&typeof viewParlayLab==='function'){ setNav('parlays'); return await viewParlayLab(h[1]); }
+    if(h[0]==='rendimiento'&&typeof viewRendimiento==='function'){ setNav('rendimiento'); return await viewRendimiento(); }
     if(h[0]==='lineas'){ setNav('lineas'); return await viewLineas(h[1]||'todos'); }
     if(h[0]==='ia'){ /* ruta #/ia: abre el chat del FAB */ if(typeof chOpen==='function') chOpen(true); setNav('inicio'); refreshNavDots(); return await viewHome(); }
     if(h[0]==='deportes'){ setNav('sports'); return await viewSports(); }

@@ -33,7 +33,7 @@ async def main():
         out["nav_href"] = await pg.evaluate("[...document.querySelectorAll('.snav a')].map(a=>a.getAttribute('href'))")
         out["nav_estilo"] = await pg.evaluate("(()=>{const a=getComputedStyle(document.querySelector('.snav a'));return {bw:a.borderTopWidth,bg:a.backgroundColor,sh:a.boxShadow}})()")
         out["nav_vivo"] = await pg.evaluate("[...document.querySelectorAll('.snav a.lv')].map(a=>a.dataset.sp)")
-        out["rec_tab"] = await pg.evaluate("!!document.querySelector('nav a[href=\"#/record\"], header a[href=\"#/record\"]')")
+        out["rec_tab"] = await pg.evaluate("!!document.querySelector('nav a[href=\"#/record\"], header a[href=\"#/record\"], nav a[href=\"#/rendimiento\"]')")
         await pg.click(".snav a[data-sp='nfl']"); await pg.wait_for_timeout(500)
         out["tap_nfl"] = await pg.evaluate("location.hash")
         await pg.goto(f"http://localhost:{PORT}/#/picks/hoy"); await pg.wait_for_selector(".pgrp")
