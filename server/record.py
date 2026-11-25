@@ -40,6 +40,25 @@ def _c():
         c.execute("UPDATE picks SET open_line=line, open_odds=odds WHERE open_line IS NULL AND open_odds IS NULL")
         # auditoría ROI: unidades sólo con cuota registrada (ver profit)
         c.execute("UPDATE picks SET units=NULL WHERE odds IS NULL AND units IS NOT NULL")
+        # bitácora inmutable de versiones de cada pick (alta, cambio de línea/cuota/lado, calificación). Sólo se inserta, nunca se edita.
+        c.execute("""CREATE TABLE IF NOT EXISTS pick_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, pick_id INTEGER, ts INTEGER, event TEXT,
+                     market TEXT, selection TEXT, line REAL, odds INTEGER, label TEXT, status TEXT, p_final REAL, start_ts INTEGER)""")
+        c.execute("CREATE INDEX IF NOT EXISTS ix_pv_pick ON pick_versions(pick_id, ts)")
+        if c.execute("SELECT COUNT(*) FROM pick_versions").fetchone()[0] == 0:
+            # punto de partida: apertura registrada de cada pick existente (línea/cuota de apertura y fecha de alta)
+            c.execute("""INSERT INTO pick_versions(pick_id,ts,event,market,selection,line,odds,label,status,p_final,start_ts)
+                         SELECT id, created_at, 'apertura', market, selection, COALESCE(open_line,line), COALESCE(open_odds,odds), label, 'PENDIENTE', p_final, start_ts FROM picks""")
+        c.execute("""CREATE TRIGGER IF NOT EXISTS trg_pv_ins AFTER INSERT ON picks BEGIN
+                     INSERT INTO pick_versions(pick_id,ts,event,market,selection,line,odds,label,status,p_final,start_ts)
+                     VALUES(NEW.id,CAST(strftime('%s','now') AS INTEGER),'alta',NEW.market,NEW.selection,NEW.line,NEW.odds,NEW.label,NEW.status,NEW.p_final,NEW.start_ts); END""")
+        c.execute("""CREATE TRIGGER IF NOT EXISTS trg_pv_upd AFTER UPDATE OF selection, line, odds, label, status ON picks
+                     WHEN NEW.selection IS NOT OLD.selection OR NEW.line IS NOT OLD.line OR NEW.odds IS NOT OLD.odds OR NEW.label IS NOT OLD.label OR NEW.status IS NOT OLD.status BEGIN
+                     INSERT INTO pick_versions(pick_id,ts,event,market,selection,line,odds,label,status,p_final,start_ts)
+                     VALUES(NEW.id,CAST(strftime('%s','now') AS INTEGER),
+                            CASE WHEN NEW.status IS NOT OLD.status THEN 'estado' WHEN NEW.selection IS NOT OLD.selection THEN 'lado' WHEN NEW.line IS NOT OLD.line THEN 'linea' ELSE 'cuota' END,
+                            NEW.market,NEW.selection,NEW.line,NEW.odds,NEW.label,NEW.status,NEW.p_final,NEW.start_ts); END""")
+        c.execute("CREATE TRIGGER IF NOT EXISTS trg_pv_noupd BEFORE UPDATE ON pick_versions BEGIN SELECT RAISE(ABORT,'pick_versions es inmutable'); END")
+        c.execute("CREATE TRIGGER IF NOT EXISTS trg_pv_nodel BEFORE DELETE ON pick_versions BEGIN SELECT RAISE(ABORT,'pick_versions es inmutable'); END")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_status ON picks(status, start_ts)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_picks_game ON picks(league, eid)")
         c.execute("CREATE TABLE IF NOT EXISTS team_logos(league TEXT, team_id TEXT, logo TEXT, PRIMARY KEY(league, team_id))")

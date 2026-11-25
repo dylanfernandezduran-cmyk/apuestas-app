@@ -42,9 +42,10 @@ function nbCal(c){
   if(!c||!c.overall||!c.overall.n) return '';
   const f=x=>x==null?'—':x.toFixed(3);
   const tr=x=>`<tr><td>${esc(x.label)}</td><td class="mono">${x.n}</td><td class="mono ${x.hit_pct>=52.4?'pos':'neg'}">${x.hit_pct==null?'—':x.hit_pct.toFixed(1)+'%'}</td><td class="mono ${x.roi>0?'pos':'neg'}">${x.roi==null?'—':nbSign(x.roi,1,'%')}</td><td class="mono ${x.brier!=null&&x.brier_market!=null?(x.brier<=x.brier_market?'pos':'neg'):''}">${f(x.brier)}</td><td class="mono mut">${f(x.brier_market)}</td><td class="mono">${f(x.logloss)}</td></tr>`;
+  const bk=(c.buckets||[]).length?`<div class="cal-t">Prob. predicha vs acierto real</div><div class="cal-w"><table class="cal"><thead><tr><th>Cubeta</th><th>n</th><th>Predicha</th><th>Real</th><th>Mercado</th><th>Dif.</th><th>ROI</th></tr></thead><tbody>${c.buckets.map(b=>`<tr><td>${esc(b.label)}</td><td class="mono">${b.n}</td><td class="mono">${b.pred.toFixed(1)}%</td><td class="mono">${b.real.toFixed(1)}%</td><td class="mono mut">${b.market.toFixed(1)}%</td><td class="mono ${b.gap>=0?'pos':'neg'}">${nbSign(b.gap,1,' pp')}</td><td class="mono ${b.roi>0?'pos':'neg'}">${nbSign(b.roi,1,'%')}</td></tr>`).join('')}</tbody></table></div><p class="nb-foot">Dif. negativa = el modelo sobreestima su probabilidad en esa cubeta.</p>`:'';
   const tb=(t,rows)=>`<div class="cal-t">${t}</div><div class="cal-w"><table class="cal"><thead><tr><th></th><th>n</th><th>Acierto</th><th>ROI</th><th>Brier</th><th>Mercado</th><th>Log loss</th></tr></thead><tbody>${rows.map(tr).join('')}</tbody></table></div>`;
-  return `<details class="nb-cal"><summary>Calibración del modelo (Brier, log loss, por deporte y mercado)</summary>
-    ${tb('Total',[c.overall])}${tb('Por deporte',c.by_sport||[])}${tb('Por mercado',c.by_market||[])}<p class="nb-foot">${esc(c.note||'')}</p></details>`;
+  return `<details class="nb-cal"><summary>Rendimiento del modelo · calibración (Brier, log loss, cubetas)</summary>
+    ${bk}${tb('Total',[c.overall])}${tb('Por deporte',c.by_sport||[])}${tb('Por mercado',c.by_market||[])}<p class="nb-foot">${esc(c.note||'')}</p></details>`;
 }
 function nbRec(r){
   if(!r||r.error) return '';
@@ -66,6 +67,8 @@ async function nrnmFill(el){
   const head=`<div class="nb-h"><div><h2>Picks NRNM</h2><div class="sub">Pick registrado = Predicción NRNM (mercado, lado y línea) · ${typeof agoTxt==='function'?esc(agoTxt(d.now)):''}</div></div><span class="nb-n mono">${items.length}</span></div>`;
   const empty=`<div class="nb-empty"><b>Hoy no hay picks con valor.</b> ${d.n_coincident?`${d.n_coincident} pick${d.n_coincident===1?'':'s'} coincide${d.n_coincident===1?'':'n'} con la predicción, pero con EV ≤ 0 o divergencia alta.`:'Ningún pick registrado coincide con la predicción todavía.'} No se inventa ninguno.</div>`;
   const offB = off.length?`<details class="nb-offw"><summary>Coinciden pero sin valor (${off.length}) · no se recomiendan</summary>${off.map(nbCard).join('')}</details>`:'';
-  el.innerHTML = head + (items.length?`<div class="nb-list">${items.map(nbCard).join('')}</div>`:empty) + offB +
+  const mm=(d.mismatches||[]);
+  const mmB = mm.length?`<details class="nb-offw"><summary>Registrados que ya no coinciden (${mm.length}) · no se muestran como pick</summary>${mm.map(m=>`<a class="nb-mm" href="${m.href}"><b>${esc(m.game)}</b><span>Registrado: ${esc(m.registered)} · Predicción actual: ${esc(m.prediction||SD)}</span><span class="mut">${esc(m.explain)}</span></a>`).join('')}</details>`:'';
+  el.innerHTML = head + (items.length?`<div class="nb-list">${items.map(nbCard).join('')}</div>`:empty) + offB + mmB +
     `<p class="nb-foot">${esc(d.formula||'')} ${esc(d.note||'')}</p>` + nbRec(d.record);
 }

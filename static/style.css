@@ -951,3 +951,10 @@ table.cal td:first-child,table.cal th:first-child{text-align:left}
 .ch-wel-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ch-wel-g .ch-sg{min-height:48px;border-radius:14px;border:1px solid rgba(255,17,121,.28);background:rgba(255,17,121,.07);color:#fff;font:600 13px/1.2 inherit;text-align:left;padding:10px 12px;cursor:pointer}
 .ch-s[hidden]{display:none}
+.nb-mm{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:#0d0d0e;margin-bottom:6px;font-size:12.5px}
+.nb-mm span{color:#c4ccd6}
+table.cal{display:table!important;table-layout:auto;min-width:0}
+table.cal thead{display:table-header-group!important}table.cal tbody{display:table-row-group!important}
+table.cal tr{display:table-row!important}
+table.cal th,table.cal td{display:table-cell!important;position:static!important;width:auto!important;font-size:11.5px}
+table.cal th,table.cal td{padding:5px 4px}

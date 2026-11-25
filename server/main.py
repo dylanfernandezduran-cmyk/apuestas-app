@@ -316,6 +316,13 @@ async def nrnm_board(date: str = None):
         raise HTTPException(400, "date debe ser YYYY-MM-DD")
     return BOARD.board(date=d)
 
+@app.get("/api/pick/{pid}/versions")
+async def pick_versions(pid: int):
+    """Bitácora inmutable de versiones de un pick (alta, cambios de línea/cuota/lado y calificación)."""
+    from . import consistency as CS
+    rows = CS._rows("SELECT ts,event,market,selection,line,odds,label,status,p_final,start_ts FROM pick_versions WHERE pick_id=? ORDER BY ts,id", (pid,))
+    return dict(pick_id=pid, versions=rows, note="La versión vigente al inicio del juego es la que se califica.")
+
 @app.get("/api/picks/agreeing")
 async def picks_agreeing(date: str = None, include_live: int = 1):
     """Picks registrados de hoy (o de `date`) que coinciden en mercado, lado y línea con la Predicción NRNM."""

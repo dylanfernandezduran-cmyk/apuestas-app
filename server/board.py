@@ -175,7 +175,27 @@ def calibration(rows):
                     brier=(round(a["b"] / a["n"], 4) if a["n"] else None),
                     logloss=(round(a["ll"] / a["n"], 4) if a["n"] else None),
                     brier_market=(round(a["bm"] / a["nm"], 4) if a["nm"] else None))
-    return dict(overall=out(tot, "Total"),
+    # calibración por cubeta de probabilidad predicha (p_final del lado apostado) vs acierto real
+    edges = [(0.0, 0.5, "<50%"), (0.5, 0.6, "50–60%"), (0.6, 0.7, "60–70%"), (0.7, 0.8, "70–80%"), (0.8, 0.9, "80–90%"), (0.9, 1.01, "≥90%")]
+    bk = {lab: dict(n=0, W=0, sp=0.0, sq=0.0, u=0.0) for _, _, lab in edges}
+    for r in rows:
+        s = r["status"]
+        p = _f(r.get("p_final"))
+        if s not in ("GANADO", "PERDIDO") or r.get("odds") is None or p is None:
+            continue
+        lab = next(l for a, b, l in edges if a <= p < b)
+        x = bk[lab]; x["n"] += 1; x["W"] += (s == "GANADO"); x["sp"] += p
+        q = _f(r.get("p_nv")); x["sq"] += (q if q is not None else p)
+        x["u"] += REC.profit(s, r["odds"]) or 0.0
+    buckets = []
+    for _, _, lab in edges:
+        x = bk[lab]
+        if not x["n"]:
+            continue
+        pred, real, mkt = x["sp"] / x["n"] * 100, x["W"] / x["n"] * 100, x["sq"] / x["n"] * 100
+        buckets.append(dict(label=lab, n=x["n"], pred=round(pred, 1), real=round(real, 1), market=round(mkt, 1),
+                            gap=round(real - pred, 1), roi=round(x["u"] / x["n"] * 100, 1)))
+    return dict(overall=out(tot, "Total"), buckets=buckets,
                 by_sport=[out(v, SPORT_ES.get(k, k)) for k, v in sorted(by_s.items(), key=lambda kv: -(kv[1]["W"] + kv[1]["L"]))],
                 by_market=[out(v, MK_ES.get(k, k)) for k, v in sorted(by_m.items(), key=lambda kv: -(kv[1]["W"] + kv[1]["L"]))],
                 note="Brier: 0 = perfecto, 0.25 = moneda al aire. Si el Brier del modelo es mayor que el del mercado sin vig, el mercado predice mejor.")
@@ -214,14 +234,22 @@ def board(now=None, date=None):
     except Exception:
         pass
     rows = CS._rows("SELECT * FROM picks WHERE status='PENDIENTE' AND start_ts>=? AND start_ts<? ORDER BY start_ts", (lo, hi))
-    cache, items, n_reg, n_mis = {}, [], len(rows), 0
+    cache, items, n_reg, n_mis, mism = {}, [], len(rows), 0, []
     for r in rows:
         pred = CS._load_pred(r["league"], r["eid"], cache)
         if not pred:
             continue
-        kind, _ = CS.classify_pick(pred, r)
+        kind, why = CS.classify_pick(pred, r)
         if kind == "mismatch":
             n_mis += 1
+            tgt = CS.pred_target(pred, r.get("market"), r.get("selection")) or {}
+            mism.append(dict(game=CS._game_title(r.get("home"), r.get("away"), r.get("sport")), sport=SPORT_ES.get(r.get("sport"), r.get("sport")),
+                             registered=r.get("label"), registered_at=r.get("created_at"), open_line=r.get("open_line"), line=r.get("line"),
+                             reason=why, prediction=tgt.get("label") or (f"{tgt.get('side')} {tgt.get('line') if tgt.get('line') is not None else ''}".strip()),
+                             live=int(r.get("start_ts") or 0) <= now,
+                             explain=("La línea se movió desde que se registró" if why == "línea" else "La predicción cambió de lado (línea, lesiones o noticias nuevas)") +
+                                     ("; el juego ya empezó: se califica el pick vigente al inicio." if int(r.get("start_ts") or 0) <= now else "; antes del inicio se realinea en el siguiente refresco."),
+                             href=f"#/juego/{r.get('league')}/{r.get('eid')}"))
         if kind != "ok":
             continue
         it = _item(r, now)
@@ -235,7 +263,7 @@ def board(now=None, date=None):
     except Exception as e:
         rec = dict(error=type(e).__name__)
     res = dict(date=day, now=now, n_registered=n_reg, n_mismatch=n_mis, n_coincident=len(items),
-               n=len(val), items=val, no_value=rest, record=rec,
+               n=len(val), items=val, no_value=rest, mismatches=mism, record=rec,
                formula="Ventaja = Prob. NRNM − implícita de la cuota. EV = Prob. NRNM × cuota decimal − 1. Mismos números, mismo signo.",
                note=CS.AGREE_NOTE)
     _cache.clear(); _cache[ck] = res
