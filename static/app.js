@@ -306,17 +306,29 @@ function sgrRow(b,g,rec){
 }
 const _edgeV = b => { const v=vtgPP(b.p_final??b.p_model, b.best&&b.best.price); return v!=null?v:null; };
 const briefRows = (items,g,rec) => (items||[]).map(b=>sgrRow(b,g,rec)).join('');
-function briefBlock(g,items){
+// misma regla en toda la app: «PICK» sólo si pasa TODOS los candados; si no, «Lado del modelo» con EV y motivo
+const evTxt = ev => ev==null ? '' : `<span class="e mono ${ev>0?'pos':'neg'}">${ev>0?'+':''}${(+ev).toFixed(1)}% EV${ev<=0?' · sin valor':''}</span>`;
+function pickLine(label,g,{approved,ev,reason,extra='',title=''}={}){
+  if(approved) return `<div class="pickline"${title?` title="${esc(title)}"`:''}><span class="k">PICK</span><span class="t">${esc(shortLbl(label,g))}</span>${evTxt(ev)}${extra}</div>`;
+  return `<div class="pickline md"${title?` title="${esc(title)}"`:''}><span class="k k-md">Lado del modelo</span><span class="t">${esc(shortLbl(label,g))}</span>${evTxt(ev)}${extra}</div>${reason?`<div class="pl-why">🔒 ${esc(reason)}</div>`:''}`;
+}
+function briefBlock(g,items,ap){
   if(!items||!items.length) return `<div class="pickline none">Probabilidades: ${SD}</div>`;
   const rec=g.rec||[], _mains=(rec||[]).filter(x=>x.type==='main'), rm=[..._mains].reverse().find(x=>x.status!=='ANULADO')||_mains[_mains.length-1];
   let main = rm && items.find(b=>b.market===rm.market&&b.side===rm.selection);
   let line;
   if(!main && rm){
     const inv=rec.find(x=>x.market===rm.market&&x.status==='ANULADO'&&x.state==='INVERTIDO');
-    line=`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(rm.label,g))}</span>${gradedBadge(rm)}</div>`+(inv?`<div class="sub">antes: ${esc(shortLbl(inv.label,g))} · invertido</div>`:'');
+    line=pickLine(rm.label,g,{approved:rm.approved,ev:rm.ev_pct,reason:rm.block_reason,extra:gradedBadge(rm)})+(inv?`<div class="sub">antes: ${esc(shortLbl(inv.label,g))} · invertido</div>`:'');
   } else {
     if(!main) main=items.slice().sort((a,b)=>(b.edge==null?-99:b.edge)-(a.edge==null?-99:a.edge))[0];
-    line=`<div class="pickline" title="${esc(main.title||'')} · ${esc(main.label)}"><span class="k">PICK</span><span class="t">${esc(shortLbl(main.label,g))}</span>${(main.p_final??main.p_model)!=null?`<span class="m mono">${pct(main.p_final??main.p_model,0)}</span>`:''}${(()=>{ const pr=main.best&&main.best.price, v=vtgPP(main.p_final??main.p_model,pr); return v!=null?`<span class="e mono ${v>0?'pos':'neg'}">${sg(v)} pp</span>`:''; })()}${gradedBadge(rm&&rm.market===main.market&&rm.selection===main.side?rm:null)}</div>`;
+    const evM=(()=>{ const pr=main.best&&main.best.price, p=main.p_final??main.p_model, d=pr==null?null:(pr>0?1+pr/100:1+100/Math.abs(pr)); return (p!=null&&d)?(p*d-1)*100:null; })();
+    const isLean=ap&&ap.market===String(main.market||'').toLowerCase()&&ap.side===main.side;
+    const reg=rm&&rm.market===main.market&&rm.selection===main.side?rm:null;
+    const okP=reg?!!reg.approved:(isLean&&!!ap.approved);
+    const why=reg?reg.block_reason:(isLean?ap.reason:'No es el pick principal del filtro (mejor ventaja del mercado, sin registrar)');
+    line=pickLine(main.label,g,{approved:okP,ev:reg&&reg.ev_pct!=null?reg.ev_pct:evM,reason:why,title:(main.title||'')+' · '+main.label,
+      extra:`${(main.p_final??main.p_model)!=null?`<span class="m mono">${pct(main.p_final??main.p_model,0)}</span>`:''}${gradedBadge(reg)}`});
   }
   const rest=items.filter(b=>b!==main);
   if(!rest.length) return line;
@@ -327,7 +339,7 @@ function recBlock(g){
   const _ms=r.filter(x=>x.type==='main'), m=[..._ms].reverse().find(x=>x.status!=='ANULADO')||_ms[_ms.length-1], rest=r.filter(x=>x!==m);
   const gb=x=>x.status==='PENDIENTE'&&g.state==='in' ? (provBadge(g.prov,x.market,x.selection)||gradeBadge(x,false)) : gradeBadge(x,false);
   const row=x=>`<div class="sgr"><span class="mk">${esc(MKL[x.market]||String(x.market).slice(0,3).toUpperCase())}</span><span class="lb">${esc(shortLbl(x.label,g))}</span>${gb(x)}</div>`;
-  return `<div class="gp">${m?`<div class="pickline"><span class="k">PICK</span><span class="t">${esc(shortLbl(m.label,g))}</span>${gb(m)}</div>`:''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;
+  return `<div class="gp">${m?pickLine(m.label,g,{approved:m.approved,ev:m.ev_pct,reason:m.block_reason,extra:gb(m)}):''}${rest.length?`<div class="tg" role="button" tabindex="0">Sugerencias (${rest.length})</div><div class="sg">${rest.map(row).join('')}</div>`:''}</div>`;
 }
 function marketRow(g){
   const o=g.odds; if(!o) return g.state==='pre'?`<div class="sub" style="margin-top:8px">Cuotas: ${SD}</div>`:'';
@@ -803,7 +815,7 @@ const briefChips = (items,g) => !items||!items.length ? `<span class="sub">Proba
 async function fillBriefs(league){
   try{
     const r=await api('/api/league_brief?league='+encodeURIComponent(league));
-    document.querySelectorAll('.gp[data-id]').forEach(el=>{ const it=r.items[el.dataset.id]; el.innerHTML = it===undefined ? '' : briefBlock(GAMES[el.dataset.id]||{away:{},home:{}},it); });
+    document.querySelectorAll('.gp[data-id]').forEach(el=>{ const it=r.items[el.dataset.id]; el.innerHTML = it===undefined ? '' : briefBlock(GAMES[el.dataset.id]||{away:{},home:{}},it,(r.approval||{})[el.dataset.id]); });
   }catch(e){ document.querySelectorAll('.gp[data-id]').forEach(el=>el.innerHTML=`<span class="sub">Probabilidades: ${SD}</span>`); }
 }
 

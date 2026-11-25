@@ -569,7 +569,12 @@ async def picks(scope="24h"):
             return None
         if not a or not a.get("picks"): return None
         p = a["picks"]
-        return dict(game=a["game"], lean=p["lean"], status=p["status"], confidence=p["confidence"], has_odds=bool(a.get("odds")),
+        try:
+            from . import validation as VAL
+            ap = VAL.approve_light(a)
+        except Exception:
+            ap = dict(approved=False, reason=None)
+        return dict(game=a["game"], lean=p["lean"], approved=bool(ap.get("approved")), block_reason=ap.get("reason"), status=p["status"], confidence=p["confidence"], has_odds=bool(a.get("odds")),
                     official=p.get("official") or [], considered=p.get("considered") or [], strict=("official" in p), pred=_pred_brief(a.get("pred")),
                     top=[c for c in p["candidates"][:3]], model=a.get("model"), brief=PR.brief(a.get("probs")),
                     published=bool(p.get("published")), discard_reason=p.get("discard_reason"),

@@ -66,7 +66,7 @@ def _items():
                     p_final=0.55, p_nv=0.48, price=-110, price_txt="-110")
         pred = dict(winner=dict(side=side if agree else ("away" if side == "home" else "home"), p=0.55, probs={}),
                     score=dict(home=2, away=1), total=dict(side="under", label="Menos de 2.5"))
-        return dict(game=g, lean=lean, status=status, published=published,
+        return dict(game=g, lean=lean, status=status, published=published, approved=published,
                     confidence=dict(level=conf), pred=pred, discard_reason=reason)
     return [
         item(game("uefa.nations","futbol","Germany","Netherlands","n1",0,19), "REVISAR", -6.4, 0.3, reason="divergencia alta"),
@@ -108,20 +108,20 @@ CASES = [
     ("dame los mejores picks de uefa liga de naciines", {"must": ["Liga de Naciones UEFA", "Wales ML", "Greece ML"], "must_not": ["Oilers", "Raptors", "Chiefs", "por edge", "Real Madrid"], "scope_leagues": ["uefa.nations"]}),
     ("mejores picks de liga de naciones", {"must": ["Liga de Naciones UEFA"], "must_not": ["Oilers", "Raptors"]}),
     ("picks de la nations league", {"must": ["Liga de Naciones UEFA"], "must_not": ["Oilers"]}),
-    ("mejores picks de concacaf", {"must": ["No hay picks en estado PICK", "Liga de Naciones CONCACAF", "Mexico"], "must_not": ["Oilers", "Wales ML", "Raptors"]}),
+    ("mejores picks de concacaf", {"must": ["No hay picks aprobados", "Liga de Naciones CONCACAF", "Mexico"], "must_not": ["Oilers", "Wales ML", "Raptors"]}),
     ("picks de amistosos", {"must": ["Amistosos", "Brazil"], "must_not": ["Oilers", "Wales ML"]}),
     ("mejores picks de la premier", {"must": ["Arsenal"], "must_not": ["Oilers", "Wales ML"]}),
     ("mejores picks de liga mx", {"must": ["América"], "must_not": ["Oilers", "Arsenal"]}),
     ("picks de champions", {"must": ["Real Madrid"], "must_not": ["Wales ML", "Oilers"]}),
-    ("mejores picks de nba hoy", {"must": ["No hay picks en estado PICK", "NBA"], "must_not": ["Chiefs", "Wales ML", "Mejores picks (por EV"]}),
+    ("mejores picks de nba hoy", {"must": ["No hay picks aprobados", "NBA"], "must_not": ["Chiefs", "Wales ML", "Mejores picks (por EV"]}),
     ("mejores picks de la nfl", {"must": ["Chiefs"], "must_not": ["Raptors", "Wales ML"]}),
-    ("picks de hockey", {"must": ["No hay picks en estado PICK", "NHL"], "must_not": ["Chiefs"]}),
+    ("picks de hockey", {"must": ["No hay picks aprobados", "NHL"], "must_not": ["Chiefs"]}),
     ("picks de beisbol", {"must": ["Yankees"], "must_not": ["Chiefs", "Wales"]}),
-    ("mejores picks de tenis", {"must": ["No hay picks en estado PICK", "tenis"], "must_not": ["Chiefs"]}),
+    ("mejores picks de tenis", {"must": ["No hay picks aprobados", "tenis"], "must_not": ["Chiefs"]}),
     ("mejores picks de hoy de futbol", {"must": ["por EV y confianza"], "must_not": ["Oilers", "Yankees"]}),
     ("que me recomiendas en la bundesliga", {"must": ["Bayern"], "must_not": ["Oilers"]}),
     ("picks de serie a", {"must": ["Inter"], "must_not": ["Oilers"]}),
-    ("mejores picks de laliga", {"must": ["No hay picks en estado PICK", "LaLiga", "Barcelona"], "must_not": ["Oilers"]}),
+    ("mejores picks de laliga", {"must": ["No hay picks aprobados", "LaLiga", "Barcelona"], "must_not": ["Oilers"]}),
     ("picks de uefa", {"must": ["Liga de Naciones UEFA"], "may_champions": True, "must_not": ["Oilers", "Raptors"]}),
     ("mejores picks de burdesliga", {"must": ["Bayern"], "must_not": ["Oilers"]}),  # typo bundesliga
     ("picks de la premir league", {"must": ["Arsenal"], "must_not": ["Oilers"]}),
@@ -172,7 +172,7 @@ def test_uefa_typo_no_salta_a_nba_y_ordena_por_ev():
     assert ans.index("Wales ML") < ans.index("Greece ML")  # EV 7.5 antes que 4.2
     assert "Belgium ML" not in ans  # contradice predicción
     assert "Oilers" not in ans and "Raptors" not in ans and "por edge" not in ans
-    assert "Sin pick / revisar" in ans  # REVISAR/PASS de la misma liga, aparte
+    assert "Lado del modelo, no aprobado" in ans  # REVISAR/PASS de la misma liga, aparte
 
 
 def test_solo_pick_en_lista_global_sin_pass():

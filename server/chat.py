@@ -35,6 +35,7 @@ SYSTEM = (
     "5. Nunca digas \"seguro\", \"garantizado\" ni \"100%\". Cierra con: \"Estimación del modelo, no garantía de ganancia.\" No eres asesor financiero.\n"
     "6. En parlays avisa que el EV es un tope y que las piernas no son independientes.\n"
     "7. Si la persona parece perseguir pérdidas o subir el stake por encima de lo planeado, sugiere pausar y bajar el monto.\n"
+    "Sólo llama «pick» o «recomendación» a lo que tenga aprobado=true (pasó TODOS los candados). Si aprobado=false, preséntalo como «Lado del modelo», con su EV y el motivo_bloqueo; nunca como recomendación. Días sin picks aprobados son válidos.\n"
     "Nunca contradigas la predicción ni el pick registrado del juego. Recomienda primero PICK y luego LEAN. PASS/SIN_LINEA no son recomendación. No menciones ningún «filtro estricto».\n"
     "8. El ganador del juego es consistencia.ganador_pfinal (mismo pFinal de la carta). "
     "El pFinal del pick (hándicap/total) NO es el ganador. Si consistencia.contradicciones no está vacío, dilo y quédate con la predicción. "
@@ -60,7 +61,7 @@ def _pick_short(it):
         conf_level = conf.get("level")
     except Exception:
         conf_level = (it.get("confidence") or {}).get("level")
-    return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", liga=g.get("league"), id=g.get("id"), fecha=g.get("date"), pick_principal=it.get("status") == "PICK",
+    return dict(juego=f"{(g.get('away') or {}).get('name')} @ {(g.get('home') or {}).get('name')}", liga=g.get("league"), id=g.get("id"), fecha=g.get("date"), pick_principal=it.get("status") == "PICK" and bool(it.get("approved")), aprobado=bool(it.get("approved")), motivo_bloqueo=it.get("block_reason"),
                 pick=l.get("label"), mercado=l.get("market"), linea=l.get("line"), cuota=l.get("price_txt"), prob_final=round(l["p_final"], 3) if l.get("p_final") is not None else None,
                 edge_pp=round(l["edge"], 1) if l.get("edge") is not None else None, estado=it.get("status"), confianza=conf_level,
                 publicado=bool(it.get("published")), motivo=it.get("discard_reason"))
@@ -89,6 +90,8 @@ def _game_short(a):
                 prediccion=dict(marcador=p.get("score"), ganador=p.get("winner"), total=p.get("total"), handicap=p.get("spread"), ambos_anotan=p.get("btts")),
                 lean=((a.get("picks") or {}).get("lean") or {}).get("label"),
                 pick_publicado=bool((a.get("picks") or {}).get("published")),
+                aprobado=bool((a.get("picks") or {}).get("approved")),
+                motivo_bloqueo="; ".join(l.get("reason", "") for l in ((a.get("picks") or {}).get("locks") or [])) or None,
                 motivo_descarte=((a.get("picks") or {}).get("discard_reason")),
                 analisis_detalle=(a.get("analysis") or ((a.get("picks") or {}).get("analysis"))),
                 consistencia=cons,

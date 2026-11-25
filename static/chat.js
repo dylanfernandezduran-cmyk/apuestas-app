@@ -195,8 +195,13 @@ function chApplyScope(items, scope){
   if(scope.date==='manana'){ const t=chTomorrowYmd(); pool=pool.filter(it=>chYmd((it.game||{}).date)===t); }
   return pool;
 }
+function chMdLine(it){
+  const l=it.lean, ev=l?chEvPct(l.ev):null;
+  if(!l||!l.label) return `• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> — ${esc(it.status||'sin pick')}${chWhy(it,it.status||'sin pick')}`;
+  return `• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> — Lado del modelo: <b>${esc(l.label)}</b>${l.price_txt?' '+esc(l.price_txt):''}${ev!=null?` · EV ${ev>0?'+':''}${ev.toFixed(1)}%${ev<=0?' (sin valor)':''}`:''}${(it.block_reason||it.discard_reason)?` · 🔒 ${esc(it.block_reason||it.discard_reason)}`:''}`;
+}
 function chIsOfficialPick(it){
-  if(!it||!it.published||it.status!=='PICK'||!it.lean||!it.lean.label) return false;
+  if(!it||!it.published||it.status!=='PICK'||!it.lean||!it.lean.label||it.approved!==true) return false;   // sólo si pasa TODOS los candados
   return chAgree(it.pred,it.lean)!==false;
 }
 function chRankPick(it){
@@ -242,36 +247,32 @@ function chBestAnswerFromItems(items, qn){
   const named=!!(scope.leagues.length||scope.sports.length);
   const scoped=!!(named||scope.date);
   const picks=pool.filter(chIsOfficialPick).sort((a,b)=>chCmpRank(chRankPick(a),chRankPick(b)));
-  const revis=named?pool.filter(it=>!chIsOfficialPick(it)&&(it.status==='REVISAR'||it.status==='PASS'||it.status==='LEAN'||it.status==='SIN_LINEA'||!it.published)):[];
+  const revis=named?pool.filter(it=>!chIsOfficialPick(it)&&(it.status==='REVISAR'||it.status==='PASS'||it.status==='LEAN'||it.status==='SIN_LINEA'||!it.published||it.approved!==true)&&!(it.lean&&chAgree(it.pred,it.lean)===false)):[];
   const where=scope.label?(scope.label):(scope.date==='hoy'?'hoy':scope.date==='manana'?'mañana':'próximas 72 h');
   const whenBit=scope.date==='hoy'?', hoy':(scope.date==='manana'?', mañana':'');
   const note='<span class="ch-mut">Estimaciones del modelo, no garantías. Paper trading. Acuerdo con la predicción no garantiza acierto.</span>';
   if(picks.length){
     let html=`Mejores picks (por EV y confianza${whenBit}${scope.label?' · '+esc(scope.label):''}):<br>`+picks.slice(0,8).map(chPickLine).join('<br>');
     if(named && revis.length){
-      html+=`<br><br><b>Sin pick / revisar</b> en ${esc(where)} (no son recomendación):<br>`+revis.slice(0,24).map(it=>{
-        const st=it.status||'sin pick';
-        const why=chWhy(it,st);
-        return `• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> — ${esc(st)}${why}`;
-      }).join('<br>');
+      html+=`<br><br><b>Lado del modelo, no aprobado</b> en ${esc(where)} (no son recomendación):<br>`+revis.slice(0,24).map(chMdLine).join('<br>');
     }
     return html+'<br>'+note;
   }
   if(named){
     const preds=pool.filter(it=>it.pred&&(it.pred.winner||it.pred.score)).sort((a,b)=>Date.parse(a.game.date)-Date.parse(b.game.date));
-    let html=`No hay picks en estado PICK para ${esc(where)}. No invento ninguno ni salto a otros deportes o ligas.`;
+    let html=`No hay picks aprobados (que pasen todos los candados) para ${esc(where)}. Un día sin picks es válido: no invento ninguno ni salto a otros deportes o ligas.`;
     if(preds.length) html+=`<br><br>Predicciones NRNM de esos juegos:<br>`+preds.slice(0,24).map(chPredLine).join('<br>');
     else if(pool.length) html+=`<br>Hay ${pool.length} juego(s) en esa lista, pero aún no hay predicción publicada.`;
     else html+=`<br>No hay juegos de ${esc(where)} en esa ventana.`;
     if(revis.length){
-      html+=`<br><br><b>Sin pick / revisar</b> (no son recomendación):<br>`+revis.slice(0,24).map(it=>`• <a href="${chLink(it.game)}">${esc(chGame(it))}</a> — ${esc(it.status||'sin pick')}${chWhy(it,it.status||'sin pick')}`).join('<br>');
+      html+=`<br><br><b>Lado del modelo, no aprobado</b> (no son recomendación):<br>`+revis.slice(0,24).map(chMdLine).join('<br>');
     }
     return html+'<br>'+note;
   }
   if(scope.date){
-    return `No hay picks en estado PICK para ${esc(where)}. No relleno la lista con PASS ni REVISAR.<br>`+note;
+    return `No hay picks aprobados (que pasen todos los candados) para ${esc(where)}. No relleno la lista.<br>`+note;
   }
-  return 'No hay picks en estado PICK en las próximas 72 h. No relleno la lista con PASS ni REVISAR de otros juegos.<br>'+note;
+  return 'No hay picks aprobados (que pasen todos los candados) en las próximas 72 h. Un día sin picks es válido; no relleno la lista.<br>'+note;
 }
 /* --- end intent helpers --- */
 
@@ -424,7 +425,10 @@ async function chGameAnswer(league, eid, qn){
   if(g.state==='pre'){
     const lean=pk&&pk.lean, predSide=p&&p.winner&&p.winner.side;
     const agrees=!lean||!predSide||lean.side===predSide||(lean.market==='ML'&&lean.side===predSide);
-    if(pk.published && lean && (lean.edge>0.5 || (pk.status==='PICK') || (agrees && lean.edge!=null && lean.edge>=0))){
+    const lks=(pk&&pk.locks||[]).map(x=>x.reason).filter(Boolean).join('; '), evL=lean?chEvPct(lean.ev):null;
+    if(lean && !pk.approved){
+      out.push(`Lado del modelo (no se recomienda): <b>${esc(lean.label)}</b> ${esc(lean.price_txt||'')} · prob. ${chPct(lean.p_final)}${evL!=null?` · EV ${evL>0?'+':''}${evL.toFixed(1)}%${evL<=0?' (sin valor)':''}`:''}${(lks||pk.discard_reason)?` · 🔒 ${esc(lks||pk.discard_reason)}`:''}`);
+    } else if(pk.published && lean && (lean.edge>0.5 || (pk.status==='PICK') || (agrees && lean.edge!=null && lean.edge>=0))){
       out.push(`${pk.status==='PICK'?'Pick':'Lean'}: <b>${esc(lean.label)}</b> ${esc(lean.price_txt||'')} · prob. ${chPct(lean.p_final)}${chEdge(lean.edge)} · ${esc(pk.status)}${pk.confidence?' · confianza '+esc(pk.confidence.level):''}`);
       if(!agrees) out.push('<span class="ch-mut">Ojo: este lean no coincide con la Predicción NRNM.</span>');
     } else if(lean && !pk.published){

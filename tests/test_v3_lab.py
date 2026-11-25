@@ -84,3 +84,12 @@ def test_market_grid_pick_only_when_approved():
     a = dict(game=dict(sport="nfl", state="pre"), picks=dict(published=False, lean={"label": "Rams ML", "ev": -3.0, "p_final": 0.56}, discard_reason="EV no positivo (-3.0%)"))
     V._approve(a, {"score": 100})
     assert a["picks"]["approved"] is False and "EV" in a["picks"]["locks"][0]["reason"]
+
+def test_same_rule_everywhere():
+    import pathlib
+    app = pathlib.Path("static/app.js").read_text(); det = pathlib.Path("static/detalle.js").read_text(); ch = pathlib.Path("static/chat.js").read_text()
+    assert "function pickLine" in app and "approved:m.approved" in app and "approved:okP" in app
+    assert "okP=!!p.approved" in det and "Lado del modelo" in det
+    assert "it.approved!==true" in ch and "Lado del modelo (no se recomienda)" in ch
+    from server import chat
+    assert "aprobado=true" in chat.SYSTEM if hasattr(chat, "SYSTEM") else True

@@ -1,6 +1,6 @@
 /* Service worker local (LAN). En GitHub Pages NO se registra (NRNM_STATIC). Network-first HTML y JSON de datos. */
-const V = 'shell-v51';
-const SHELL = ['/', '/static/style.css?v=39', '/static/nrnm-core.js?v=1', '/static/extras.js?v=24', '/static/lab.js?v=2', '/static/detalle.js?v=20', '/static/props.js?v=2', '/static/lineas.js?v=3', '/static/app.js?v=38', '/static/board.js?v=6', '/static/recdia.js?v=5', '/static/ticket.js?v=9', '/static/chat.js?v=18', '/static/brand/icons/icon-192.png', '/manifest.webmanifest'];
+const V = 'shell-v54';
+const SHELL = ['/', '/static/style.css?v=42', '/static/nrnm-core.js?v=1', '/static/extras.js?v=24', '/static/lab.js?v=2', '/static/detalle.js?v=21', '/static/props.js?v=2', '/static/lineas.js?v=3', '/static/app.js?v=39', '/static/board.js?v=6', '/static/recdia.js?v=5', '/static/ticket.js?v=9', '/static/chat.js?v=19', '/static/brand/icons/icon-192.png', '/manifest.webmanifest'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => Promise.all(SHELL.map(u => c.add(u).catch(()=>null)))).then(() => self.skipWaiting()));
 });

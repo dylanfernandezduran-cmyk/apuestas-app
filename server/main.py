@@ -136,7 +136,13 @@ async def sports():
     return [dict(s, leagues=[dict(key=k, name=LEAGUES[k]["name"]) for k in s["leagues"]]) for s in SPORTS]
 
 def _rec_short(r):
-    return dict(market=r["market"], selection=r["selection"], line=r.get("line"), type=r["type"], status=r["status"], label=r["label"])
+    out = dict(market=r["market"], selection=r["selection"], line=r.get("line"), type=r["type"], status=r["status"], label=r["label"])
+    try:
+        from . import validation as VAL
+        out.update(VAL.approve_row(r))
+    except Exception:
+        pass
+    return out
 
 @app.get("/api/games")
 async def games(league: str, days: int | None = None):
@@ -270,8 +276,15 @@ async def league_brief(league: str, hours: int = 96):
                 a = await data.analyze(league, g["id"])
             except Exception:
                 return g["id"], None
+        try:
+            from . import validation as VAL
+            if a: appr[g["id"]] = VAL.approve_light(a)
+        except Exception:
+            pass
         return g["id"], (data.PR.brief(a.get("probs")) if a and a.get("probs") else [])
+    appr = {}
     res = dict(league=league, items=dict(await asyncio.gather(*[one(g) for g in gs])), now=time.time())
+    res["approval"] = appr
     _brief_cache[league] = (time.time(), res)
     return res
 

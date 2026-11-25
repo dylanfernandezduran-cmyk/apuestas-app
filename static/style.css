@@ -1001,3 +1001,17 @@ table.cal th,table.cal td{padding:5px 4px}
 .ob.mside,.gd .ob.mside{box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
 .ob.mside{position:relative;overflow:visible}.ob.mside .ob-md{position:absolute;top:-8px;left:10px;background:#1d1d1f;box-shadow:0 0 0 1px rgba(255,255,255,.18);font-size:9px;line-height:14px;padding:0 6px}
 .gd .grid .ob.mside,.ob.mside{margin-top:4px}
+.pickline.md .k-md,.k-md{background:rgba(255,255,255,.08)!important;color:var(--mut)!important;font-weight:600;white-space:nowrap}
+.pickline.md{flex-wrap:wrap;row-gap:2px}.pickline .e{font-size:11.5px}
+.pl-why{font-size:11.5px;color:var(--mut);margin:3px 0 2px;line-height:1.35}
+.mp2.md{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+/* nombres junto a etiquetas en teléfonos angostos: envolver en 2 líneas, sin cortar */
+.ob .ol{white-space:normal;overflow:hidden;text-overflow:clip;overflow-wrap:break-word;min-width:3.6em;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pickline .t{white-space:normal;overflow-wrap:break-word;min-width:0}
+.pickline.md{background:rgba(255,255,255,.04)}.pickline .k-md{border-radius:4px;padding:1px 6px;font-size:9.5px;letter-spacing:.02em}
+.pickline.md{padding:7px var(--s3);gap:4px 8px;white-space:normal}
+.pickline.md .t{flex:1 1 calc(100% - 130px);min-width:0;overflow:visible}
+.pickline.md .e,.pickline.md .m{flex:0 0 auto}
+.ob{min-width:0}.ob .op{white-space:normal;text-align:right;overflow-wrap:break-word}
+.ob.mside .op{max-width:100%}
+.ob .or{flex:0 1 auto;min-width:0;max-width:64%}.ob.mside{height:auto;min-height:44px;padding-top:6px;padding-bottom:4px}

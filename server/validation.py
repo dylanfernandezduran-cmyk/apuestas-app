@@ -97,10 +97,35 @@ def _approve(a, dq):
     g = a.get("game") or {}
     it = dict(p_final=lean.get("p_final"), ev_pct=lean.get("ev"), sport=g.get("sport"), market=MKT.get(lean.get("market"), str(lean.get("market") or "").lower()),
               live=g.get("state") not in (None, "pre"), divergence_high=lean.get("divergence_high"))
-    c = POL.check(it, POL.history(CS._rows), dq=dq.get("score"))
+    c = POL.check(it, POL.history(CS._rows), dq=dq.get("score") if dq else None)
     if lean.get("divergence_high"):
         c["locks"].append(dict(key="consistency", label="Consistencia", reason="Divergencia alta modelo vs mercado (>10 pp)")); c["approved"] = False
     pk["approved"] = c["approved"]; pk["locks"] = c["locks"]; pk["tier"] = c["tier"]
+
+
+def approve_light(a):
+    """Aprobación del pick principal sin datos de enriquecimiento (listas). dict(approved, label, market, side, line, ev, reason)."""
+    a2 = dict(a); a2["picks"] = dict(a.get("picks") or {})
+    try: dq = data_quality(a2)
+    except Exception: dq = {"score": None}
+    _approve(a2, dict(dq, score=None))
+    pk = a2["picks"]; lean = pk.get("lean") or {}
+    return dict(approved=bool(pk.get("approved")), label=lean.get("label"), market=str(lean.get("market") or "").lower(), side=lean.get("side"),
+                line=lean.get("line"), ev=lean.get("ev"), p_final=lean.get("p_final"),
+                reason="; ".join(l["reason"] for l in pk.get("locks") or []) or None)
+
+
+def approve_row(r):
+    """Aprobación de un pick registrado (fila de picks) con la política vigente."""
+    from . import policy as POL, consistency as CS, board as BD
+    m = BD.metrics(r.get("odds"), r.get("p_final"), r.get("p_nv"), r.get("p_model"))
+    if not m:
+        return dict(approved=False, ev_pct=None, block_reason="Sin cuota: no es pick")
+    it = dict(p_final=m["p_final"], ev_pct=m["ev_pct"], sport=r.get("sport"), market=r.get("market"), live=False)
+    c = POL.check(it, POL.history(CS._rows))
+    if m.get("divergence_high"):
+        c["locks"].append(dict(key="consistency", label="Consistencia", reason="Divergencia alta modelo vs mercado (>10 pp)")); c["approved"] = False
+    return dict(approved=c["approved"], ev_pct=m["ev_pct"], block_reason="; ".join(l["reason"] for l in c["locks"]) or None)
 
 
 def attach(a, league, eid):
